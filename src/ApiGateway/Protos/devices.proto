@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+option csharp_namespace = "Devices.V1";
+
+package devices.v1;
+
+message DeviceKey {
+  string device_id = 1;
+}
+
+message Property {
+  string key = 1;
+  string value_json = 2;
+}
+
+message Snapshot {
+  string device_id = 1;
+  int64 last_sequence = 2;
+  string updated_at_iso = 3;
+  repeated Property properties = 4;
+}
+
+service DeviceService {
+  rpc GetSnapshot (DeviceKey) returns (Snapshot);
+  rpc StreamUpdates (DeviceKey) returns (stream Snapshot);
+}
