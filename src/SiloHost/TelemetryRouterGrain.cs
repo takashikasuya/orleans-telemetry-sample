@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Grains.Abstractions;
 using Orleans;
 
@@ -13,17 +14,37 @@ public sealed class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
 {
     public async Task RouteAsync(TelemetryMsg msg)
     {
-        var key = $"{msg.TenantId}:{msg.DeviceId}";
+        var key = DeviceGrainKey.Create(msg.TenantId, msg.DeviceId);
         var deviceGrain = GrainFactory.GetGrain<IDeviceGrain>(key);
         await deviceGrain.UpsertAsync(msg);
     }
 
     public async Task RouteBatchAsync(IReadOnlyList<TelemetryMsg> batch)
     {
-        foreach (var group in batch.GroupBy(m => $"{m.TenantId}:{m.DeviceId}"))
+        if (batch.Count == 0)
         {
-            var grain = GrainFactory.GetGrain<IDeviceGrain>(group.Key);
-            foreach (var msg in group.OrderBy(m => m.Sequence))
+            return;
+        }
+
+        var groups = new Dictionary<(string TenantId, string DeviceId), List<TelemetryMsg>>(batch.Count);
+        foreach (var msg in batch)
+        {
+            var tupleKey = (msg.TenantId, msg.DeviceId);
+            if (!groups.TryGetValue(tupleKey, out var list))
+            {
+                list = new List<TelemetryMsg>();
+                groups[tupleKey] = list;
+            }
+
+            list.Add(msg);
+        }
+
+        foreach (var (tupleKey, messages) in groups)
+        {
+            var grainKey = DeviceGrainKey.Create(tupleKey.TenantId, tupleKey.DeviceId);
+            var grain = GrainFactory.GetGrain<IDeviceGrain>(grainKey);
+            messages.Sort((left, right) => left.Sequence.CompareTo(right.Sequence));
+            foreach (var msg in messages)
             {
                 await grain.UpsertAsync(msg);
             }

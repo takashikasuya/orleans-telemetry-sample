@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 using Grains.Abstractions;
 using Microsoft.Extensions.Hosting;
 using Orleans;
@@ -63,8 +65,8 @@ internal sealed class MqIngestService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // start consumer and router loops
-        var consumeTask = Task.Run(() => ConsumeLoopAsync(stoppingToken), stoppingToken);
-        var routeTask = Task.Run(() => RouteLoopAsync(stoppingToken), stoppingToken);
+        var consumeTask = ConsumeLoopAsync(stoppingToken);
+        var routeTask = RouteLoopAsync(stoppingToken);
         await Task.WhenAll(consumeTask, routeTask);
     }
     private void EnsureConnection()
@@ -96,6 +98,10 @@ internal sealed class MqIngestService : BackgroundService
                     _model!.BasicNack(ea.DeliveryTag, false, false);
                 }
             }
+            catch (OperationCanceledException)
+            {
+                // Ignore cancellation so shutdown can proceed without noise.
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "failed to process message");
@@ -111,24 +117,52 @@ internal sealed class MqIngestService : BackgroundService
         catch (OperationCanceledException)
         {
         }
+        finally
+        {
+            _channel.Writer.TryComplete();
+        }
     }
     private async Task RouteLoopAsync(CancellationToken ct)
     {
         var router = _grains.GetGrain<ITelemetryRouterGrain>(Guid.Empty);
         var batch = new List<TelemetryMsg>(100);
-        while (!ct.IsCancellationRequested)
+        try
         {
-            batch.Clear();
-            while (batch.Count < 100 && _channel.Reader.TryRead(out var msg))
+            await foreach (var msg in _channel.Reader.ReadAllAsync(ct))
             {
                 batch.Add(msg);
+                if (batch.Count < 100)
+                {
+                    continue;
+                }
+
+                await router.RouteBatchAsync(batch.ToArray());
+                batch.Clear();
             }
-            if (batch.Count == 0)
-            {
-                var msg = await _channel.Reader.ReadAsync(ct);
-                batch.Add(msg);
-            }
-            await router.RouteBatchAsync(batch);
         }
+        catch (OperationCanceledException)
+        {
+            // Allow graceful shutdown when cancellation is requested.
+        }
+        finally
+        {
+            if (batch.Count > 0)
+            {
+                await router.RouteBatchAsync(batch.ToArray());
+                batch.Clear();
+            }
+        }
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _channel.Writer.TryComplete();
+        _model?.Close();
+        _model?.Dispose();
+        _model = null;
+        _connection?.Close();
+        _connection?.Dispose();
+        _connection = null;
+        await base.StopAsync(cancellationToken);
     }
 }
