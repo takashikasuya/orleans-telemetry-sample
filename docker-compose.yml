@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  mq:
+    image: rabbitmq:3-management
+    hostname: mq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  silo:
+    build:
+      context: ./src/SiloHost
+      dockerfile: ../../Dockerfile.dotnet
+      args:
+        PROJECT: SiloHost
+    depends_on:
+      - mq
+    environment:
+      RABBITMQ_HOST: mq
+    ports:
+      - "11111:11111"
+      - "30000:30000"
+
+  api:
+    build:
+      context: ./src/ApiGateway
+      dockerfile: ../../Dockerfile.dotnet
+      args:
+        PROJECT: ApiGateway
+    depends_on:
+      - silo
+    environment:
+      OIDC_AUTHORITY: ${OIDC_AUTHORITY:-http://mock-oidc:8080/default}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-api}
+    ports:
+      - "8080:80"
+
+  publisher:
+    build:
+      context: ./src/Publisher
+      dockerfile: ../../Dockerfile.dotnet
+      args:
+        PROJECT: Publisher
+    depends_on:
+      - mq
+    environment:
+      RABBITMQ_HOST: mq
+      TENANT: t1
+
+  # Mock OIDC provider for local development
+  mock-oidc:
+    image: ghcr.io/navikt/mock-oauth2-server:latest
+    ports:
+      - "8081:8080"
