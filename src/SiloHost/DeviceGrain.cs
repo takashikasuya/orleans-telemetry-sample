@@ -65,7 +65,7 @@ public sealed class DeviceGrain : Grain, IDeviceGrain
     }
 
     [GenerateSerializer]
-    private sealed class DeviceState
+    public class DeviceState
     {
         [Id(0)] public long LastSequence { get; set; }
         [Id(1)] public Dictionary<string, object> LatestProps { get; set; } = new();

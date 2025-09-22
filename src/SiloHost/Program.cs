@@ -3,10 +3,13 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Grains.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Orleans;
 using Orleans.Configuration;
 using Orleans.Hosting;
+using Orleans.Streaming;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -32,8 +35,9 @@ internal static class Program
             });
             // configure grain storage
             siloBuilder.AddMemoryGrainStorage("DeviceStore");
+            siloBuilder.AddMemoryStreams("DeviceUpdates");
             // add stream provider for device updates
-            siloBuilder.AddSimpleMessageStreamProvider("DeviceUpdates");
+            // siloBuilder.AddSimpleMessageStreamProvider("DeviceUpdates");
             siloBuilder.AddMemoryGrainStorage("PubSubStore");
         });
         var host = builder.Build();
@@ -72,10 +76,18 @@ internal sealed class MqIngestService : BackgroundService
     private void EnsureConnection()
     {
         if (_connection is not null) return;
-        var factory = new ConnectionFactory { HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "mq", DispatchConsumersAsync = true };
+        var factory = new ConnectionFactory
+        {
+            //HostName = "localhost",
+            HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "mq",
+            // TODO: use secure credentials in production
+            UserName = "user",
+            Password = "password",
+            DispatchConsumersAsync = true
+        };
         _connection = factory.CreateConnection();
         _model = _connection.CreateModel();
-        _model.QueueDeclare(queue: "telemetry", durable: true, exclusive: false, autoDelete: false);
+        _model.QueueDeclare(queue: "telemetry", durable: false, exclusive: false, autoDelete: false);
         _model.BasicQos(prefetchSize: 0, prefetchCount: 100, global: false);
     }
     private async Task ConsumeLoopAsync(CancellationToken ct)

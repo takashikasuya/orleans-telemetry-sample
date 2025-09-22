@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Grains.Abstractions;
 using Orleans;
+using Orleans.Concurrency;
 
 namespace SiloHost;
 
@@ -10,7 +11,7 @@ namespace SiloHost;
 /// number of RPC calls.
 /// </summary>
 [StatelessWorker]
-public sealed class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
+public class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
 {
     public async Task RouteAsync(TelemetryMsg msg)
     {

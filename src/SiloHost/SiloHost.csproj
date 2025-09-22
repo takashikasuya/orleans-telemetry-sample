@@ -3,6 +3,7 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
     <ProjectReference Include="../Grains.Abstractions/Grains.Abstractions.csproj" />
     <PackageReference Include="Microsoft.Orleans.Server" Version="8.0.0" />
     <PackageReference Include="RabbitMQ.Client" Version="6.4.0" />

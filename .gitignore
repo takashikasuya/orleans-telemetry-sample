@@ -1,0 +1,54 @@
+# .NET build artifacts
+bin/
+obj/
+out/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS Code settings
+.vscode/
+
+# NuGet packages
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+# NuGet restore logs
+*.nuget.log
+
+# Build results
+*.dll
+*.exe
+*.app
+*.pdb
+*.cache
+*.mdb
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# ASP.NET files
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+# Rider/JetBrains IDE
+.idea/
+*.sln.iml
+
+# Others
+*.vspscc
+*.vssscc
+_ReSharper*/
+*.DotSettings.user
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
