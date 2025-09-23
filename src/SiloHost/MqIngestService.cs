@@ -55,8 +55,9 @@ internal sealed class MqIngestService : BackgroundService
             //HostName = "localhost",
             HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "mq",
             // TODO: use secure credentials in production
-            UserName = "user",
-            Password = "password",
+            Port = int.TryParse(Environment.GetEnvironmentVariable("RABBITMQ_PORT"), out var port) ? port : 5672,
+            UserName = Environment.GetEnvironmentVariable("RABBITMQ_USER") ?? "user",
+            Password = Environment.GetEnvironmentVariable("RABBITMQ_PASS") ?? "password",
             DispatchConsumersAsync = true
         };
         _connection = factory.CreateConnection();

@@ -10,10 +10,16 @@ var devices = new[] { "dev-1", "dev-2", "dev-3" };
 var tenant = Environment.GetEnvironmentVariable("TENANT") ?? "t1";
 var rand = new Random();
 
-var factory = new ConnectionFactory { HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "mq" };
+var factory = new ConnectionFactory
+{
+    HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost",
+    Port = int.TryParse(Environment.GetEnvironmentVariable("RABBITMQ_PORT"), out var port) ? port : 5672,
+    UserName = Environment.GetEnvironmentVariable("RABBITMQ_USER") ?? "user",
+    Password = Environment.GetEnvironmentVariable("RABBITMQ_PASS") ?? "password",
+};
 using var conn = factory.CreateConnection();
 using var channel = conn.CreateModel();
-channel.QueueDeclare(queue: "telemetry", durable: true, exclusive: false, autoDelete: false);
+channel.QueueDeclare(queue: "telemetry", durable: false, exclusive: false, autoDelete: false);
 
 var seqs = new Dictionary<string, long>();
 foreach (var d in devices) seqs[d] = 0;
