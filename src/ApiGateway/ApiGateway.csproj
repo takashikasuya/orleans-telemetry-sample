@@ -7,10 +7,11 @@
     <PackageReference Include="Microsoft.Orleans.Client" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
-    <PackageReference Include="Grpc.AspNetCore" Version="2.53.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.53.0" PrivateAssets="All" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.57.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.57.0" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <Protobuf Include="Protos/devices.proto" GrpcServices="Server" />
   </ItemGroup>
+
 </Project>

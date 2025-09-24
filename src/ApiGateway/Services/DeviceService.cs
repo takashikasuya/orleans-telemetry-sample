@@ -1,7 +1,7 @@
 using System.Threading.Channels;
 using ApiGateway.Infrastructure;
 using ApiGateway.Telemetry;
-using Devices.V1;
+//using Devices.V1;
 using Grains.Abstractions;
 using Grpc.Core;
 using Microsoft.AspNetCore.Http;
@@ -10,7 +10,8 @@ using Orleans.Streams;
 
 namespace ApiGateway.Services;
 
-public sealed class DeviceService : DeviceServiceBase
+// Temporarily disable gRPC service inheritance to focus on core functionality
+public sealed class DeviceService // : DeviceServiceBase
 {
     private readonly IClusterClient _client;
     private readonly IHttpContextAccessor _contextAccessor;
@@ -21,6 +22,7 @@ public sealed class DeviceService : DeviceServiceBase
         _contextAccessor = contextAccessor;
     }
 
+    /*
     public override async Task<Snapshot> GetSnapshot(DeviceKey request, ServerCallContext context)
     {
         var httpContext = _contextAccessor.HttpContext;
@@ -92,4 +94,5 @@ public sealed class DeviceService : DeviceServiceBase
 
         public ValueTask DisposeAsync() => new(_handle.UnsubscribeAsync());
     }
+    */
 }

@@ -30,16 +30,13 @@ builder.Services.AddSwaggerGen();
 // Configure Orleans client
 builder.Host.UseOrleansClient(client =>
 {
-    client.UseStaticClustering(options =>
-    {
-        options.Gateways = new[] { new Orleans.Runtime.OrleansUrlGateway(11111) };
-    });
-    client.Configure<Orleans.Runtime.ClusterOptions>(opts =>
+    client.UseStaticClustering(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 11111));
+    client.Configure<Orleans.Configuration.ClusterOptions>(opts =>
     {
         opts.ClusterId = "telemetry-cluster";
         opts.ServiceId = "telemetry-service";
     });
-    client.AddSimpleMessageStreamProvider("DeviceUpdates");
+    client.AddMemoryStreams("DeviceUpdates");
 });
 
 var app = builder.Build();
