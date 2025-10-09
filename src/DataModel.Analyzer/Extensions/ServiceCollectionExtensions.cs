@@ -16,7 +16,7 @@ public static class ServiceCollectionExtensions
     /// <returns>サービスコレクション</returns>
     public static IServiceCollection AddDataModelAnalyzer(this IServiceCollection services)
     {
-        services.AddSingleton<TtlAnalyzerService>();
+        services.AddSingleton<RdfAnalyzerService>();
         services.AddSingleton<DataModelExportService>();
         services.AddSingleton<DataModelAnalyzer>();
         services.AddSingleton<Integration.OrleansIntegrationService>();

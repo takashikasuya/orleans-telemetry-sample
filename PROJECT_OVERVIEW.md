@@ -1,13 +1,13 @@
 # Orleans Telemetry Sample - DataModel.Analyzer
 
-このプロジェクトは、Orleans Telemetry Sampleソリューションの一部として、TTL（Turtle）形式のRDFデータを解析し、建物データモデルとして構造化するライブラリです。
+このプロジェクトは、Orleans Telemetry Sampleソリューションの一部として、TurtleやN-Triples、JSON-LDなど複数形式のRDFデータを解析し、建物データモデルとして構造化するライブラリです。
 
 ## プロジェクト概要
 
-**目的**: GUTPプロトコルに基づく建物・設備・センサーデータのTTLファイルを解析し、Orleansクラスターで利用可能な形式に変換する。
+**目的**: GUTPプロトコルに基づく建物・設備・センサーデータのRDFファイルを解析し、Orleansクラスターで利用可能な形式に変換する。
 
 **主要機能**:
-- TTL形式のRDFファイル解析
+- Turtle / N-Triples / JSON-LD / RDF/XML などのRDFファイル解析
 - 建物データモデルの構造化
 - Orleansデバイスコントラクトの生成
 - JSON形式でのデータエクスポート
@@ -20,7 +20,7 @@ DataModel.Analyzer/
 ├── Models/
 │   └── BuildingDataModel.cs         # データモデルクラス
 ├── Services/
-│   ├── TtlAnalyzerService.cs        # TTL解析サービス
+│   ├── RdfAnalyzerService.cs        # RDF解析サービス
 │   └── DataModelExportService.cs    # データエクスポートサービス
 ├── Integration/
 │   └── OrleansIntegrationService.cs # Orleans統合サービス
@@ -66,7 +66,7 @@ foreach (var device in deviceData.Devices)
 ## 対応データ形式
 
 ### 入力
-- TTL (Turtle) 形式のRDFファイル
+- Turtle / N-Triples / JSON-LD / RDF/XML / TriG / TriX / N-Quads 形式のRDFファイル
 - GUTPプロトコル準拠のデータ構造
 - REC (Real Estate Core) オントロジー
 
@@ -98,4 +98,4 @@ services.AddDataModelAnalyzer(builder =>
 2. **スキーマ検証**: RDFスキーマベースの検証機能
 3. **キャッシュ機能**: 解析結果のメモリ/Redis キャッシュ
 4. **API化**: RESTful API としての提供
-5. **他形式対応**: XML, OWL, JSON-LD 形式のサポート
+5. **フォーマット自動判別**: 拡張子以外のヒューリスティクスによる形式検出の改善

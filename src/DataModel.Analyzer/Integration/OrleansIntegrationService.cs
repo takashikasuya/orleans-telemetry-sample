@@ -21,15 +21,15 @@ public class OrleansIntegrationService
     }
 
     /// <summary>
-    /// TTLファイルからOrleansで使用可能なデバイス情報を抽出
+    /// RDFファイルからOrleansで使用可能なデバイス情報を抽出
     /// </summary>
-    /// <param name="ttlFilePath">TTLファイルのパス</param>
+    /// <param name="rdfFilePath">RDFファイルのパス</param>
     /// <returns>デバイス情報とテレメトリポイントの辞書</returns>
-    public async Task<OrleansDeviceData> ExtractDeviceDataAsync(string ttlFilePath)
+    public async Task<OrleansDeviceData> ExtractDeviceDataAsync(string rdfFilePath)
     {
-        _logger.LogInformation("TTLファイルからOrleansデバイスデータを抽出開始: {FilePath}", ttlFilePath);
+        _logger.LogInformation("RDFファイルからOrleansデバイスデータを抽出開始: {FilePath}", rdfFilePath);
 
-        var model = await _analyzer.AnalyzeFromFileAsync(ttlFilePath);
+        var model = await _analyzer.AnalyzeFromFileAsync(rdfFilePath);
         var deviceData = new OrleansDeviceData();
 
         foreach (var equipment in model.Equipment)

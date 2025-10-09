@@ -1,10 +1,10 @@
 # DataModel.Analyzer
 
-TTL（Turtle）形式のRDFデータを解析し、建物データモデルとして構造化するライブラリです。GUTPプロトコルに基づく建物・設備・センサーデータの解析とエクスポート機能を提供します。
+Turtle・N-Triples・JSON-LD・RDF/XML など複数形式のRDFデータを解析し、建物データモデルとして構造化するライブラリです。GUTPプロトコルに基づく建物・設備・センサーデータの解析とエクスポート機能を提供します。
 
 ## 機能
 
-- **TTL解析**: TTL形式のRDFファイルまたはコンテンツを解析
+- **マルチフォーマット解析**: Turtle / N-Triples / JSON-LD / RDF/XML / TriG / TriX / N-Quads などのRDFファイルまたはコンテンツを解析
 - **データモデル変換**: RDFトリプルを構造化されたC#オブジェクトに変換
 - **階層構築**: Site → Building → Level → Area → Equipment → Point の階層関係を自動構築
 - **多様なエクスポート形式**:
@@ -31,6 +31,7 @@ Site (サイト)
 ```csharp
 using DataModel.Analyzer;
 using DataModel.Analyzer.Extensions;
+using DataModel.Analyzer.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 // 依存性注入の設定
@@ -41,7 +42,7 @@ var services = new ServiceCollection()
 var serviceProvider = services.BuildServiceProvider();
 var analyzer = serviceProvider.GetRequiredService<DataModelAnalyzer>();
 
-// TTLファイルを解析
+// RDFファイルを解析（拡張子に応じて形式を自動判別）
 var model = await analyzer.AnalyzeFromFileAsync("path/to/file.ttl");
 
 // サマリー情報を取得
@@ -56,23 +57,21 @@ await analyzer.ExportToJsonFileAsync(model, "output.json");
 var orleansContracts = analyzer.ExportToOrleansContracts(model);
 ```
 
-### TTLコンテンツから直接解析
+### RDFコンテンツから直接解析
 
 ```csharp
-var ttlContent = @"
-@prefix rec: <https://w3id.org/rec#> .
-@prefix gutp: <https://www.gutp.jp/bim-wg#> .
-...
-";
+var ttlContent = @"...";
+var turtleModel = await analyzer.AnalyzeFromContentAsync(ttlContent, RdfSerializationFormat.Turtle, "ttl-source");
 
-var model = await analyzer.AnalyzeFromContentAsync(ttlContent, "my-source");
+var jsonLdContent = @"{ ... }";
+var jsonLdModel = await analyzer.AnalyzeFromContentAsync(jsonLdContent, RdfSerializationFormat.JsonLd, "jsonld-source");
 ```
 
 ### 完全な処理パイプライン
 
 ```csharp
 // 解析からエクスポートまでの完全な処理
-var result = await analyzer.ProcessTtlFileAsync("input.ttl", "output-directory");
+var result = await analyzer.ProcessRdfFileAsync("input.ttl", "output-directory");
 
 if (result.IsSuccess)
 {
@@ -138,7 +137,7 @@ dotnet build
 # サンプル実行（コンソールアプリ）
 dotnet run
 
-# TTLファイルを指定して実行
+# RDFファイルを指定して実行（拡張子に応じて解析）
 dotnet run path/to/your/file.ttl
 ```
 
