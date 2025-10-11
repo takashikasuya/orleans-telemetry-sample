@@ -1,45 +1,48 @@
-using VDS.RDF;
-using VDS.RDF.Parsing;
+using System;
+using System.IO;
+using System.Threading.Tasks;
 using DataModel.Analyzer.Models;
 using Microsoft.Extensions.Logging;
+using VDS.RDF;
+using VDS.RDF.Parsing;
 
 namespace DataModel.Analyzer.Services;
 
 /// <summary>
-/// TTL(Turtle)ファイルを解析してデータモデルに変換するサービス
+/// RDFファイルを解析してデータモデルに変換するサービス
 /// </summary>
-public class TtlAnalyzerService
+public class RdfAnalyzerService
 {
-    private readonly ILogger<TtlAnalyzerService> _logger;
+    private readonly ILogger<RdfAnalyzerService> _logger;
 
     // 名前空間の定義
     private const string RecNamespace = "https://w3id.org/rec#";
     private const string GutpNamespace = "https://www.gutp.jp/bim-wg#";
     private const string DctNamespace = "http://purl.org/dc/terms/";
 
-    public TtlAnalyzerService(ILogger<TtlAnalyzerService> logger)
+    public RdfAnalyzerService(ILogger<RdfAnalyzerService> logger)
     {
         _logger = logger;
     }
 
     /// <summary>
-    /// TTLファイルを読み込んでデータモデルに変換する
+    /// RDFファイルを読み込んでデータモデルに変換する
     /// </summary>
-    /// <param name="ttlFilePath">TTLファイルのパス</param>
+    /// <param name="rdfFilePath">RDFファイルのパス</param>
     /// <returns>建物データモデル</returns>
-    public async Task<BuildingDataModel> AnalyzeTtlFileAsync(string ttlFilePath)
+    public async Task<BuildingDataModel> AnalyzeRdfFileAsync(string rdfFilePath)
     {
-        _logger.LogInformation("RDFファイルの解析を開始: {FilePath}", ttlFilePath);
+        _logger.LogInformation("RDFファイルの解析を開始: {FilePath}", rdfFilePath);
 
         var model = new BuildingDataModel
         {
-            Source = ttlFilePath
+            Source = rdfFilePath
         };
 
         try
         {
             // 拡張子に応じて適切なパーサーで読み込み
-            var graph = await Task.Run(() => LoadGraphFromFile(ttlFilePath));
+            var graph = await Task.Run(() => LoadGraphFromFile(rdfFilePath));
 
             _logger.LogInformation("RDFグラフの読み込み完了。トリプル数: {TripleCount}", graph.Triples.Count);
 
@@ -54,14 +57,54 @@ public class TtlAnalyzerService
             // 階層関係を構築
             BuildHierarchy(model);
 
-            _logger.LogInformation("TTLファイルの解析完了。Sites: {Sites}, Buildings: {Buildings}, Levels: {Levels}, Areas: {Areas}, Equipment: {Equipment}, Points: {Points}",
+            _logger.LogInformation("RDFファイルの解析完了。Sites: {Sites}, Buildings: {Buildings}, Levels: {Levels}, Areas: {Areas}, Equipment: {Equipment}, Points: {Points}",
                 model.Sites.Count, model.Buildings.Count, model.Levels.Count, model.Areas.Count, model.Equipment.Count, model.Points.Count);
 
             return model;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "RDFファイルの解析中にエラーが発生しました: {FilePath}", ttlFilePath);
+            _logger.LogError(ex, "RDFファイルの解析中にエラーが発生しました: {FilePath}", rdfFilePath);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// RDFコンテンツ文字列を解析してデータモデルに変換する
+    /// </summary>
+    /// <param name="content">RDFコンテンツ</param>
+    /// <param name="format">コンテンツのフォーマット</param>
+    /// <param name="sourceName">ソース名</param>
+    /// <returns>建物データモデル</returns>
+    public async Task<BuildingDataModel> AnalyzeRdfContentAsync(string content, RdfSerializationFormat format, string sourceName = "content")
+    {
+        _logger.LogInformation("RDFコンテンツの解析を開始: {SourceName} ({Format})", sourceName, format);
+
+        var model = new BuildingDataModel
+        {
+            Source = sourceName
+        };
+
+        try
+        {
+            var graph = await Task.Run(() => LoadGraphFromContent(content, format));
+
+            _logger.LogInformation("RDFグラフの読み込み完了。トリプル数: {TripleCount}", graph.Triples.Count);
+
+            model.Sites = ExtractSites(graph);
+            model.Buildings = ExtractBuildings(graph);
+            model.Levels = ExtractLevels(graph);
+            model.Areas = ExtractAreas(graph);
+            model.Equipment = ExtractEquipment(graph);
+            model.Points = ExtractPoints(graph);
+
+            BuildHierarchy(model);
+
+            return model;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "RDFコンテンツの解析中にエラーが発生しました: {SourceName}", sourceName);
             throw;
         }
     }
@@ -134,6 +177,52 @@ public class TtlAnalyzerService
         }
     }
 
+    private Graph LoadGraphFromContent(string content, RdfSerializationFormat format)
+    {
+        _logger.LogDebug("形式 {Format} として RDF コンテンツを解析します", format);
+
+        switch (format)
+        {
+            case RdfSerializationFormat.Turtle:
+                return LoadGraphWithReader(content, (graph, reader) => new TurtleParser().Load(graph, reader));
+            case RdfSerializationFormat.Notation3:
+                return LoadGraphWithReader(content, (graph, reader) => new Notation3Parser().Load(graph, reader));
+            case RdfSerializationFormat.NTriples:
+                return LoadGraphWithReader(content, (graph, reader) => new NTriplesParser().Load(graph, reader));
+            case RdfSerializationFormat.RdfXml:
+                return LoadGraphWithReader(content, (graph, reader) => new RdfXmlParser().Load(graph, reader));
+            case RdfSerializationFormat.JsonLd:
+                return LoadStoreWithReader(content, new JsonLdParser());
+            case RdfSerializationFormat.TriG:
+                return LoadStoreWithReader(content, new TriGParser());
+            case RdfSerializationFormat.TriX:
+                return LoadStoreWithReader(content, new TriXParser());
+            case RdfSerializationFormat.NQuads:
+                return LoadStoreWithReader(content, new NQuadsParser());
+            default:
+                _logger.LogWarning("未対応の形式 {Format}。Turtle として試行します。", format);
+                return LoadGraphWithReader(content, (graph, reader) => new TurtleParser().Load(graph, reader));
+        }
+    }
+
+    private Graph LoadGraphWithReader(string content, Action<IGraph, TextReader> loader)
+    {
+        var graph = new Graph();
+
+        using var reader = new StringReader(content);
+        loader(graph, reader);
+
+        return graph;
+    }
+
+    private Graph LoadStoreWithReader(string content, IStoreReader reader)
+    {
+        var store = new TripleStore();
+        using var stringReader = new StringReader(content);
+        reader.Load(store, stringReader);
+        return MergeStoreToGraph(store);
+    }
+
     private Graph MergeStoreToGraph(ITripleStore store)
     {
         var merged = new Graph();
@@ -143,52 +232,6 @@ public class TtlAnalyzerService
         }
         _logger.LogDebug("データセット形式を単一グラフにマージしました。グラフ数: {GraphCount}, トリプル数: {TripleCount}", store.Graphs.Count, merged.Triples.Count);
         return merged;
-    }
-
-    /// <summary>
-    /// TTLコンテンツ文字列を解析してデータモデルに変換する
-    /// </summary>
-    /// <param name="ttlContent">TTLコンテンツ</param>
-    /// <param name="sourceName">ソース名</param>
-    /// <returns>建物データモデル</returns>
-    public async Task<BuildingDataModel> AnalyzeTtlContentAsync(string ttlContent, string sourceName = "content")
-    {
-        _logger.LogInformation("TTLコンテンツの解析を開始: {SourceName}", sourceName);
-
-        var model = new BuildingDataModel
-        {
-            Source = sourceName
-        };
-
-        try
-        {
-            var graph = new Graph();
-            var parser = new TurtleParser();
-
-            await Task.Run(() =>
-            {
-                using var reader = new StringReader(ttlContent);
-                parser.Load(graph, reader);
-            });
-
-            _logger.LogInformation("RDFグラフの読み込み完了。トリプル数: {TripleCount}", graph.Triples.Count);
-
-            model.Sites = ExtractSites(graph);
-            model.Buildings = ExtractBuildings(graph);
-            model.Levels = ExtractLevels(graph);
-            model.Areas = ExtractAreas(graph);
-            model.Equipment = ExtractEquipment(graph);
-            model.Points = ExtractPoints(graph);
-
-            BuildHierarchy(model);
-
-            return model;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "TTLコンテンツの解析中にエラーが発生しました: {SourceName}", sourceName);
-            throw;
-        }
     }
 
     private List<Site> ExtractSites(IGraph graph)

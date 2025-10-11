@@ -20,8 +20,8 @@ class Program
         var serviceProvider = services.BuildServiceProvider();
         var analyzer = serviceProvider.GetRequiredService<DataModelAnalyzer>();
 
-        // サンプルTTLコンテンツ（実際のファイルからの読み込みも可能）
-        var sampleTtlContent = @"
+        // サンプルRDFコンテンツ（Turtle形式。実際のファイルからの読み込みも可能）
+        var sampleTurtleContent = @"
 @prefix rec: <https://w3id.org/rec#> .
 @prefix gutp: <https://www.gutp.jp/bim-wg#> .
 @prefix site: <http://example.org/site#> .
@@ -70,12 +70,12 @@ point:Temp001 a gutp:GUTPPoint ;
 
         try
         {
-            Console.WriteLine("=== TTLデータモデル解析サンプル ===");
+            Console.WriteLine("=== RDFデータモデル解析サンプル ===");
             Console.WriteLine();
 
-            // TTLコンテンツを解析
-            Console.WriteLine("1. TTLコンテンツを解析中...");
-            var model = await analyzer.AnalyzeFromContentAsync(sampleTtlContent, "sample-ttl");
+            // Turtleコンテンツを解析
+            Console.WriteLine("1. Turtleコンテンツを解析中...");
+            var model = await analyzer.AnalyzeFromContentAsync(sampleTurtleContent, "sample-turtle");
 
             // サマリーを表示
             Console.WriteLine("2. 解析結果のサマリー:");
@@ -107,11 +107,11 @@ point:Temp001 a gutp:GUTPPoint ;
             // ファイルが指定されている場合の処理例
             if (args.Length > 0)
             {
-                var ttlFilePath = args[0];
-                if (File.Exists(ttlFilePath))
+                var rdfFilePath = args[0];
+                if (File.Exists(rdfFilePath))
                 {
-                    Console.WriteLine($"5. TTLファイルを処理中: {ttlFilePath}");
-                    var result = await analyzer.ProcessTtlFileAsync(ttlFilePath, "output");
+                    Console.WriteLine($"5. RDFファイルを処理中: {rdfFilePath}");
+                    var result = await analyzer.ProcessRdfFileAsync(rdfFilePath, "output");
 
                     if (result.IsSuccess)
                     {
@@ -130,13 +130,13 @@ point:Temp001 a gutp:GUTPPoint ;
                 }
                 else
                 {
-                    Console.WriteLine($"   ファイルが見つかりません: {ttlFilePath}");
+                    Console.WriteLine($"   ファイルが見つかりません: {rdfFilePath}");
                 }
             }
             else
             {
-                Console.WriteLine("5. TTLファイルのパスを引数として指定すると、ファイル処理も実行されます。");
-                Console.WriteLine("   例: dotnet run path/to/file.ttl");
+                Console.WriteLine("5. RDFファイルのパスを引数として指定すると、ファイル処理も実行されます。");
+                Console.WriteLine("   例: dotnet run path/to/file.ttl (または .jsonld / .nt など)");
             }
 
             Console.WriteLine();
