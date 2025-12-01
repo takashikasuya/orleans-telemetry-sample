@@ -18,4 +18,8 @@
     <ProjectReference Include="..\Grains.Abstractions\Grains.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Schema\*.ttl" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
+
