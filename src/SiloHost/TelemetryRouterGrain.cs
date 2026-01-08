@@ -7,33 +7,33 @@ namespace SiloHost;
 
 /// <summary>
 /// Stateless worker grain that routes incoming telemetry to the appropriate
-/// device grain.  Grouping messages per device in a batch reduces the
+/// point grain. Grouping messages per point in a batch reduces the
 /// number of RPC calls.
 /// </summary>
 [StatelessWorker]
 public class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
 {
-    public async Task RouteAsync(TelemetryMsg msg)
+    public async Task RouteAsync(TelemetryPointMsg msg)
     {
-        var key = DeviceGrainKey.Create(msg.TenantId, msg.DeviceId);
-        var deviceGrain = GrainFactory.GetGrain<IDeviceGrain>(key);
-        await deviceGrain.UpsertAsync(msg);
+        var key = PointGrainKey.Create(msg.TenantId, msg.BuildingName, msg.SpaceId, msg.DeviceId, msg.PointId);
+        var pointGrain = GrainFactory.GetGrain<IPointGrain>(key);
+        await pointGrain.UpsertAsync(msg);
     }
 
-    public async Task RouteBatchAsync(IReadOnlyList<TelemetryMsg> batch)
+    public async Task RouteBatchAsync(IReadOnlyList<TelemetryPointMsg> batch)
     {
         if (batch.Count == 0)
         {
             return;
         }
 
-        var groups = new Dictionary<(string TenantId, string DeviceId), List<TelemetryMsg>>(batch.Count);
+        var groups = new Dictionary<(string TenantId, string BuildingName, string SpaceId, string DeviceId, string PointId), List<TelemetryPointMsg>>(batch.Count);
         foreach (var msg in batch)
         {
-            var tupleKey = (msg.TenantId, msg.DeviceId);
+            var tupleKey = (msg.TenantId, msg.BuildingName, msg.SpaceId, msg.DeviceId, msg.PointId);
             if (!groups.TryGetValue(tupleKey, out var list))
             {
-                list = new List<TelemetryMsg>();
+                list = new List<TelemetryPointMsg>();
                 groups[tupleKey] = list;
             }
 
@@ -42,8 +42,13 @@ public class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
 
         foreach (var (tupleKey, messages) in groups)
         {
-            var grainKey = DeviceGrainKey.Create(tupleKey.TenantId, tupleKey.DeviceId);
-            var grain = GrainFactory.GetGrain<IDeviceGrain>(grainKey);
+            var grainKey = PointGrainKey.Create(
+                tupleKey.TenantId,
+                tupleKey.BuildingName,
+                tupleKey.SpaceId,
+                tupleKey.DeviceId,
+                tupleKey.PointId);
+            var grain = GrainFactory.GetGrain<IPointGrain>(grainKey);
             messages.Sort((left, right) => left.Sequence.CompareTo(right.Sequence));
             foreach (var msg in messages)
             {
@@ -55,6 +60,6 @@ public class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
 
 public interface ITelemetryRouterGrain : IGrainWithGuidKey
 {
-    Task RouteAsync(TelemetryMsg msg);
-    Task RouteBatchAsync(IReadOnlyList<TelemetryMsg> batch);
+    Task RouteAsync(TelemetryPointMsg msg);
+    Task RouteBatchAsync(IReadOnlyList<TelemetryPointMsg> batch);
 }

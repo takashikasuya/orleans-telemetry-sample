@@ -35,6 +35,8 @@ internal static class Program
             // configure grain storage
             siloBuilder.AddMemoryGrainStorage("DeviceStore");
             siloBuilder.AddMemoryStreams("DeviceUpdates");
+            siloBuilder.AddMemoryGrainStorage("PointStore");
+            siloBuilder.AddMemoryStreams("PointUpdates");
             // add stream provider for device updates
             // siloBuilder.AddSimpleMessageStreamProvider("DeviceUpdates");
             siloBuilder.AddMemoryGrainStorage("PubSubStore");
