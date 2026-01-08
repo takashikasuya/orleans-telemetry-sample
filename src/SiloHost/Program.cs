@@ -1,4 +1,5 @@
 using System;
+using DataModel.Analyzer.Extensions;
 using Grains.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,12 +17,14 @@ internal static class Program
         var builder = Host.CreateDefaultBuilder(args);
         builder.ConfigureServices(services =>
         {
+            services.AddDataModelAnalyzer();
             services.AddSingleton<ITelemetryRouterGrain>(provider =>
             {
                 var grainFactory = provider.GetRequiredService<IGrainFactory>();
                 return grainFactory.GetGrain<ITelemetryRouterGrain>(Guid.Empty);
             });
             services.AddHostedService<MqIngestService>();
+            services.AddHostedService<GraphSeedService>();
         });
         builder.UseOrleans(siloBuilder =>
         {
@@ -34,6 +37,9 @@ internal static class Program
             });
             // configure grain storage
             siloBuilder.AddMemoryGrainStorage("DeviceStore");
+            siloBuilder.AddMemoryGrainStorage("GraphStore");
+            siloBuilder.AddMemoryGrainStorage("GraphIndexStore");
+            siloBuilder.AddMemoryGrainStorage("ValueStore");
             siloBuilder.AddMemoryStreams("DeviceUpdates");
             // add stream provider for device updates
             // siloBuilder.AddSimpleMessageStreamProvider("DeviceUpdates");

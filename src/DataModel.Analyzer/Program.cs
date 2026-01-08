@@ -1,15 +1,14 @@
 using DataModel.Analyzer;
 using DataModel.Analyzer.Extensions;
+using DataModel.Analyzer.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
+using System.Linq;
 
-// サンプルプログラムのエントリーポイント
 class Program
 {
     static async Task Main(string[] args)
     {
-        // 依存性注入の設定
         var services = new ServiceCollection()
             .AddDataModelAnalyzer(builder =>
             {
@@ -19,65 +18,100 @@ class Program
 
         var serviceProvider = services.BuildServiceProvider();
         var analyzer = serviceProvider.GetRequiredService<DataModelAnalyzer>();
-
-        // サンプルRDFコンテンツ（Turtle形式。実際のファイルからの読み込みも可能）
         var sampleTurtleContent = @"
-@prefix rec: <https://w3id.org/rec#> .
-@prefix gutp: <https://www.gutp.jp/bim-wg#> .
-@prefix site: <http://example.org/site#> .
-@prefix building: <http://example.org/building#> .
-@prefix level: <http://example.org/level#> .
-@prefix area: <http://example.org/area#> .
-@prefix device: <http://example.org/equipment#> .
-@prefix point: <http://example.org/point#> .
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix rec:   <https://w3id.org/rec/> .
+@prefix sbco:  <https://www.sbco.or.jp/ont/> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
 
-site:TestSite a rec:Site ;
-    rec:name ""Test Site"" ;
-    rec:hasPart building:TestBuilding .
+sbco:Site_001 a sbco:Site ;
+    sbco:name ""Main Site"" ;
+    sbco:id ""SITE_001"" ;
+    sbco:identifiers _:siteId1 ;
+    sbco:hasPart sbco:Building_001 .
 
-building:TestBuilding a rec:Building ;
-    rec:name ""Test Building"" ;
-    rec:hasPart level:Floor1 .
+sbco:Building_001 a sbco:Building ;
+    sbco:name ""Headquarters Building"" ;
+    sbco:id ""BLD_001"" ;
+    sbco:identifiers _:bldId1 ;
+    sbco:isPartOf sbco:Site_001 ;
+    sbco:hasPart sbco:Level_01 .
 
-level:Floor1 a rec:Level ;
-    rec:name ""1F"" ;
-    rec:hasPart area:Room101 .
+sbco:Level_01 a sbco:Level ;
+    sbco:name ""Level 1"" ;
+    sbco:id ""LVL_01"" ;
+    sbco:identifiers _:lvlId1 ;
+    sbco:levelNumber 1 ;
+    sbco:isPartOf sbco:Building_001 ;
+    sbco:hasPart sbco:Space_101 .
 
-area:Room101 a rec:Area ;
-    rec:name ""Room 101"" ;
-    rec:isLocationOf device:TempSensor001 .
+sbco:Space_101 a sbco:Space ;
+    sbco:name ""Room 101"" ;
+    sbco:id ""SPC_101"" ;
+    sbco:identifiers _:spcId1 ;
+    sbco:isPartOf sbco:Level_01 .
 
-device:TempSensor001 a gutp:GUTPEquipment ;
-    rec:name ""Temperature Sensor 001"" ;
-    gutp:device_id ""TempSensor001"" ;
-    gutp:gateway_id ""GW001"" ;
-    gutp:device_type ""TemperatureSensor"" ;
-    rec:hasPoint point:Temp001 .
+sbco:AHU_01 a sbco:EquipmentExt ;
+    sbco:name ""AHU-1"" ;
+    sbco:id ""EQP_AHU1"" ;
+    sbco:identifiers _:eqpId1 ;
+    sbco:assetTag ""AT-1001"" ;
+    sbco:installationDate ""2023-05-01""^^xsd:date ;
+    sbco:IPAddress ""10.0.1.10"" ;
+    sbco:locatedIn sbco:Space_101 ;
+    sbco:hasPoint sbco:Point_Temp_101 .
 
-point:Temp001 a gutp:GUTPPoint ;
-    rec:name ""Temperature Point"" ;
-    gutp:point_id ""Temp001"" ;
-    gutp:point_type ""Temperature"" ;
-    gutp:point_specification ""Measurement"" ;
-    gutp:local_id ""TempSensor001"" ;
-    gutp:writable false ;
-    gutp:interval 60 ;
-    gutp:unit ""degC"" ;
-    gutp:max_pres_value 50.0 ;
-    gutp:min_pres_value -10.0 ;
-    rec:isPointOf device:TempSensor001 .
+sbco:Point_Temp_101 a sbco:PointExt ;
+    sbco:name ""Room 101 Temperature"" ;
+    sbco:id ""PNT_TEMP_101"" ;
+    sbco:identifiers _:pntId1 ;
+    sbco:pointType ""TemperatureSensorProfile"" ;
+    sbco:pointSpecification ""Measurement"" ;
+    sbco:unit ""celsius"" ;
+    brick:hasQuantity ""Temperature"" ;
+    brick:isPointOf sbco:AHU_01 ;
+    sbco:minPresValue ""0.0""^^xsd:float ;
+    sbco:maxPresValue ""50.0""^^xsd:float ;
+    sbco:scale ""1.0""^^xsd:float ;
+    brick:aggregate ""average"" ;
+    brick:hasSubstance ""Air"" .
+
+_:siteId1 a sbco:KeyStringMapEntry ;
+    sbco:key ""site_code"" ;
+    sbco:value ""SITE-001"" .
+
+_:bldId1 a sbco:KeyStringMapEntry ;
+    sbco:key ""building_code"" ;
+    sbco:value ""HQ-01"" .
+
+_:lvlId1 a sbco:KeyStringMapEntry ;
+    sbco:key ""level_code"" ;
+    sbco:value ""L1"" .
+
+_:spcId1 a sbco:KeyStringMapEntry ;
+    sbco:key ""room_code"" ;
+    sbco:value ""101"" .
+
+_:eqpId1 a sbco:KeyStringMapEntry ;
+    sbco:key ""equipment_code"" ;
+    sbco:value ""AHU-1"" .
+
+_:pntId1 a sbco:KeyStringMapEntry ;
+    sbco:key ""point_code"" ;
+    sbco:value ""TEMP-101"" .
 ";
+
+        var shapesPath = Path.Combine(AppContext.BaseDirectory, "Schema", "building_model.shacl.ttl");
 
         try
         {
             Console.WriteLine("=== RDFデータモデル解析サンプル ===");
             Console.WriteLine();
 
-            // Turtleコンテンツを解析
-            Console.WriteLine("1. Turtleコンテンツを解析中...");
-            var model = await analyzer.AnalyzeFromContentAsync(sampleTurtleContent, "sample-turtle");
+            Console.WriteLine("1. Turtleコンテンツ解析中...");
+            var analysis = await analyzer.AnalyzeFromContentWithValidationAsync(sampleTurtleContent, RdfSerializationFormat.Turtle, "sample-turtle", shapesPath);
+            var model = analysis.Model;
 
-            // サマリーを表示
             Console.WriteLine("2. 解析結果のサマリー:");
             var summary = analyzer.GetSummary(model);
             Console.WriteLine($"   - ソース: {summary.Source}");
@@ -90,33 +124,63 @@ point:Temp001 a gutp:GUTPPoint ;
             Console.WriteLine($"   - ポイント数: {summary.PointCount}");
             Console.WriteLine();
 
-            // JSONエクスポート
-            Console.WriteLine("3. JSONエクスポート:");
-            var json = analyzer.ExportToJson(model);
-            Console.WriteLine($"   JSONサイズ: {json.Length} bytes");
-            Console.WriteLine("   JSON（最初の200文字）:");
-            Console.WriteLine($"   {json.Substring(0, Math.Min(200, json.Length))}...");
+            Console.WriteLine("3. SHACLバリデーション:");
+            if (analysis.Validation != null)
+            {
+                Console.WriteLine($"   SHACL適合: {analysis.Validation.Conforms}");
+
+                if (analysis.Validation.Messages.Any())
+                {
+                    Console.WriteLine("   バリデーションメッセージ:");
+                    foreach (var msg in analysis.Validation.Messages)
+                    {
+                        Console.WriteLine($"     - {msg}");
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("   SHACLスキーマが見つかりません、または検証を実行できませんでした。");
+            }
+
             Console.WriteLine();
 
-            // Orleans用コントラクト生成
-            Console.WriteLine("4. Orleans用コントラクト生成:");
+            Console.WriteLine("4. JSONエクスポート");
+            var json = analyzer.ExportToJson(model);
+            Console.WriteLine($"   JSONサイズ: {json.Length} bytes");
+            Console.WriteLine("   JSONの最初の200文字:");
+            Console.WriteLine($"   {json.Substring(0, Math.Min(100000, json.Length))}...");
+            Console.WriteLine();
+
+            Console.WriteLine("5. Orleans用コントラクト生成");
             var contracts = analyzer.ExportToOrleansContracts(model);
             Console.WriteLine($"   生成されたコントラクト数: {contracts.Count}");
             Console.WriteLine();
 
-            // ファイルが指定されている場合の処理例
             if (args.Length > 0)
             {
                 var rdfFilePath = args[0];
                 if (File.Exists(rdfFilePath))
                 {
-                    Console.WriteLine($"5. RDFファイルを処理中: {rdfFilePath}");
-                    var result = await analyzer.ProcessRdfFileAsync(rdfFilePath, "output");
+                    Console.WriteLine($"6. RDFファイルを処理: {rdfFilePath}");
+                    var result = await analyzer.ProcessRdfFileAsync(rdfFilePath, "output", shapesPath);
 
                     if (result.IsSuccess)
                     {
                         Console.WriteLine("   処理が完了しました。");
                         Console.WriteLine($"   処理時間: {result.ProcessingTime.TotalMilliseconds:F2}ms");
+                        if (result.ShaclConforms.HasValue)
+                        {
+                            Console.WriteLine($"   SHACL適合: {result.ShaclConforms}");
+                            if (result.ShaclMessages.Any())
+                            {
+                                Console.WriteLine("   SHACLメッセージ:");
+                                foreach (var msg in result.ShaclMessages)
+                                {
+                                    Console.WriteLine($"     - {msg}");
+                                }
+                            }
+                        }
                         Console.WriteLine("   出力ファイル:");
                         foreach (var outputFile in result.OutputFiles)
                         {
@@ -135,7 +199,7 @@ point:Temp001 a gutp:GUTPPoint ;
             }
             else
             {
-                Console.WriteLine("5. RDFファイルのパスを引数として指定すると、ファイル処理も実行されます。");
+                Console.WriteLine("6. RDFファイルのパスを引数に指定すると、ファイル処理が実行されます。");
                 Console.WriteLine("   例: dotnet run path/to/file.ttl (または .jsonld / .nt など)");
             }
 
