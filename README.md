@@ -66,6 +66,84 @@ Telemetry messages are routed to device grains and persisted as the latest
 state. The graph layer sits alongside this so you can traverse spaces/devices
 and bind values to any node.
 
+## Control Flow (Draft Interfaces)
+
+This sample now defines draft interfaces for issuing control commands to
+writable points and routing them through egress connectors. The implementation
+is intentionally scoped to interfaces so each connector can define its own
+acknowledgement and confirmation behavior.
+
+### REST API (planned)
+
+Control requests are submitted per point and return a command status handle:
+
+```
+POST /api/points/{pointId}/control
+{
+  "commandId": "cmd-123",
+  "buildingName": "building",
+  "spaceId": "space",
+  "deviceId": "device-1",
+  "pointId": "setpoint-1",
+  "desiredValue": 22.5,
+  "metadata": { "source": "operator" }
+}
+```
+
+Control status is queried by command id:
+
+```
+GET /api/points/{pointId}/control/{commandId}
+```
+
+### Grain Interface
+
+The control grain accepts a request and returns a status snapshot.
+
+```
+Task<PointControlSnapshot> SubmitAsync(PointControlRequest request);
+Task<PointControlSnapshot?> GetAsync(string commandId);
+```
+
+### Egress Connector Interface
+
+Connectors expose a send API and report their confirmation mode:
+
+```
+Task<ControlEgressResult> SendAsync(ControlEgressRequest request, CancellationToken ct);
+```
+
+### Control Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as REST Client
+    participant API as API Gateway
+    participant Ctrl as PointControlGrain
+    participant Egress as ControlEgressCoordinator
+    participant Conn as Egress Connector
+    participant Point as PointGrain
+
+    Client->>API: POST /api/points/{pointId}/control
+    API->>Ctrl: SubmitAsync(request)
+    Ctrl-->>API: Snapshot (Pending)
+    API-->>Client: 202 Accepted (commandId)
+
+    Ctrl->>Egress: Enqueue request
+    Egress->>Conn: SendAsync(request)
+    Conn-->>Egress: Accepted (ACK + correlation)
+    Egress->>Ctrl: Mark Accepted
+
+    alt TelemetryConfirm
+        Point-->>Ctrl: New value observed (Applied)
+    else ReadBackConfirm
+        Conn-->>Ctrl: Read-back ok (Applied)
+    else AckOnly
+        Ctrl-->>Ctrl: Finalize as Accepted
+    end
+```
+
 ## Services
 
 The solution is composed of these Docker services:
