@@ -1,10 +1,10 @@
 # Orleans Telemetry Sample
 
 This repository contains a minimal sample that demonstrates how to ingest
-telemetry messages from RabbitMQ into an Orleans cluster, map them to
-device‑scoped grains, and expose the latest state through a REST and gRPC
-gateway.  A small publisher service publishes random temperature/humidity
-telemetry to RabbitMQ to exercise the pipeline.
+telemetry messages into an Orleans cluster (via RabbitMQ or a simulator),
+map them to device‑scoped grains, and expose the latest state through a REST
+and gRPC gateway. A small publisher service publishes random
+temperature/humidity telemetry to RabbitMQ to exercise the pipeline.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ docker compose up --build
 
 ### Local (without Docker)
 
-Start RabbitMQ, then run each project:
+If using RabbitMQ, start it first. Then run each project:
 
 ```bash
 dotnet run --project src/SiloHost
@@ -68,14 +68,14 @@ and bind values to any node.
 
 ## Services
 
-The solution is composed of four Docker services:
+The solution is composed of these Docker services:
 
 | Service        | Description                                                       |
 |---------------|-------------------------------------------------------------------|
-| `mq`           | RabbitMQ broker used as the message queue for incoming telemetry.|
-| `silo`         | Orleans host containing grains and the RabbitMQ consumer.        |
+| `mq`           | RabbitMQ broker used as the message queue for incoming telemetry (optional).|
+| `silo`         | Orleans host containing grains and telemetry ingest connectors.  |
 | `api`          | ASP.NET Core application that exposes REST and gRPC endpoints.   |
-| `publisher`    | .NET console app that publishes random telemetry to the queue.   |
+| `publisher`    | .NET console app that publishes random telemetry to the queue (optional).|
 
 To run the stack locally you can use Docker Compose:
 
@@ -90,8 +90,9 @@ This sample is intentionally simple and is not hardened for production use.
 
 ## Telemetry ingest connectors
 
-Telemetry ingestion is handled by `Telemetry.Ingest` and can enable multiple connectors
-via configuration. To run with the built-in simulator:
+Telemetry ingestion is handled by `Telemetry.Ingest`. Connectors are registered in code
+(currently in `src/SiloHost/Program.cs`), and the configuration selects which ones run.
+To run with the built-in simulator:
 
 ```json
 {
@@ -119,7 +120,8 @@ sequenceDiagram
     actor Seed as Seeder
     actor Pub as Publisher
     participant MQ as RabbitMQ (queue: telemetry)
-    participant Ingest as SiloHost: TelemetryIngestCoordinator (RabbitMq)
+    participant Sim as Simulator Connector
+    participant Ingest as SiloHost: TelemetryIngestCoordinator
     participant Router as TelemetryRouterGrain (Stateless)
     participant Dev as DeviceGrain("{tenant}:{deviceId}")
     participant Node as GraphNodeGrain("{tenant}:{nodeId}")
@@ -136,13 +138,19 @@ sequenceDiagram
     Seed->>Node: AddIncomingEdgeAsync(edge)
 
     %% --- 発行 ---
-    Pub->>MQ: JSON {deviceId, sequence, properties}
-    note right of Pub: 任意周期で発行（デモのPublisher）
+    alt Simulator enabled
+        Sim->>Ingest: TelemetryPointMsg (periodic)
+    else RabbitMQ enabled
+        Pub->>MQ: JSON {deviceId, sequence, properties}
+        note right of Pub: 任意周期で発行（デモのPublisher）
+    end
 
     %% --- 取り込み & ルーティング ---
-    Ingest-->>MQ: BasicConsume(prefetch=N)
-    MQ-->>Ingest: Deliver message
-    Ingest->>Ingest: JSONパース/バリデーション
+    opt RabbitMQ enabled
+        Ingest-->>MQ: BasicConsume(prefetch=N)
+        MQ-->>Ingest: Deliver message
+        Ingest->>Ingest: JSONパース/バリデーション
+    end
     Ingest->>Router: RouteAsync(msg)
     Router->>Dev: UpsertAsync(msg)\n(key = "{tenant}:{deviceId}")
 
@@ -268,8 +276,10 @@ classDiagram
 ```mermaid
 flowchart LR
     subgraph Ingest
-        MQ[(RabbitMQ)]
         IngestSvc[TelemetryIngestCoordinator]
+        Sim[Simulator Connector]
+        MQ[(RabbitMQ)]
+        RMQ[RabbitMQ Connector]
         RouterGrain[TelemetryRouterGrain]
     end
     subgraph Orleans["Orleans Silo"]
@@ -289,7 +299,8 @@ flowchart LR
         Analyzer[DataModel.Analyzer]
     end
 
-    MQ --> IngestSvc --> RouterGrain --> DevGrain --> Stream
+    Sim --> IngestSvc --> RouterGrain --> DevGrain --> Stream
+    MQ --> RMQ --> IngestSvc
     RestApi --> DevGrain
     RestApi --> NodeGrain
     RestApi --> ValGrain

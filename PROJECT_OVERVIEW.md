@@ -46,7 +46,7 @@ DataModel.Analyzer/
 
 ### Telemetry.Ingest
 - RabbitMQ/シミュレータなどのコネクタを追加してテレメトリを発行
-- `TelemetryIngest` 設定で有効なコネクタを切り替え
+- コネクタの登録は `SiloHost` のDIで行い、`TelemetryIngest` 設定で有効/無効を切り替え
 
 ## 使用例
 
