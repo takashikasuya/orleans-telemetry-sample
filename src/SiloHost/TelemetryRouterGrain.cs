@@ -57,9 +57,3 @@ public class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
         }
     }
 }
-
-public interface ITelemetryRouterGrain : IGrainWithGuidKey
-{
-    Task RouteAsync(TelemetryPointMsg msg);
-    Task RouteBatchAsync(IReadOnlyList<TelemetryPointMsg> batch);
-}

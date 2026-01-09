@@ -7,6 +7,9 @@ using Orleans;
 using Orleans.Configuration;
 using Orleans.Hosting;
 using Orleans.Streaming;
+using Telemetry.Ingest;
+using Telemetry.Ingest.RabbitMq;
+using Telemetry.Ingest.Simulator;
 
 namespace SiloHost;
 
@@ -15,7 +18,7 @@ internal static class Program
     public static async Task Main(string[] args)
     {
         var builder = Host.CreateDefaultBuilder(args);
-        builder.ConfigureServices(services =>
+        builder.ConfigureServices((context, services) =>
         {
             services.AddDataModelAnalyzer();
             services.AddSingleton<ITelemetryRouterGrain>(provider =>
@@ -23,7 +26,11 @@ internal static class Program
                 var grainFactory = provider.GetRequiredService<IGrainFactory>();
                 return grainFactory.GetGrain<ITelemetryRouterGrain>(Guid.Empty);
             });
-            services.AddHostedService<MqIngestService>();
+            var ingestSection = context.Configuration.GetSection("TelemetryIngest");
+            services.AddTelemetryIngest(ingestSection);
+            // Connector registration stays in code; config controls which ones are enabled.
+            services.AddRabbitMqIngest(ingestSection.GetSection("RabbitMq"));
+            services.AddSimulatorIngest(ingestSection.GetSection("Simulator"));
             services.AddHostedService<GraphSeedService>();
         });
         builder.UseOrleans(siloBuilder =>

@@ -39,9 +39,14 @@ DataModel.Analyzer/
 ### SiloHost
 - デバイスGrainの初期化データ提供
 - テレメトリルーティング設定
+- `Telemetry.Ingest` で取得したテレメトリの取り込み先
 
 ### Grains.Abstractions
 - 共通のデバイスコントラクト定義参照
+
+### Telemetry.Ingest
+- RabbitMQ/シミュレータなどのコネクタを追加してテレメトリを発行
+- `TelemetryIngest` 設定で有効なコネクタを切り替え
 
 ## 使用例
 

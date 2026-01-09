@@ -88,6 +88,30 @@ the REST API and `http://localhost:8080` to call the gRPC service via a client.
 
 This sample is intentionally simple and is not hardened for production use.
 
+## Telemetry ingest connectors
+
+Telemetry ingestion is handled by `Telemetry.Ingest` and can enable multiple connectors
+via configuration. To run with the built-in simulator:
+
+```json
+{
+  "TelemetryIngest": {
+    "Enabled": [ "Simulator" ],
+    "BatchSize": 100,
+    "ChannelCapacity": 10000,
+    "Simulator": {
+      "TenantId": "tenant",
+      "BuildingName": "building",
+      "SpaceId": "space",
+      "DeviceIdPrefix": "sim-",
+      "DeviceCount": 2,
+      "PointsPerDevice": 3,
+      "IntervalMilliseconds": 2000
+    }
+  }
+}
+```
+
 
 ```mermaid
 sequenceDiagram
@@ -95,7 +119,7 @@ sequenceDiagram
     actor Seed as Seeder
     actor Pub as Publisher
     participant MQ as RabbitMQ (queue: telemetry)
-    participant Ingest as SiloHost: MqIngestService
+    participant Ingest as SiloHost: TelemetryIngestCoordinator (RabbitMq)
     participant Router as TelemetryRouterGrain (Stateless)
     participant Dev as DeviceGrain("{tenant}:{deviceId}")
     participant Node as GraphNodeGrain("{tenant}:{nodeId}")
@@ -230,8 +254,8 @@ classDiagram
       +GetAsync() DeviceSnapshot
     }
     class ITelemetryRouterGrain {
-      +RouteAsync(TelemetryMsg)
-      +RouteBatchAsync(TelemetryMsg[])
+      +RouteAsync(TelemetryPointMsg)
+      +RouteBatchAsync(TelemetryPointMsg[])
     }
     IGraphNodeGrain --> GraphNodeDefinition
     IGraphNodeGrain --> GraphEdge
@@ -245,7 +269,7 @@ classDiagram
 flowchart LR
     subgraph Ingest
         MQ[(RabbitMQ)]
-        IngestSvc[MqIngestService]
+        IngestSvc[TelemetryIngestCoordinator]
         RouterGrain[TelemetryRouterGrain]
     end
     subgraph Orleans["Orleans Silo"]
