@@ -20,7 +20,7 @@ namespace SiloHost;
 internal sealed class MqIngestService : BackgroundService
 {
     private readonly ILogger<MqIngestService> _logger;
-    private readonly Channel<TelemetryMsg> _channel;
+    private readonly Channel<TelemetryPointMsg> _channel;
     private readonly ITelemetryRouterGrain _router;
     private IConnection? _connection;
     private IModel? _model;
@@ -29,7 +29,7 @@ internal sealed class MqIngestService : BackgroundService
     {
         _router = router;
         _logger = logger;
-        _channel = Channel.CreateBounded<TelemetryMsg>(new BoundedChannelOptions(10000)
+        _channel = Channel.CreateBounded<TelemetryPointMsg>(new BoundedChannelOptions(10000)
         {
             FullMode = BoundedChannelFullMode.Wait
         });
@@ -78,7 +78,21 @@ internal sealed class MqIngestService : BackgroundService
                 var msg = JsonSerializer.Deserialize<TelemetryMsg>(body);
                 if (msg is not null)
                 {
-                    await _channel.Writer.WriteAsync(msg, ct);
+                    foreach (var kv in msg.Properties)
+                    {
+                        var pointMsg = new TelemetryPointMsg
+                        {
+                            TenantId = msg.TenantId,
+                            BuildingName = msg.BuildingName,
+                            SpaceId = msg.SpaceId,
+                            DeviceId = msg.DeviceId,
+                            PointId = kv.Key,
+                            Sequence = msg.Sequence,
+                            Timestamp = msg.Timestamp,
+                            Value = kv.Value
+                        };
+                        await _channel.Writer.WriteAsync(pointMsg, ct);
+                    }
                     _model!.BasicAck(ea.DeliveryTag, multiple: false);
                 }
                 else
@@ -113,7 +127,7 @@ internal sealed class MqIngestService : BackgroundService
 
     private async Task RouteLoopAsync(CancellationToken ct)
     {
-        var batch = new List<TelemetryMsg>(100);
+        var batch = new List<TelemetryPointMsg>(100);
         try
         {
             await foreach (var msg in _channel.Reader.ReadAllAsync(ct))
