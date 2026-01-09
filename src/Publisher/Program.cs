@@ -8,6 +8,8 @@ using RabbitMQ.Client;
 // considered production ready.
 var devices = new[] { "dev-1", "dev-2", "dev-3" };
 var tenant = Environment.GetEnvironmentVariable("TENANT") ?? "t1";
+var buildingName = Environment.GetEnvironmentVariable("BUILDING_NAME") ?? "bldg-1";
+var spaceId = Environment.GetEnvironmentVariable("SPACE_ID") ?? "floor-1/room-1";
 var rand = new Random();
 
 var factory = new ConnectionFactory
@@ -38,7 +40,9 @@ while (true)
             {
                 ["temperature"] = 20 + rand.NextDouble() * 10,
                 ["humidity"] = 50 + rand.NextDouble() * 20
-            }
+            },
+            BuildingName: buildingName,
+            SpaceId: spaceId
         );
         var body = JsonSerializer.SerializeToUtf8Bytes(msg);
         var props = channel.CreateBasicProperties();

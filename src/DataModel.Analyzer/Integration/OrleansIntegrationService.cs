@@ -1,5 +1,6 @@
 using DataModel.Analyzer.Models;
 using DataModel.Analyzer.Services;
+using Grains.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace DataModel.Analyzer.Integration;
@@ -105,6 +106,281 @@ public class OrleansIntegrationService
                     ValidationRules = p.ValidationRules
                 })
         };
+    }
+
+    /// <summary>
+    /// RDFファイルからグラフシードデータを抽出
+    /// </summary>
+    public async Task<GraphSeedData> ExtractGraphSeedDataAsync(string rdfFilePath)
+    {
+        _logger.LogInformation("RDFファイルからグラフシードを抽出開始: {FilePath}", rdfFilePath);
+
+        var model = await _analyzer.AnalyzeFromFileAsync(rdfFilePath);
+        return CreateGraphSeedData(model);
+    }
+
+    /// <summary>
+    /// BuildingDataModelからグラフシードデータを生成
+    /// </summary>
+    public GraphSeedData CreateGraphSeedData(BuildingDataModel model)
+    {
+        var seed = new GraphSeedData();
+
+        foreach (var site in model.Sites)
+        {
+            seed.Nodes.Add(CreateNodeDefinition(site, GraphNodeType.Site));
+        }
+
+        foreach (var building in model.Buildings)
+        {
+            seed.Nodes.Add(CreateNodeDefinition(building, GraphNodeType.Building, attrs =>
+            {
+                if (!string.IsNullOrWhiteSpace(building.SiteUri))
+                {
+                    attrs["SiteUri"] = building.SiteUri;
+                }
+            }));
+
+            if (!string.IsNullOrWhiteSpace(building.SiteUri))
+            {
+                seed.Edges.Add(new GraphSeedEdge
+                {
+                    SourceNodeId = building.SiteUri,
+                    Predicate = "hasBuilding",
+                    TargetNodeId = ResolveNodeId(building, "building", building.Uri)
+                });
+            }
+        }
+
+        foreach (var level in model.Levels)
+        {
+            seed.Nodes.Add(CreateNodeDefinition(level, GraphNodeType.Level, attrs =>
+            {
+                if (!string.IsNullOrWhiteSpace(level.BuildingUri))
+                {
+                    attrs["BuildingUri"] = level.BuildingUri;
+                }
+                if (level.LevelNumber.HasValue)
+                {
+                    attrs["LevelNumber"] = level.LevelNumber.Value.ToString();
+                }
+            }));
+
+            if (!string.IsNullOrWhiteSpace(level.BuildingUri))
+            {
+                seed.Edges.Add(new GraphSeedEdge
+                {
+                    SourceNodeId = level.BuildingUri,
+                    Predicate = "hasLevel",
+                    TargetNodeId = ResolveNodeId(level, "level", level.Uri)
+                });
+            }
+        }
+
+        foreach (var area in model.Areas)
+        {
+            seed.Nodes.Add(CreateNodeDefinition(area, GraphNodeType.Area, attrs =>
+            {
+                if (!string.IsNullOrWhiteSpace(area.LevelUri))
+                {
+                    attrs["LevelUri"] = area.LevelUri;
+                }
+            }));
+
+            if (!string.IsNullOrWhiteSpace(area.LevelUri))
+            {
+                seed.Edges.Add(new GraphSeedEdge
+                {
+                    SourceNodeId = area.LevelUri,
+                    Predicate = "hasArea",
+                    TargetNodeId = ResolveNodeId(area, "area", area.Uri)
+                });
+            }
+        }
+
+        foreach (var equipment in model.Equipment)
+        {
+            var equipmentId = ResolveEquipmentId(equipment);
+            seed.Nodes.Add(CreateNodeDefinition(equipment, GraphNodeType.Equipment, attrs =>
+            {
+                attrs["DeviceId"] = equipment.DeviceId;
+                attrs["GatewayId"] = equipment.GatewayId;
+                attrs["DeviceType"] = equipment.DeviceType;
+                if (!string.IsNullOrWhiteSpace(equipment.AreaUri))
+                {
+                    attrs["AreaUri"] = equipment.AreaUri;
+                }
+                if (!string.IsNullOrWhiteSpace(equipment.Supplier))
+                {
+                    attrs["Supplier"] = equipment.Supplier;
+                }
+                if (!string.IsNullOrWhiteSpace(equipment.Owner))
+                {
+                    attrs["Owner"] = equipment.Owner;
+                }
+            }, equipmentId));
+
+            if (!string.IsNullOrWhiteSpace(equipment.AreaUri))
+            {
+                seed.Edges.Add(new GraphSeedEdge
+                {
+                    SourceNodeId = equipment.AreaUri,
+                    Predicate = "hasEquipment",
+                    TargetNodeId = equipmentId
+                });
+            }
+
+            foreach (var fed in equipment.Feeds)
+            {
+                if (!string.IsNullOrWhiteSpace(fed))
+                {
+                    seed.Edges.Add(new GraphSeedEdge
+                    {
+                        SourceNodeId = equipmentId,
+                        Predicate = "feeds",
+                        TargetNodeId = fed
+                    });
+                }
+            }
+
+            foreach (var fedBy in equipment.IsFedBy)
+            {
+                if (!string.IsNullOrWhiteSpace(fedBy))
+                {
+                    seed.Edges.Add(new GraphSeedEdge
+                    {
+                        SourceNodeId = equipmentId,
+                        Predicate = "isFedBy",
+                        TargetNodeId = fedBy
+                    });
+                }
+            }
+        }
+
+        foreach (var point in model.Points)
+        {
+            var pointId = ResolvePointId(point);
+            seed.Nodes.Add(CreateNodeDefinition(point, GraphNodeType.Point, attrs =>
+            {
+                attrs["PointId"] = point.PointId;
+                attrs["PointType"] = point.PointType;
+                attrs["PointSpecification"] = point.PointSpecification;
+                attrs["Writable"] = point.Writable.ToString();
+                if (!string.IsNullOrWhiteSpace(point.Unit))
+                {
+                    attrs["Unit"] = point.Unit;
+                }
+                if (point.Interval.HasValue)
+                {
+                    attrs["Interval"] = point.Interval.Value.ToString();
+                }
+                if (point.MinPresValue.HasValue)
+                {
+                    attrs["MinPresValue"] = point.MinPresValue.Value.ToString();
+                }
+                if (point.MaxPresValue.HasValue)
+                {
+                    attrs["MaxPresValue"] = point.MaxPresValue.Value.ToString();
+                }
+            }, pointId));
+
+            if (!string.IsNullOrWhiteSpace(point.EquipmentUri))
+            {
+                seed.Edges.Add(new GraphSeedEdge
+                {
+                    SourceNodeId = point.EquipmentUri,
+                    Predicate = "hasPoint",
+                    TargetNodeId = pointId
+                });
+            }
+        }
+
+        return seed;
+    }
+
+    private GraphNodeDefinition CreateNodeDefinition(RdfResource resource, GraphNodeType nodeType, Action<Dictionary<string, string>>? extras = null, string? forcedId = null)
+    {
+        var nodeId = !string.IsNullOrWhiteSpace(forcedId) ? forcedId : ResolveNodeId(resource, nodeType.ToString().ToLowerInvariant(), resource.Uri);
+        var attributes = new Dictionary<string, string>();
+
+        if (!string.IsNullOrWhiteSpace(resource.Uri))
+        {
+            attributes["Uri"] = resource.Uri;
+        }
+
+        foreach (var kv in resource.Identifiers)
+        {
+            attributes[$"id:{kv.Key}"] = kv.Value;
+        }
+
+        foreach (var kv in resource.CustomProperties)
+        {
+            if (kv.Value is null)
+            {
+                continue;
+            }
+            attributes[$"prop:{kv.Key}"] = kv.Value.ToString() ?? string.Empty;
+        }
+
+        extras?.Invoke(attributes);
+
+        return new GraphNodeDefinition
+        {
+            NodeId = nodeId,
+            NodeType = nodeType,
+            DisplayName = resource.Name,
+            Attributes = attributes
+        };
+    }
+
+    private string ResolveNodeId(RdfResource resource, string prefix, string fallbackId)
+    {
+        if (!string.IsNullOrWhiteSpace(resource.Uri))
+        {
+            return resource.Uri;
+        }
+
+        if (!string.IsNullOrWhiteSpace(fallbackId))
+        {
+            return $"{prefix}:{fallbackId}";
+        }
+
+        return $"{prefix}:{Guid.NewGuid()}";
+    }
+
+    private static string ResolveEquipmentId(Equipment equipment)
+    {
+        if (!string.IsNullOrWhiteSpace(equipment.Uri))
+        {
+            return equipment.Uri;
+        }
+
+        if (!string.IsNullOrWhiteSpace(equipment.DeviceId))
+        {
+            if (!string.IsNullOrWhiteSpace(equipment.GatewayId))
+            {
+                return $"device:{equipment.GatewayId}:{equipment.DeviceId}";
+            }
+
+            return $"device:{equipment.DeviceId}";
+        }
+
+        return $"equipment:{Guid.NewGuid()}";
+    }
+
+    private static string ResolvePointId(Point point)
+    {
+        if (!string.IsNullOrWhiteSpace(point.Uri))
+        {
+            return point.Uri;
+        }
+
+        if (!string.IsNullOrWhiteSpace(point.PointId))
+        {
+            return $"point:{point.PointId}";
+        }
+
+        return $"point:{Guid.NewGuid()}";
     }
 
     private string BuildLocationPath(BuildingDataModel model, Equipment equipment)
