@@ -8,6 +8,7 @@ using Orleans.Configuration;
 using Orleans.Hosting;
 using Orleans.Streaming;
 using Telemetry.Ingest;
+using Telemetry.Ingest.Kafka;
 using Telemetry.Ingest.RabbitMq;
 using Telemetry.Ingest.Simulator;
 
@@ -29,6 +30,7 @@ internal static class Program
             var ingestSection = context.Configuration.GetSection("TelemetryIngest");
             services.AddTelemetryIngest(ingestSection);
             // Connector registration stays in code; config controls which ones are enabled.
+            services.AddKafkaIngest(ingestSection.GetSection("Kafka"));
             services.AddRabbitMqIngest(ingestSection.GetSection("RabbitMq"));
             services.AddSimulatorIngest(ingestSection.GetSection("Simulator"));
             services.AddHostedService<GraphSeedService>();
