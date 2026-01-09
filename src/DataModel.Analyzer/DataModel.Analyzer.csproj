@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Schema\building_model.shacl.ttl" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Schema\*.ttl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-
 </Project>
+
