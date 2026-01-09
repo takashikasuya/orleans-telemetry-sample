@@ -82,16 +82,25 @@ public sealed class TelemetryIngestCoordinator : BackgroundService
         var batch = new List<TelemetryPointMsg>(batchSize);
         try
         {
-            await foreach (var msg in _channel.Reader.ReadAllAsync(ct))
+            while (await _channel.Reader.WaitToReadAsync(ct))
             {
-                batch.Add(msg);
-                if (batch.Count < batchSize)
+                while (_channel.Reader.TryRead(out var msg))
                 {
-                    continue;
+                    batch.Add(msg);
+                    if (batch.Count < batchSize)
+                    {
+                        continue;
+                    }
+
+                    await _router.RouteBatchAsync(batch.ToArray());
+                    batch.Clear();
                 }
 
-                await _router.RouteBatchAsync(batch.ToArray());
-                batch.Clear();
+                if (batch.Count > 0)
+                {
+                    await _router.RouteBatchAsync(batch.ToArray());
+                    batch.Clear();
+                }
             }
         }
         catch (OperationCanceledException)
