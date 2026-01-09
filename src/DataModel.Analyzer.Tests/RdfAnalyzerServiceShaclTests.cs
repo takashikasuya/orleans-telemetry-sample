@@ -34,29 +34,27 @@ public class RdfAnalyzerServiceShaclTests
         model.Sites[0].Name.Should().Be("Site 1");
     }
 
-    [Fact(Skip = "SHACL validation temporarily disabled")]
+    [Fact]
     public async Task AnalyzeRdfContent_MissingRequiredField_FailsShacl()
     {
-        const string ttl = @"@prefix rec: <https://w3id.org/rec/> .
-    @prefix sbco: <https://www.sbco.or.jp/ont/> .
+        // sbco:Building に sbco:name が不足（検証エラーになる）
+        const string ttl = @"@prefix sbco: <https://www.sbco.or.jp/ont/> .
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-    <http://example.org/site1> a rec:Site ;
-        rec:name ""Site 1"" ;
-        sbco:id ""site1"" ;
-        rec:identifiers [ a sbco:KeyStringMapEntry ; sbco:key ""dtid"" ; sbco:value ""site1-dtid"" ] ;
-        rec:hasPart <http://example.org/building1> .
+    <http://example.org/site1> a sbco:Site ;
+        sbco:name ""Site 1"" ;
+        sbco:id ""site1"" .
 
-    <http://example.org/building1> a rec:Building ;
-        rec:name ""Building 1"" ;
-        sbco:id ""building1"" ;
-        rec:identifiers [ a sbco:KeyStringMapEntry ; sbco:key ""dtid"" ; sbco:value ""building1-dtid"" ] .";
+    <http://example.org/building1> a sbco:Building ;
+        sbco:id ""building1"" .";
 
         var service = CreateService();
 
-        var act = async () => await service.AnalyzeRdfContentAsync(ttl, RdfSerializationFormat.Turtle, "shacl-invalid");
+        var result = await service.AnalyzeRdfContentWithValidationAsync(ttl, RdfSerializationFormat.Turtle, "shacl-invalid");
 
-        var ex = await Assert.ThrowsAsync<InvalidDataException>(act);
-        ex.Message.Should().Contain("SHACL validation failed");
+        result.Validation.Should().NotBeNull();
+        result.Validation!.Conforms.Should().BeFalse("Building が sbco:name（必須）を持たないため検証が失敗");
+        result.Validation!.Messages.Should().NotBeEmpty("検証失敗メッセージが生成される");
     }
 
     private static RdfAnalyzerService CreateService() => new(NullLogger<RdfAnalyzerService>.Instance);

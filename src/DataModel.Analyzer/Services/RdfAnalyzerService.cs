@@ -14,7 +14,7 @@ using IOPath = System.IO.Path;
 namespace DataModel.Analyzer.Services;
 
 /// <summary>
-/// RDFファイルを解析してデータモデルに変換するサービス
+/// RDF を解析して建物データモデルに変換するサービス
 /// </summary>
 public class RdfAnalyzerService
 {
@@ -26,8 +26,7 @@ public class RdfAnalyzerService
     private readonly string _shaclFileName;
     private readonly string _schemaFolder;
 
-    // 名前空間定義
-    private const string RecNamespace = "https://w3id.org/rec#";
+    private const string RecNamespace = "https://w3id.org/rec/";
     private const string GutpNamespace = "https://www.gutp.jp/bim-wg#";
     private const string SbcoNamespace = "https://www.sbco.or.jp/ont/";
     private const string BrickNamespace = "https://brickschema.org/schema/Brick#";
@@ -36,13 +35,11 @@ public class RdfAnalyzerService
     private const string ShaclFileName = "building_model.shacl.ttl";
     private const string SchemaDirectoryName = "Schema";
 
-    // 既存コード互換のためのデフォルトコンストラクタ（既存呼び出しを壊さない）
     public RdfAnalyzerService(ILogger<RdfAnalyzerService> logger)
         : this(logger, Microsoft.Extensions.Options.Options.Create(new RdfAnalyzerOptions()))
     {
     }
 
-    // DI / 設定対応コンストラクタ
     public RdfAnalyzerService(ILogger<RdfAnalyzerService> logger, IOptions<RdfAnalyzerOptions> options)
     {
         _logger = logger;
@@ -55,9 +52,6 @@ public class RdfAnalyzerService
         _shapesGraph = new Lazy<ShapesGraph>(() => LoadShapesGraph(_shaclFileName));
     }
 
-    /// <summary>
-    /// RDFファイルを読み込んでデータモデルに変換する
-    /// </summary>
     public async Task<BuildingDataModel> AnalyzeRdfFileAsync(string rdfFilePath)
     {
         _logger.LogInformation("RDFファイルの解析を開始します {FilePath}", rdfFilePath);
@@ -65,20 +59,12 @@ public class RdfAnalyzerService
         try
         {
             var graph = await Task.Run(() => LoadGraphFromFile(rdfFilePath));
-            ValidateAgainstShacl(graph, rdfFilePath); // 必要なら有効化
 
             _logger.LogInformation("RDFグラフの読み込み完了。トリプル数: {TripleCount}", graph.Triples.Count);
+            var model = BuildModel(graph, rdfFilePath);
 
-            model.Sites = ExtractSites(graph);
-            model.Buildings = ExtractBuildings(graph);
-            model.Levels = ExtractLevels(graph);
-            model.Areas = ExtractAreas(graph);
-            model.Equipment = ExtractEquipment(graph);
-            model.Points = ExtractPoints(graph);
-
-            BuildHierarchy(model);
-
-            _logger.LogInformation("RDFファイルの解析完了 Sites: {Sites}, Buildings: {Buildings}, Levels: {Levels}, Areas: {Areas}, Equipment: {Equipment}, Points: {Points}",
+            _logger.LogInformation(
+                "RDFファイルの解析完了 Sites: {Sites}, Buildings: {Buildings}, Levels: {Levels}, Areas: {Areas}, Equipment: {Equipment}, Points: {Points}",
                 model.Sites.Count, model.Buildings.Count, model.Levels.Count, model.Areas.Count, model.Equipment.Count, model.Points.Count);
 
             return model;
@@ -90,9 +76,6 @@ public class RdfAnalyzerService
         }
     }
 
-    /// <summary>
-    /// RDFコンテンツを読み込んでデータモデルに変換する
-    /// </summary>
     public async Task<BuildingDataModel> AnalyzeRdfContentAsync(string content, RdfSerializationFormat format, string sourceName = "content")
     {
         _logger.LogInformation("RDFコンテンツ解析を開始します {SourceName} ({Format})", sourceName, format);
@@ -100,10 +83,7 @@ public class RdfAnalyzerService
         try
         {
             var graph = await Task.Run(() => LoadGraphFromContent(content, format));
-            ValidateAgainstShacl(graph, sourceName); // 必要なら有効化
-
             _logger.LogInformation("RDFグラフの読み込み完了。トリプル数: {TripleCount}", graph.Triples.Count);
-
             return BuildModel(graph, sourceName);
         }
         catch (Exception ex)
@@ -113,29 +93,86 @@ public class RdfAnalyzerService
         }
     }
 
-    private void ValidateAgainstShacl(IGraph dataGraph, string sourceName)
+    public async Task<RdfAnalysisResult> AnalyzeRdfContentWithValidationAsync(
+        string content,
+        RdfSerializationFormat format,
+        string sourceName = "content",
+        string? shaclFilePath = null)
     {
-        var shapes = _shapesGraph.Value;
-        _ = _ontologyGraph.Value;
+        _logger.LogInformation("RDFコンテンツ解析(検証付き)を開始します {SourceName} ({Format})", sourceName, format);
 
-        _logger.LogInformation("SHACL Shapes をロードして検証します: {ShaclFile}", _shaclFileName);
+        var graph = await Task.Run(() => LoadGraphFromContent(content, format));
+        var validation = ValidateAgainstShacl(graph, sourceName, shaclFilePath, false);
+        var model = BuildModel(graph, sourceName);
+
+        return new RdfAnalysisResult
+        {
+            Model = model,
+            Validation = validation
+        };
+    }
+
+    public async Task<RdfAnalysisResult> AnalyzeRdfFileWithValidationAsync(string rdfFilePath, string? shaclFilePath = null)
+    {
+        _logger.LogInformation("RDFファイル解析(検証付き)を開始します {FilePath}", rdfFilePath);
+
+        var graph = await Task.Run(() => LoadGraphFromFile(rdfFilePath));
+        var validation = ValidateAgainstShacl(graph, rdfFilePath, shaclFilePath, false);
+        var model = BuildModel(graph, rdfFilePath);
+
+        return new RdfAnalysisResult
+        {
+            Model = model,
+            Validation = validation
+        };
+    }
+
+    private RdfValidationResult ValidateAgainstShacl(IGraph dataGraph, string sourceName, string? shaclFilePath, bool throwOnFailure)
+    {
+        ShapesGraph shapes;
+
+        if (!string.IsNullOrWhiteSpace(shaclFilePath))
+        {
+            var g = new Graph();
+            new TurtleParser().Load(g, shaclFilePath);
+            shapes = new ShapesGraph(g);
+            _logger.LogInformation("SHACL Shapes をカスタムパスからロードしました: {Path}", shaclFilePath);
+        }
+        else
+        {
+            shapes = _shapesGraph.Value;
+            _ = _ontologyGraph.Value;
+            _logger.LogInformation("SHACL Shapes をロードして検証します: {ShaclFile}", _shaclFileName);
+        }
+
         var report = shapes.Validate(dataGraph);
+        var messages = report.Results
+            .Select(r =>
+            {
+                var focus = r.FocusNode?.ToString() ?? "(unknown)";
+                var path = r.ResultPath?.ToString() ?? "(no path)";
+                var message = r.Message?.Value ?? "No message";
+                return $"{focus} @ {path}: {message}";
+            })
+            .ToList();
 
         if (!report.Conforms)
         {
-            var details = report.Results
-                .Select(r =>
-                {
-                    var focus = r.FocusNode?.ToString() ?? "(unknown)";
-                    var path = r.ResultPath?.ToString() ?? "(no path)";
-                    var message = r.Message?.Value ?? "No message";
-                    return $"{focus} @ {path}: {message}";
-                });
+            var detail = string.Join(Environment.NewLine, messages);
+            _logger.LogWarning("SHACLバリデーションに失敗しました。{SourceName}{NewLine}{Details}", sourceName, Environment.NewLine, detail);
 
-            var message = string.Join(Environment.NewLine, details);
-            _logger.LogWarning("SHACLバリデーションに失敗しました。{SourceName}{NewLine}{Details}", sourceName, Environment.NewLine, message);
-            throw new InvalidDataException($"SHACL validation failed for {sourceName}:{Environment.NewLine}{message}");
+            if (throwOnFailure)
+            {
+                throw new InvalidDataException($"SHACL validation failed for {sourceName}:{Environment.NewLine}{detail}");
+            }
         }
+
+        return new RdfValidationResult
+        {
+            Conforms = report.Conforms,
+            ReportText = report.ToString(),
+            Messages = messages
+        };
     }
 
     private IGraph LoadSchemaGraph(string fileName)
@@ -165,7 +202,6 @@ public class RdfAnalyzerService
             return candidate;
         }
 
-        // dotnet run (project root) からの実行に対応
         var devPath = IOPath.Combine(baseDir, "..", "..", "..", _schemaFolder, fileName);
         var fullDevPath = IOPath.GetFullPath(devPath);
         if (File.Exists(fullDevPath))
@@ -176,10 +212,6 @@ public class RdfAnalyzerService
         throw new FileNotFoundException($"Schema file not found: {fileName}", fileName);
     }
 
-    // --- 以下は元のまま（LoadGraphFromFile, LoadGraphFromContent, LoadGraphWithReader,
-    // LoadStoreWithReader, MergeStoreToGraph, Extract* 系、BuildHierarchy をそのまま保持） ---
-    // （実際のファイルでは元の実装をそのまま残してください）
-    // ※ 編集差分を最小化するため、ここでは以降のメソッドは元ファイルをそのままコピーして置いてください。
     private Graph LoadGraphFromFile(string filePath)
     {
         var ext = IOPath.GetExtension(filePath).ToLowerInvariant();
@@ -187,64 +219,51 @@ public class RdfAnalyzerService
 
         var g = new Graph();
 
-        try
+        switch (ext)
         {
-            switch (ext)
+            case ".ttl":
+                new TurtleParser().Load(g, filePath);
+                return g;
+            case ".n3":
+                new Notation3Parser().Load(g, filePath);
+                return g;
+            case ".nt":
+                new NTriplesParser().Load(g, filePath);
+                return g;
+            case ".rdf":
+            case ".owl":
+            case ".xml":
+                new RdfXmlParser().Load(g, filePath);
+                return g;
+            case ".jsonld":
+            case ".json":
             {
-                case ".ttl":
-                    new TurtleParser().Load(g, filePath);
-                    return g;
-                case ".n3":
-                    new Notation3Parser().Load(g, filePath);
-                    return g;
-                case ".nt":
-                    new NTriplesParser().Load(g, filePath);
-                    return g;
-                case ".rdf":
-                case ".owl":
-                case ".xml":
-                    new RdfXmlParser().Load(g, filePath);
-                    return g;
-                case ".jsonld":
-                case ".json":
-                    try
-                    {
-                        var store = new TripleStore();
-                        new JsonLdParser().Load(store, filePath);
-                        return MergeStoreToGraph(store);
-                    }
-                    catch (Exception jex)
-                    {
-                        _logger.LogWarning(jex, "JSON-LD の解析に失敗しました。ファイル: {Path}", filePath);
-                        throw;
-                    }
-                case ".trig":
-                    {
-                        var store = new TripleStore();
-                        new TriGParser().Load(store, filePath);
-                        return MergeStoreToGraph(store);
-                    }
-                case ".trix":
-                    {
-                        var store = new TripleStore();
-                        new TriXParser().Load(store, filePath);
-                        return MergeStoreToGraph(store);
-                    }
-                case ".nq":
-                    {
-                        var store = new TripleStore();
-                        new NQuadsParser().Load(store, filePath);
-                        return MergeStoreToGraph(store);
-                    }
-                default:
-                    _logger.LogWarning("未対応の拡張子 {Ext}。Turtle として試行します", ext);
-                    new TurtleParser().Load(g, filePath);
-                    return g;
+                var store = new TripleStore();
+                new JsonLdParser().Load(store, filePath);
+                return MergeStoreToGraph(store);
             }
-        }
-        catch
-        {
-            throw;
+            case ".trig":
+            {
+                var store = new TripleStore();
+                new TriGParser().Load(store, filePath);
+                return MergeStoreToGraph(store);
+            }
+            case ".trix":
+            {
+                var store = new TripleStore();
+                new TriXParser().Load(store, filePath);
+                return MergeStoreToGraph(store);
+            }
+            case ".nq":
+            {
+                var store = new TripleStore();
+                new NQuadsParser().Load(store, filePath);
+                return MergeStoreToGraph(store);
+            }
+            default:
+                _logger.LogWarning("未対応の拡張子 {Ext}。Turtle として試行します", ext);
+                new TurtleParser().Load(g, filePath);
+                return g;
         }
     }
 
@@ -252,28 +271,18 @@ public class RdfAnalyzerService
     {
         _logger.LogDebug("形式 {Format} で RDF コンテンツを読み込みます", format);
 
-        switch (format)
+        return format switch
         {
-            case RdfSerializationFormat.Turtle:
-                return LoadGraphWithReader(content, (graph, reader) => new TurtleParser().Load(graph, reader));
-            case RdfSerializationFormat.Notation3:
-                return LoadGraphWithReader(content, (graph, reader) => new Notation3Parser().Load(graph, reader));
-            case RdfSerializationFormat.NTriples:
-                return LoadGraphWithReader(content, (graph, reader) => new NTriplesParser().Load(graph, reader));
-            case RdfSerializationFormat.RdfXml:
-                return LoadGraphWithReader(content, (graph, reader) => new RdfXmlParser().Load(graph, reader));
-            case RdfSerializationFormat.JsonLd:
-                return LoadStoreWithReader(content, new JsonLdParser());
-            case RdfSerializationFormat.TriG:
-                return LoadStoreWithReader(content, new TriGParser());
-            case RdfSerializationFormat.TriX:
-                return LoadStoreWithReader(content, new TriXParser());
-            case RdfSerializationFormat.NQuads:
-                return LoadStoreWithReader(content, new NQuadsParser());
-            default:
-                _logger.LogWarning("未対応の形式 {Format}。Turtle として試行します", format);
-                return LoadGraphWithReader(content, (graph, reader) => new TurtleParser().Load(graph, reader));
-        }
+            RdfSerializationFormat.Turtle => LoadGraphWithReader(content, (graph, reader) => new TurtleParser().Load(graph, reader)),
+            RdfSerializationFormat.Notation3 => LoadGraphWithReader(content, (graph, reader) => new Notation3Parser().Load(graph, reader)),
+            RdfSerializationFormat.NTriples => LoadGraphWithReader(content, (graph, reader) => new NTriplesParser().Load(graph, reader)),
+            RdfSerializationFormat.RdfXml => LoadGraphWithReader(content, (graph, reader) => new RdfXmlParser().Load(graph, reader)),
+            RdfSerializationFormat.JsonLd => LoadStoreWithReader(content, new JsonLdParser()),
+            RdfSerializationFormat.TriG => LoadStoreWithReader(content, new TriGParser()),
+            RdfSerializationFormat.TriX => LoadStoreWithReader(content, new TriXParser()),
+            RdfSerializationFormat.NQuads => LoadStoreWithReader(content, new NQuadsParser()),
+            _ => LoadGraphWithReader(content, (graph, reader) => new TurtleParser().Load(graph, reader)),
+        };
     }
 
     private Graph LoadGraphWithReader(string content, Action<IGraph, TextReader> loader)
@@ -301,8 +310,32 @@ public class RdfAnalyzerService
         {
             merged.Assert(ng.Triples);
         }
-        _logger.LogDebug("データセットを単一グラフにマージしました。グラフ数: {GraphCount}, トリプル数: {TripleCount}", store.Graphs.Count, merged.Triples.Count);
+
+        _logger.LogDebug(
+            "データセットを単一グラフにマージしました。グラフ数: {GraphCount}, トリプル数: {TripleCount}",
+            store.Graphs.Count,
+            merged.Triples.Count);
+
         return merged;
+    }
+
+    private BuildingDataModel BuildModel(IGraph graph, string sourceName)
+    {
+        var model = new BuildingDataModel
+        {
+            Source = sourceName,
+            LastUpdated = DateTime.UtcNow
+        };
+
+        model.Sites = ExtractSites(graph);
+        model.Buildings = ExtractBuildings(graph);
+        model.Levels = ExtractLevels(graph);
+        model.Areas = ExtractAreas(graph);
+        model.Equipment = ExtractEquipment(graph);
+        model.Points = ExtractPoints(graph);
+
+        BuildHierarchy(model);
+        return model;
     }
 
     private List<Site> ExtractSites(IGraph graph)
@@ -312,26 +345,14 @@ public class RdfAnalyzerService
 
         foreach (var subject in subjects)
         {
-            var site = new Site
-            {
-                Uri = subject.ToString()
-            };
+            var site = new Site { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, site);
 
-            // rec:hasPart で Building の URI を収雁E��後続で階層を絁E��立て�E�E
-            var hasPartTriples = graph.GetTriplesWithSubjectPredicate(
-                triple.Subject,
-                graph.CreateUriNode(UriFactory.Create($"{RecNamespace}hasPart")));
-
-            var childUris = new List<string>();
-            foreach (var hp in hasPartTriples)
+            var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
+            if (hasPartUris.Count > 0)
             {
-                childUris.Add(hp.Object.ToString());
-            }
-            if (childUris.Count > 0)
-            {
-                site.CustomProperties["hasPartUris"] = childUris;
+                site.CustomProperties["hasPartUris"] = hasPartUris;
             }
 
             sites.Add(site);
@@ -347,25 +368,14 @@ public class RdfAnalyzerService
 
         foreach (var subject in subjects)
         {
-            var building = new Building
-            {
-                Uri = subject.ToString()
-            };
+            var building = new Building { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, building);
 
-            // rec:hasPart で Level の URI を収雁E
-            var hasPartTriples = graph.GetTriplesWithSubjectPredicate(
-                triple.Subject,
-                graph.CreateUriNode(UriFactory.Create($"{RecNamespace}hasPart")));
-            var childUris = new List<string>();
-            foreach (var hp in hasPartTriples)
+            var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
+            if (hasPartUris.Count > 0)
             {
-                childUris.Add(hp.Object.ToString());
-            }
-            if (childUris.Count > 0)
-            {
-                building.CustomProperties["hasPartUris"] = childUris;
+                building.CustomProperties["hasPartUris"] = hasPartUris;
             }
 
             buildings.Add(building);
@@ -381,37 +391,24 @@ public class RdfAnalyzerService
 
         foreach (var subject in subjects)
         {
-            var level = new Level
-            {
-                Uri = subject.ToString()
-            };
+            var level = new Level { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, level);
 
-            var levelNumberValue = GetFirstLiteralValue(graph, subject, new[]
-            {
-                $"{SbcoNamespace}levelNumber",
-                $"{GutpNamespace}levelNumber",
-                $"{RecNamespace}levelNumber"
-            });
+            var levelNumberValue = GetFirstLiteralValue(
+                graph,
+                subject,
+                new[] { $"{SbcoNamespace}levelNumber", $"{GutpNamespace}levelNumber", $"{RecNamespace}levelNumber" });
 
             if (!string.IsNullOrWhiteSpace(levelNumberValue) && int.TryParse(levelNumberValue, out var levelNumber))
             {
                 level.LevelNumber = levelNumber;
             }
 
-            // rec:hasPart で Area の URI を収雁E
-            var hasPartTriples = graph.GetTriplesWithSubjectPredicate(
-                triple.Subject,
-                graph.CreateUriNode(UriFactory.Create($"{RecNamespace}hasPart")));
-            var childUris = new List<string>();
-            foreach (var hp in hasPartTriples)
+            var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
+            if (hasPartUris.Count > 0)
             {
-                childUris.Add(hp.Object.ToString());
-            }
-            if (childUris.Count > 0)
-            {
-                level.CustomProperties["hasPartUris"] = childUris;
+                level.CustomProperties["hasPartUris"] = hasPartUris;
             }
 
             levels.Add(level);
@@ -427,22 +424,11 @@ public class RdfAnalyzerService
 
         foreach (var subject in subjects)
         {
-            var area = new Area
-            {
-                Uri = subject.ToString()
-            };
+            var area = new Area { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, area);
 
-            // rec:isLocationOf で Area が保持する Equipment の URI を収雁E
-            var isLocationOfTriples = graph.GetTriplesWithSubjectPredicate(
-                triple.Subject,
-                graph.CreateUriNode(UriFactory.Create($"{RecNamespace}isLocationOf")));
-            var equipmentUris = new List<string>();
-            foreach (var ilof in isLocationOfTriples)
-            {
-                equipmentUris.Add(ilof.Object.ToString());
-            }
+            var equipmentUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}isLocationOf", $"{SbcoNamespace}isLocationOf" });
             if (equipmentUris.Count > 0)
             {
                 area.CustomProperties["equipmentUris"] = equipmentUris;
@@ -461,24 +447,13 @@ public class RdfAnalyzerService
 
         foreach (var subject in subjects)
         {
-            var equipment = new Equipment
-            {
-                Uri = subject.ToString()
-            };
+            var equipment = new Equipment { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, equipment);
             ExtractAssetProperties(graph, subject, equipment);
             ExtractGutpEquipmentProperties(graph, subject, equipment);
 
-            // rec:hasPoint で Point の URI を収雁E
-            var hasPointTriples = graph.GetTriplesWithSubjectPredicate(
-                triple.Subject,
-                graph.CreateUriNode(UriFactory.Create($"{RecNamespace}hasPoint")));
-            var pointUris = new List<string>();
-            foreach (var hp in hasPointTriples)
-            {
-                pointUris.Add(hp.Object.ToString());
-            }
+            var pointUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPoint", $"{SbcoNamespace}hasPoint" });
             if (pointUris.Count > 0)
             {
                 equipment.CustomProperties["pointUris"] = pointUris;
@@ -503,19 +478,13 @@ public class RdfAnalyzerService
 
         foreach (var subject in subjects)
         {
-            var point = new Point
-            {
-                Uri = subject.ToString()
-            };
+            var point = new Point { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, point);
             ExtractPointProperties(graph, subject, point);
 
-            // rec:isPointOf で親 Equipment の URI を特宁E
-            var isPointOfTriples = graph.GetTriplesWithSubjectPredicate(
-                triple.Subject,
-                graph.CreateUriNode(UriFactory.Create($"{RecNamespace}isPointOf")));
-            foreach (var ipof in isPointOfTriples)
+            var isPointOfUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}isPointOf", $"{SbcoNamespace}isPointOf" });
+            if (isPointOfUris.Count > 0)
             {
                 point.EquipmentUri = isPointOfUris[0];
             }
@@ -536,24 +505,8 @@ public class RdfAnalyzerService
             var classNode = graph.CreateUriNode(UriFactory.Create(classUri));
             foreach (var triple in graph.GetTriplesWithPredicateObject(rdfType, classNode))
             {
-                resource.Name = literalNode.Value;
-                break;
-            }
-        }
-
-        // 識別子�E抽出
-        var identifierTriples = graph.GetTriplesWithSubjectPredicate(
-            subject, graph.CreateUriNode(UriFactory.Create($"{RecNamespace}identifiers")));
-
-        foreach (var identifierTriple in identifierTriples)
-        {
-            var identifierNode = identifierTriple.Object;
-            var dctIdentifierTriples = graph.GetTriplesWithSubjectPredicate(
-                identifierNode, graph.CreateUriNode(UriFactory.Create($"{DctNamespace}identifier")));
-
-            foreach (var dctTriple in dctIdentifierTriples)
-            {
-                if (dctTriple.Object is ILiteralNode dctLiteralNode)
+                var subjectKey = triple.Subject.ToString();
+                if (seen.Add(subjectKey))
                 {
                     yield return triple.Subject;
                 }
@@ -750,7 +703,6 @@ public class RdfAnalyzerService
 
     private void BuildHierarchy(BuildingDataModel model)
     {
-        // URI辞書を作�E
         var siteByUri = model.Sites.ToDictionary(s => s.Uri, s => s);
         var buildingByUri = model.Buildings.ToDictionary(b => b.Uri, b => b);
         var levelByUri = model.Levels.ToDictionary(l => l.Uri, l => l);
@@ -857,7 +809,4 @@ public class RdfAnalyzerService
         }
     }
 }
-
-
-
 
