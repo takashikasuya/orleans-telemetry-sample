@@ -6,6 +6,66 @@ device‑scoped grains, and expose the latest state through a REST and gRPC
 gateway.  A small publisher service publishes random temperature/humidity
 telemetry to RabbitMQ to exercise the pipeline.
 
+## Quick Start
+
+Run the stack with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Once running:
+- REST Swagger: `http://localhost:8080/swagger`
+- REST base: `http://localhost:8080`
+
+Optional: seed the graph from an RDF file:
+
+```bash
+export RDF_SEED_PATH=/path/to/building-data.ttl
+export TENANT_ID=default
+docker compose up --build
+```
+
+## Startup Reference
+
+### Docker Compose (recommended)
+
+```bash
+docker compose up --build
+```
+
+### Local (without Docker)
+
+Start RabbitMQ, then run each project:
+
+```bash
+dotnet run --project src/SiloHost
+dotnet run --project src/ApiGateway
+dotnet run --project src/Publisher
+```
+
+Environment variables:
+- `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASS`
+- `RDF_SEED_PATH`: path to RDF file to seed graph nodes/edges on startup
+- `TENANT_ID`: tenant key used by graph seeding (default: `default`)
+
+## Graph Model (Nodes, Edges, Values)
+
+The project supports a graph representation of spaces/devices/points based on
+`BuildingDataModel`. Each RDF resource becomes a graph node with edges between
+them. Any node can also have bound values (not just devices).
+
+Key endpoints (authorized):
+- `GET /api/nodes/{nodeId}`: node metadata and edges
+- `GET /api/nodes/{nodeId}/value`: latest bound values for a node
+- `GET /api/graph/traverse/{nodeId}?depth=2&predicate=hasArea`: graph traversal
+
+## Telemetry Flow
+
+Telemetry messages are routed to device grains and persisted as the latest
+state. The graph layer sits alongside this so you can traverse spaces/devices
+and bind values to any node.
+
 ## Services
 
 The solution is composed of four Docker services:
@@ -32,16 +92,24 @@ This sample is intentionally simple and is not hardened for production use.
 ```mermaid
 sequenceDiagram
     autonumber
+    actor Seed as Seeder
     actor Pub as Publisher
     participant MQ as RabbitMQ (queue: telemetry)
     participant Ingest as SiloHost: MqIngestService
     participant Router as TelemetryRouterGrain (Stateless)
     participant Dev as DeviceGrain("{tenant}:{deviceId}")
+    participant Node as GraphNodeGrain("{tenant}:{nodeId}")
+    participant Val as ValueBindingGrain("{tenant}:{nodeId}")
     participant Stream as Orleans Stream("DeviceUpdates")
     participant API as API Gateway (REST/gRPC/GraphQL)
     actor Rest as REST Client
     actor Grpc as gRPC Client
     actor GQL as GraphQL Client
+
+    %% --- RDF Seed (Graph) ---
+    Seed->>Node: UpsertAsync(node metadata)
+    Seed->>Node: AddOutgoingEdgeAsync(edge)
+    Seed->>Node: AddIncomingEdgeAsync(edge)
 
     %% --- 発行 ---
     Pub->>MQ: JSON {deviceId, sequence, properties}
@@ -68,6 +136,21 @@ sequenceDiagram
     API->>Dev: GetAsync()
     Dev-->>API: DeviceSnapshot(LastSequence, Props, UpdatedAt)
     API-->>Rest: 200 OK + JSON (+ ETag: W/"LastSequence")
+
+    %% --- Graph/Value 参照（REST） ---
+    Rest->>API: GET /api/nodes/{nodeId}\nAuthorization: Bearer <JWT>
+    API->>Node: GetAsync()
+    Node-->>API: GraphNodeSnapshot
+    API-->>Rest: 200 OK + JSON
+
+    Rest->>API: GET /api/nodes/{nodeId}/value\nAuthorization: Bearer <JWT>
+    API->>Val: GetAsync()
+    Val-->>API: NodeValueSnapshot
+    API-->>Rest: 200 OK + JSON
+
+    Rest->>API: GET /api/graph/traverse/{nodeId}?depth=2
+    API->>Node: GetAsync() x N
+    API-->>Rest: 200 OK + JSON (nodes + edges)
 
     %% --- ストリーム配信（gRPC / GraphQL） ---
     Grpc->>API: DeviceService/StreamUpdates\nAuthorization: Bearer <JWT>
@@ -100,3 +183,95 @@ sequenceDiagram
     end
 ```
 
+```mermaid
+classDiagram
+    class IGraphNodeGrain {
+      +UpsertAsync(GraphNodeDefinition)
+      +AddOutgoingEdgeAsync(GraphEdge)
+      +AddIncomingEdgeAsync(GraphEdge)
+      +GetAsync() GraphNodeSnapshot
+    }
+    class IValueBindingGrain {
+      +UpsertAsync(NodeValueUpdate)
+      +GetAsync() NodeValueSnapshot
+    }
+    class IGraphIndexGrain {
+      +AddNodeAsync(GraphNodeDefinition)
+      +RemoveNodeAsync(nodeId, nodeType)
+      +GetByTypeAsync(nodeType) List~string~
+    }
+    class GraphNodeDefinition {
+      +NodeId
+      +NodeType
+      +DisplayName
+      +Attributes
+    }
+    class GraphEdge {
+      +Predicate
+      +TargetNodeId
+    }
+    class GraphNodeSnapshot {
+      +Node
+      +OutgoingEdges
+      +IncomingEdges
+    }
+    class NodeValueUpdate {
+      +Sequence
+      +Timestamp
+      +Values
+    }
+    class NodeValueSnapshot {
+      +LastSequence
+      +Values
+      +UpdatedAt
+    }
+    class IDeviceGrain {
+      +UpsertAsync(TelemetryMsg)
+      +GetAsync() DeviceSnapshot
+    }
+    class ITelemetryRouterGrain {
+      +RouteAsync(TelemetryMsg)
+      +RouteBatchAsync(TelemetryMsg[])
+    }
+    IGraphNodeGrain --> GraphNodeDefinition
+    IGraphNodeGrain --> GraphEdge
+    IGraphNodeGrain --> GraphNodeSnapshot
+    IValueBindingGrain --> NodeValueUpdate
+    IValueBindingGrain --> NodeValueSnapshot
+    ITelemetryRouterGrain --> IDeviceGrain
+```
+
+```mermaid
+flowchart LR
+    subgraph Ingest
+        MQ[(RabbitMQ)]
+        IngestSvc[MqIngestService]
+        RouterGrain[TelemetryRouterGrain]
+    end
+    subgraph Orleans["Orleans Silo"]
+        DevGrain[DeviceGrain]
+        NodeGrain[GraphNodeGrain]
+        ValGrain[ValueBindingGrain]
+        IndexGrain[GraphIndexGrain]
+        Stream[DeviceUpdates Stream]
+    end
+    subgraph API["API Gateway"]
+        RestApi[REST endpoints]
+        GrpcApi[gRPC endpoints]
+        Traversal[GraphTraversal]
+    end
+    subgraph Tools
+        SeedSvc[GraphSeedService]
+        Analyzer[DataModel.Analyzer]
+    end
+
+    MQ --> IngestSvc --> RouterGrain --> DevGrain --> Stream
+    RestApi --> DevGrain
+    RestApi --> NodeGrain
+    RestApi --> ValGrain
+    RestApi --> Traversal
+    Traversal --> NodeGrain
+    GrpcApi --> Stream
+    SeedSvc --> Analyzer --> NodeGrain
+    SeedSvc --> IndexGrain
+```

@@ -19,6 +19,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<GraphTraversal>();
 
 // Configure gRPC
 builder.Services.AddGrpc();
@@ -65,6 +66,41 @@ app.MapGet("/api/devices/{deviceId}", async (string deviceId, IClusterClient cli
         snap.UpdatedAt,
         Properties = snap.LatestProps
     });
+}).RequireAuthorization();
+
+
+// Graph endpoints for node metadata and value bindings
+app.MapGet("/api/nodes/{nodeId}", async (string nodeId, IClusterClient client, HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var grainKey = GraphNodeKey.Create(tenant, nodeId);
+    var grain = client.GetGrain<IGraphNodeGrain>(grainKey);
+    var snap = await grain.GetAsync();
+    return Results.Ok(snap);
+}).RequireAuthorization();
+
+app.MapGet("/api/nodes/{nodeId}/value", async (string nodeId, IClusterClient client, HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var grainKey = GraphNodeKey.Create(tenant, nodeId);
+    var grain = client.GetGrain<IValueBindingGrain>(grainKey);
+    var snap = await grain.GetAsync();
+    return Results.Ok(snap);
+}).RequireAuthorization();
+
+app.MapGet("/api/graph/traverse/{nodeId}", async (
+    string nodeId,
+    int? depth,
+    string? predicate,
+    IClusterClient client,
+    HttpContext http,
+    GraphTraversal traversal) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var requestedDepth = depth ?? 1;
+    var cappedDepth = Math.Min(Math.Max(requestedDepth, 0), 5);
+    var result = await traversal.TraverseAsync(client, tenant, nodeId, cappedDepth, predicate);
+    return Results.Ok(result);
 }).RequireAuthorization();
 
 // gRPC endpoints

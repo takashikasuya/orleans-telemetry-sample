@@ -18,4 +18,8 @@
     <ProjectReference Include="..\Grains.Abstractions\Grains.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Schema\building_model.shacl.ttl" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
