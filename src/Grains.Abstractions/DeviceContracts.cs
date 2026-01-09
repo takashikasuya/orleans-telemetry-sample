@@ -23,7 +23,7 @@ public class TelemetryMsg
     /// of messages from the same device.
     /// </summary>
     [Id(1)]
-    public int Sequence { get; set; }
+    public long Sequence { get; set; }
 
     /// <summary>
     /// A dictionary of additional properties associated with the telemetry message.
@@ -74,7 +74,7 @@ public class TelemetryMsg
     {
         this.TenantId = TenantId;
         this.DeviceId = DeviceId;
-        this.Sequence = (int)Sequence;
+        this.Sequence = Sequence;
         this.Timestamp = Timestamp;
         this.Properties = Properties;
         this.BuildingName = BuildingName;
@@ -106,7 +106,7 @@ public class TelemetryPointMsg
     [Id(2)] public string SpaceId { get; set; } = string.Empty;
     [Id(3)] public string DeviceId { get; set; } = default!;
     [Id(4)] public string PointId { get; set; } = default!;
-    [Id(5)] public int Sequence { get; set; }
+    [Id(5)] public long Sequence { get; set; }
     [Id(6)] public DateTimeOffset Timestamp { get; set; }
     [Id(7)] public object? Value { get; set; }
 }

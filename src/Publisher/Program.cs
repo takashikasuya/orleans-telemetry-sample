@@ -7,7 +7,7 @@ using RabbitMQ.Client;
 // devices.  This app is purely for demonstration and should not be
 // considered production ready.
 var devices = new[] { "dev-1", "dev-2", "dev-3" };
-var tenant = Environment.GetEnvironmentVariable("TENANT") ?? "t1";
+var tenant = Environment.GetEnvironmentVariable("TENANT_ID") ?? "t1";
 var buildingName = Environment.GetEnvironmentVariable("BUILDING_NAME") ?? "bldg-1";
 var spaceId = Environment.GetEnvironmentVariable("SPACE_ID") ?? "floor-1/room-1";
 var rand = new Random();
@@ -30,7 +30,16 @@ while (true)
 {
     foreach (var dev in devices)
     {
-        var seq = ++seqs[dev];
+        if (seqs[dev] == long.MaxValue)
+        {
+            seqs[dev] = 0;
+        }
+        else
+        {
+            seqs[dev]++;
+        }
+
+        var seq = seqs[dev];
         var msg = new TelemetryMsg(
             TenantId: tenant,
             DeviceId: dev,
