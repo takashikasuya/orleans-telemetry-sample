@@ -22,7 +22,19 @@ internal static class Program
     {
         var outputDir = GetArgValue(args, "--output-dir") ?? "reports";
         var quick = args.Contains("--quick", StringComparer.OrdinalIgnoreCase);
+        var includeBatchSweep = args.Contains("--batch-sweep", StringComparer.OrdinalIgnoreCase);
+        var includeAbnormal = args.Contains("--abnormal", StringComparer.OrdinalIgnoreCase);
         var stages = quick ? BuildQuickStages() : BuildDefaultStages();
+
+        if (includeBatchSweep)
+        {
+            stages = stages.Concat(BuildBatchSweepStages(quick)).ToArray();
+        }
+
+        if (includeAbnormal)
+        {
+            stages = stages.Concat(BuildAbnormalStages(quick)).ToArray();
+        }
 
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
         var runStart = DateTimeOffset.UtcNow;
@@ -34,7 +46,7 @@ internal static class Program
             var metrics = new MetricsRecorder();
             var connector = new LoadTestConnector(stage, metrics);
             var router = new SlowRouter(stage.RouterDelayMs, metrics);
-            var sink = new SlowSink(stage.SinkDelayMs);
+            var sink = new SlowSink(stage.SinkDelayMs, stage.SinkFailureRatePercent, metrics);
 
             var options = Options.Create(new TelemetryIngestOptions
             {
@@ -105,7 +117,9 @@ internal static class Program
                 PointsPerDevice: 5,
                 IntervalMilliseconds: 100,
                 RouterDelayMs: 5,
-                SinkDelayMs: 0),
+                SinkDelayMs: 0,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: 0),
             new LoadStage(
                 Name: "ramp-1",
                 DurationSeconds: 20,
@@ -115,7 +129,9 @@ internal static class Program
                 PointsPerDevice: 10,
                 IntervalMilliseconds: 50,
                 RouterDelayMs: 10,
-                SinkDelayMs: 0),
+                SinkDelayMs: 0,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: 0),
             new LoadStage(
                 Name: "ramp-2",
                 DurationSeconds: 20,
@@ -125,7 +141,9 @@ internal static class Program
                 PointsPerDevice: 20,
                 IntervalMilliseconds: 20,
                 RouterDelayMs: 20,
-                SinkDelayMs: 5),
+                SinkDelayMs: 5,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: 0),
             new LoadStage(
                 Name: "overload",
                 DurationSeconds: 20,
@@ -135,7 +153,9 @@ internal static class Program
                 PointsPerDevice: 20,
                 IntervalMilliseconds: 10,
                 RouterDelayMs: 50,
-                SinkDelayMs: 10)
+                SinkDelayMs: 10,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: 0)
         };
     }
 
@@ -152,7 +172,9 @@ internal static class Program
                 PointsPerDevice: 5,
                 IntervalMilliseconds: 100,
                 RouterDelayMs: 5,
-                SinkDelayMs: 0),
+                SinkDelayMs: 0,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: 0),
             new LoadStage(
                 Name: "overload",
                 DurationSeconds: 6,
@@ -162,7 +184,59 @@ internal static class Program
                 PointsPerDevice: 20,
                 IntervalMilliseconds: 10,
                 RouterDelayMs: 50,
-                SinkDelayMs: 10)
+                SinkDelayMs: 10,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: 0)
+        };
+    }
+
+    private static IReadOnlyList<LoadStage> BuildBatchSweepStages(bool quick)
+    {
+        var duration = quick ? 6 : 15;
+        var batchSizes = quick ? new[] { 10, 100, 500 } : new[] { 10, 50, 100, 250, 500 };
+        return batchSizes.Select(batchSize => new LoadStage(
+            Name: $"batch-{batchSize}",
+            DurationSeconds: duration,
+            ChannelCapacity: 200,
+            BatchSize: batchSize,
+            DeviceCount: 30,
+            PointsPerDevice: 10,
+            IntervalMilliseconds: 50,
+            RouterDelayMs: 10,
+            SinkDelayMs: 5,
+            SinkFailureRatePercent: 0,
+            ConnectorFailureAfterMessages: 0)).ToArray();
+    }
+
+    private static IReadOnlyList<LoadStage> BuildAbnormalStages(bool quick)
+    {
+        var duration = quick ? 6 : 15;
+        return new[]
+        {
+            new LoadStage(
+                Name: "sink-failure-5pct",
+                DurationSeconds: duration,
+                ChannelCapacity: 100,
+                BatchSize: 50,
+                DeviceCount: 40,
+                PointsPerDevice: 15,
+                IntervalMilliseconds: 30,
+                RouterDelayMs: 10,
+                SinkDelayMs: 10,
+                SinkFailureRatePercent: 5,
+                ConnectorFailureAfterMessages: 0),
+            new LoadStage(
+                Name: "connector-stop-early",
+                DurationSeconds: duration,
+                ChannelCapacity: 100,
+                BatchSize: 50,
+                DeviceCount: 30,
+                PointsPerDevice: 10,
+                IntervalMilliseconds: 30,
+                RouterDelayMs: 10,
+                SinkDelayMs: 5,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: quick ? 500 : 2000)
         };
     }
 }
@@ -176,7 +250,9 @@ internal sealed record LoadStage(
     int PointsPerDevice,
     int IntervalMilliseconds,
     int RouterDelayMs,
-    int SinkDelayMs);
+    int SinkDelayMs,
+    int SinkFailureRatePercent,
+    int ConnectorFailureAfterMessages);
 
 internal sealed record LoadTestReport(
     string RunId,
@@ -194,6 +270,8 @@ internal sealed record StageReport(
     int IntervalMilliseconds,
     int RouterDelayMs,
     int SinkDelayMs,
+    int SinkFailureRatePercent,
+    int ConnectorFailureAfterMessages,
     string ConnectorName,
     string RouterName,
     string SinkName,
@@ -201,6 +279,8 @@ internal sealed record StageReport(
     long ProducedCount,
     long RoutedCount,
     long RoutedBatches,
+    long SinkFailureCount,
+    long ConnectorFailureCount,
     double ProducedPerSecond,
     double RoutedPerSecond,
     double WriteWaitAverageMs,
@@ -246,7 +326,7 @@ internal static class ReportFormatter
                 $"ChannelCapacity={stage.ChannelCapacity}, BatchSize={stage.BatchSize}, " +
                 $"Devices={stage.DeviceCount}, PointsPerDevice={stage.PointsPerDevice}, " +
                 $"IntervalMs={stage.IntervalMilliseconds}, RouterDelayMs={stage.RouterDelayMs}, " +
-                $"SinkDelayMs={stage.SinkDelayMs}");
+                $"SinkDelayMs={stage.SinkDelayMs}, SinkFailureRate={stage.SinkFailureRatePercent}%");
             lines.Add(string.Empty);
         }
 
@@ -259,10 +339,13 @@ internal static class ReportFormatter
                 $"Config: ChannelCapacity={stage.ChannelCapacity}, BatchSize={stage.BatchSize}, " +
                 $"Devices={stage.DeviceCount}, PointsPerDevice={stage.PointsPerDevice}, " +
                 $"IntervalMs={stage.IntervalMilliseconds}, RouterDelayMs={stage.RouterDelayMs}, " +
-                $"SinkDelayMs={stage.SinkDelayMs}");
+                $"SinkDelayMs={stage.SinkDelayMs}, SinkFailureRate={stage.SinkFailureRatePercent}%, " +
+                $"ConnectorFailureAfterMessages={stage.ConnectorFailureAfterMessages}");
             lines.Add($"Connector: {stage.ConnectorName}");
             lines.Add($"Router: {stage.RouterName}");
             lines.Add($"Sink: {stage.SinkName}");
+            lines.Add($"Sink failures: {stage.SinkFailureCount}");
+            lines.Add($"Connector failures: {stage.ConnectorFailureCount}");
             lines.Add("Sample message:");
             lines.Add("```json");
             lines.Add(stage.SampleMessageJson);
@@ -292,6 +375,8 @@ internal sealed class MetricsRecorder
     private long _writeWaitTicksSum;
     private long _writeWaitTicksMax;
     private long _writeBlockedCount;
+    private long _sinkFailureCount;
+    private long _connectorFailureCount;
     private string? _sampleMessageJson;
 
     public void RecordProduced(long waitTicks)
@@ -326,11 +411,23 @@ internal sealed class MetricsRecorder
         Interlocked.Increment(ref _routedBatches);
     }
 
+    public void RecordSinkFailure()
+    {
+        Interlocked.Increment(ref _sinkFailureCount);
+    }
+
+    public void RecordConnectorFailure()
+    {
+        Interlocked.Increment(ref _connectorFailureCount);
+    }
+
     public StageReport CreateStageReport(LoadStage stage, TimeSpan elapsed)
     {
         var produced = Interlocked.Read(ref _producedCount);
         var routed = Interlocked.Read(ref _routedCount);
         var routedBatches = Interlocked.Read(ref _routedBatches);
+        var sinkFailures = Interlocked.Read(ref _sinkFailureCount);
+        var connectorFailures = Interlocked.Read(ref _connectorFailureCount);
         var waitSumTicks = Interlocked.Read(ref _writeWaitTicksSum);
         var waitMaxTicks = Interlocked.Read(ref _writeWaitTicksMax);
         var blocked = Interlocked.Read(ref _writeBlockedCount);
@@ -351,6 +448,8 @@ internal sealed class MetricsRecorder
             stage.IntervalMilliseconds,
             stage.RouterDelayMs,
             stage.SinkDelayMs,
+            stage.SinkFailureRatePercent,
+            stage.ConnectorFailureAfterMessages,
             "LoadTestConnector",
             "SlowRouter",
             "SlowSink",
@@ -358,6 +457,8 @@ internal sealed class MetricsRecorder
             produced,
             routed,
             routedBatches,
+            sinkFailures,
+            connectorFailures,
             produced / elapsedSeconds,
             routed / elapsedSeconds,
             averageWaitMs,
@@ -428,6 +529,7 @@ internal sealed class LoadTestConnector : ITelemetryIngestConnector
     private readonly LoadStage _stage;
     private readonly MetricsRecorder _metrics;
     private readonly Random _random = new();
+    private long _messageCounter;
 
     public LoadTestConnector(LoadStage stage, MetricsRecorder metrics)
     {
@@ -468,6 +570,13 @@ internal sealed class LoadTestConnector : ITelemetryIngestConnector
 
                     _metrics.TryRecordSample(msg);
                     var start = Stopwatch.GetTimestamp();
+                    if (_stage.ConnectorFailureAfterMessages > 0 &&
+                        Interlocked.Increment(ref _messageCounter) >= _stage.ConnectorFailureAfterMessages)
+                    {
+                        _metrics.RecordConnectorFailure();
+                        throw new InvalidOperationException("Simulated connector failure.");
+                    }
+
                     try
                     {
                         await writer.WriteAsync(msg, ct);
@@ -529,10 +638,15 @@ internal sealed class SlowRouter : ITelemetryRouterGrain
 internal sealed class SlowSink : ITelemetryEventSink
 {
     private readonly int _delayMs;
+    private readonly int _failureRatePercent;
+    private readonly MetricsRecorder _metrics;
+    private readonly Random _random = new();
 
-    public SlowSink(int delayMs)
+    public SlowSink(int delayMs, int failureRatePercent, MetricsRecorder metrics)
     {
         _delayMs = delayMs;
+        _failureRatePercent = Math.Clamp(failureRatePercent, 0, 100);
+        _metrics = metrics;
     }
 
     public string Name => "SlowSink";
@@ -547,6 +661,12 @@ internal sealed class SlowSink : ITelemetryEventSink
         if (batch.Count == 0)
         {
             return;
+        }
+
+        if (_failureRatePercent > 0 && _random.Next(0, 100) < _failureRatePercent)
+        {
+            _metrics.RecordSinkFailure();
+            throw new InvalidOperationException("Simulated sink failure.");
         }
 
         if (_delayMs > 0)
