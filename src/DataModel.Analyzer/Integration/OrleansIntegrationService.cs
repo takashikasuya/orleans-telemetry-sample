@@ -266,6 +266,7 @@ public class OrleansIntegrationService
                 attrs["PointType"] = point.PointType;
                 attrs["PointSpecification"] = point.PointSpecification;
                 attrs["Writable"] = point.Writable.ToString();
+                AddPointBindingAttributes(model, point, attrs);
                 if (!string.IsNullOrWhiteSpace(point.Unit))
                 {
                     attrs["Unit"] = point.Unit;
@@ -296,6 +297,86 @@ public class OrleansIntegrationService
         }
 
         return seed;
+    }
+
+    private void AddPointBindingAttributes(BuildingDataModel model, Point point, Dictionary<string, string> attributes)
+    {
+        var equipment = ResolveEquipmentForPoint(model, point);
+        if (equipment is null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(equipment.DeviceId))
+        {
+            attributes["DeviceId"] = equipment.DeviceId;
+        }
+
+        var area = ResolveAreaForEquipment(model, equipment);
+        if (area is not null && !string.IsNullOrWhiteSpace(area.Name))
+        {
+            attributes["SpaceId"] = area.Name;
+        }
+
+        var building = area is null ? null : ResolveBuildingForArea(model, area);
+        if (building is not null && !string.IsNullOrWhiteSpace(building.Name))
+        {
+            attributes["BuildingName"] = building.Name;
+        }
+    }
+
+    private static Equipment? ResolveEquipmentForPoint(BuildingDataModel model, Point point)
+    {
+        var equipment = model.Equipment.FirstOrDefault(e => e.Points.Contains(point));
+        if (equipment is not null)
+        {
+            return equipment;
+        }
+
+        if (!string.IsNullOrWhiteSpace(point.EquipmentUri))
+        {
+            return model.Equipment.FirstOrDefault(e => e.Uri == point.EquipmentUri);
+        }
+
+        return null;
+    }
+
+    private static Area? ResolveAreaForEquipment(BuildingDataModel model, Equipment equipment)
+    {
+        var area = model.Areas.FirstOrDefault(a => a.Equipment.Contains(equipment));
+        if (area is not null)
+        {
+            return area;
+        }
+
+        if (!string.IsNullOrWhiteSpace(equipment.AreaUri))
+        {
+            return model.Areas.FirstOrDefault(a => a.Uri == equipment.AreaUri);
+        }
+
+        return null;
+    }
+
+    private static Building? ResolveBuildingForArea(BuildingDataModel model, Area area)
+    {
+        var level = model.Levels.FirstOrDefault(l => l.Areas.Contains(area));
+        if (level is null && !string.IsNullOrWhiteSpace(area.LevelUri))
+        {
+            level = model.Levels.FirstOrDefault(l => l.Uri == area.LevelUri);
+        }
+
+        if (level is null)
+        {
+            return null;
+        }
+
+        var building = model.Buildings.FirstOrDefault(b => b.Levels.Contains(level));
+        if (building is null && !string.IsNullOrWhiteSpace(level.BuildingUri))
+        {
+            building = model.Buildings.FirstOrDefault(b => b.Uri == level.BuildingUri);
+        }
+
+        return building;
     }
 
     private GraphNodeDefinition CreateNodeDefinition(RdfResource resource, GraphNodeType nodeType, Action<Dictionary<string, string>>? extras = null, string? forcedId = null)
