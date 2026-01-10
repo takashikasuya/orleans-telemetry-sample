@@ -4,7 +4,7 @@
 
 ## プロジェクト概要
 
-**目的**: GUTPプロトコルに基づく建物・設備・センサーデータのRDFファイルを解析し、Orleansクラスターで利用可能な形式に変換する。
+**目的**: SBCO オントロジーに基づく建物・設備・センサーデータのRDFファイルを解析し、Orleansクラスターで利用可能な形式に変換する。
 
 **主要機能**:
 - Turtle / N-Triples / JSON-LD / RDF/XML などのRDFファイル解析
@@ -72,7 +72,7 @@ foreach (var device in deviceData.Devices)
 
 ### 入力
 - Turtle / N-Triples / JSON-LD / RDF/XML / TriG / TriX / N-Quads 形式のRDFファイル
-- GUTPプロトコル準拠のデータ構造
+- SBCO オントロジー準拠のデータ構造
 - REC (Real Estate Core) オントロジー
 
 ### 出力

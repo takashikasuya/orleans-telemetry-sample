@@ -1,6 +1,6 @@
 # DataModel.Analyzer
 
-Turtle・N-Triples・JSON-LD・RDF/XML など複数形式のRDFデータを解析し、建物データモデルとして構造化するライブラリです。GUTPプロトコルに基づく建物・設備・センサーデータの解析とエクスポート機能を提供します。
+Turtle・N-Triples・JSON-LD・RDF/XML など複数形式のRDFデータを解析し、建物データモデルとして構造化するライブラリです。SBCO オントロジーに基づく建物・設備・センサーデータの解析とエクスポート機能を提供します。
 
 ## 機能
 
@@ -87,24 +87,24 @@ if (result.IsSuccess)
 - `rec:identifiers` - 識別子
 - `dct:identifier` - DTIDなどの識別子
 
-### GUTP機器プロパティ
-- `gutp:gateway_id` - ゲートウェイID  
-- `gutp:device_id` - デバイスID
-- `gutp:device_type` - デバイスタイプ
-- `gutp:supplier` - 供給者
-- `gutp:owner` - 所有者
+### SBCO機器プロパティ
+- `sbco:gateway_id` - ゲートウェイID  
+- `sbco:device_id` - デバイスID
+- `sbco:device_type` - デバイスタイプ
+- `sbco:supplier` - 供給者
+- `sbco:owner` - 所有者
 
-### GUTPポイントプロパティ
-- `gutp:point_id` - ポイントID
-- `gutp:point_type` - ポイントタイプ（Temperature, CO2, Humidityなど）
-- `gutp:point_specification` - ポイント仕様（Measurement, Command, Alarmなど）
-- `gutp:local_id` - ローカルID
-- `gutp:writable` - 書き込み可能フラグ
-- `gutp:interval` - 測定間隔
-- `gutp:unit` - 単位
-- `gutp:max_pres_value` - 最大値
-- `gutp:min_pres_value` - 最小値
-- `gutp:scale` - スケール値
+### SBCOポイントプロパティ
+- `sbco:point_id` - ポイントID
+- `sbco:point_type` - ポイントタイプ（Temperature, CO2, Humidityなど）
+- `sbco:point_specification` - ポイント仕様（Measurement, Command, Alarmなど）
+- `sbco:local_id` - ローカルID
+- `sbco:writable` - 書き込み可能フラグ
+- `sbco:interval` - 測定間隔
+- `sbco:unit` - 単位
+- `sbco:max_pres_value` - 最大値
+- `sbco:min_pres_value` - 最小値
+- `sbco:scale` - スケール値
 
 ## 出力形式
 
