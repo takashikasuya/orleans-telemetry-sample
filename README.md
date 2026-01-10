@@ -300,6 +300,10 @@ The mock server does **not** validate signatures; for production, configure a re
 
 ## Architecture
 
+### Component Docs
+
+- [コネクタ & テレメトリーインジェスト](docs/telemetry-connector-ingest.md)
+
 ### Services (Docker Compose)
 
 | Service     | Role                                                                  |
