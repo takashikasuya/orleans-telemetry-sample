@@ -25,6 +25,7 @@ public sealed class TelemetryIngestCoordinatorTests
         var connector = new FakeConnector(messageCount: 3);
         var coordinator = new TelemetryIngestCoordinator(
             new[] { connector },
+            Array.Empty<ITelemetryEventSink>(),
             router,
             options,
             NullLogger<TelemetryIngestCoordinator>.Instance);

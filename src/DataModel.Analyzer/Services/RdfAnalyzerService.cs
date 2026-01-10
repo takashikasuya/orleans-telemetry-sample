@@ -662,8 +662,7 @@ public class RdfAnalyzerService
             { $"{SbcoNamespace}instance_no_bacnet", nameof(Point.InstanceNoBacnet) },
             { $"{SbcoNamespace}object_type_bacnet", nameof(Point.ObjectTypeBacnet) },
             { $"{SbcoNamespace}pointType", nameof(Point.PointType) },
-            { $"{SbcoNamespace}pointSpecification", nameof(Point.PointSpecification) },
-            { $"{SbcoNamespace}unit", nameof(Point.Unit) }
+            { $"{SbcoNamespace}pointSpecification", nameof(Point.PointSpecification) }
         };
 
         foreach (var (predicateUri, propertyName) in stringProperties)

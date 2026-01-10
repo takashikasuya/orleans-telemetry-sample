@@ -5,6 +5,7 @@ using FluentAssertions;
 using Grains.Abstractions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Xunit;
 
 namespace DataModel.Analyzer.Tests;
 
