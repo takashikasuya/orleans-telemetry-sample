@@ -1,106 +1,48 @@
-# Orleans Telemetry Sample - DataModel.Analyzer
+# Orleans Telemetry Sample - Project Overview
 
-このプロジェクトは、Orleans Telemetry Sampleソリューションの一部として、TurtleやN-Triples、JSON-LDなど複数形式のRDFデータを解析し、建物データモデルとして構造化するライブラリです。
+このリポジトリは、Orleans を用いたテレメトリ取り込みとグラフ参照のサンプルです。RabbitMQ/Kafka/シミュレータ経由のテレメトリを Orleans の Grain にマッピングし、REST API で最新状態やグラフ情報を取得できるようにしています。RDF からのグラフシードにも対応しています。
 
-## プロジェクト概要
+## ソリューション構成
 
-**目的**: SBCO オントロジーに基づく建物・設備・センサーデータのRDFファイルを解析し、Orleansクラスターで利用可能な形式に変換する。
+- `src/SiloHost`
+  - Orleans サイロ本体。Device/Graph/Value などの Grain 実装と Telemetry.Ingest の登録を担当します。
+  - `GraphSeedService` が `RDF_SEED_PATH` を読み込み、GraphNode/GraphIndex Grain を初期化します。
+- `src/ApiGateway`
+  - REST API を提供する ASP.NET Core アプリです。
+  - OIDC/JWT 認証を前提にしており、`tenant` claim を `TenantResolver` が解決します。
+  - gRPC はスキャフォールドのみで、実サービスはコメントアウトされています。
+- `src/Telemetry.Ingest`
+  - テレメトリ取り込み基盤。RabbitMQ/Kafka/Simulator コネクタと `TelemetryIngestCoordinator` を提供します。
+- `src/Publisher`
+  - RabbitMQ にデモ用テレメトリを送信するコンソールアプリです。
+- `src/DataModel.Analyzer`
+  - RDF 解析と BuildingDataModel の構築、Orleans 連携用データ生成を担当します。
+- `src/Grains.Abstractions`
+  - Grain のインターフェース/キー/契約モデルを集約しています。
+- `src/*Tests`
+  - `DataModel.Analyzer` と `Telemetry.Ingest` のテストプロジェクトです。
 
-**主要機能**:
-- Turtle / N-Triples / JSON-LD / RDF/XML などのRDFファイル解析
-- 建物データモデルの構造化
-- Orleansデバイスコントラクトの生成
-- JSON形式でのデータエクスポート
-- Orleans統合サポート
+## データフロー概要
 
-## アーキテクチャ
+1. Telemetry.Ingest が RabbitMQ/Kafka/Simulator からメッセージを受信。
+2. `TelemetryRouterGrain` が `DeviceGrain` にルーティングし、最新値を保存。
+3. `DeviceGrain` は Orleans Stream (`DeviceUpdates`) にスナップショットを発行。
+4. REST API (`ApiGateway`) が Grain から最新スナップショットやグラフ情報を取得。
+5. `GraphSeedService` が RDF を解析し、GraphNode/GraphIndex を構築。
 
-```
-DataModel.Analyzer/
-├── Models/
-│   └── BuildingDataModel.cs         # データモデルクラス
-├── Services/
-│   ├── RdfAnalyzerService.cs        # RDF解析サービス
-│   └── DataModelExportService.cs    # データエクスポートサービス
-├── Integration/
-│   └── OrleansIntegrationService.cs # Orleans統合サービス
-├── Extensions/
-│   └── ServiceCollectionExtensions.cs # DI拡張
-├── DataModelAnalyzer.cs             # ファサードクラス
-└── Program.cs                       # サンプル実行プログラム
-```
+## API と認証
 
-## 他プロジェクトとの連携
+- REST エンドポイントは JWT 必須です。
+- `tenant` claim が無い場合は `t1` が使用されます。
+- OIDC は `OIDC_AUTHORITY`/`OIDC_AUDIENCE` で設定し、Docker Compose では mock-oidc が同梱されています。
 
-### ApiGateway
-- デバイス情報のメタデータ提供
-- gRPCサービスでの型情報として利用
+## 主な設定ポイント
 
-### SiloHost
-- デバイスGrainの初期化データ提供
-- テレメトリルーティング設定
-- `Telemetry.Ingest` で取得したテレメトリの取り込み先
+- `TelemetryIngest` 設定で有効化コネクタを指定します。
+  - `RabbitMq` / `Kafka` / `Simulator` の各オプションを `appsettings.json` などで設定可能です。
+- RDF シードは `RDF_SEED_PATH` と `TENANT_ID` で制御します。
 
-### Grains.Abstractions
-- 共通のデバイスコントラクト定義参照
+## 現状の制約
 
-### Telemetry.Ingest
-- RabbitMQ/シミュレータなどのコネクタを追加してテレメトリを発行
-- コネクタの登録は `SiloHost` のDIで行い、`TelemetryIngest` 設定で有効/無効を切り替え
-
-## 使用例
-
-```csharp
-// 基本的な解析
-var analyzer = serviceProvider.GetRequiredService<DataModelAnalyzer>();
-var model = await analyzer.AnalyzeFromFileAsync("building-data.ttl");
-
-// Orleans統合
-var orleansService = serviceProvider.GetRequiredService<OrleansIntegrationService>();
-var deviceData = await orleansService.ExtractDeviceDataAsync("building-data.ttl");
-
-// デバイス初期化データ生成
-foreach (var device in deviceData.Devices)
-{
-    var initData = orleansService.CreateInitializationData(device);
-    var grainKey = orleansService.GenerateDeviceGrainKey(device.DeviceId, device.GatewayId);
-    // Orleans Grainに送信...
-}
-```
-
-## 対応データ形式
-
-### 入力
-- Turtle / N-Triples / JSON-LD / RDF/XML / TriG / TriX / N-Quads 形式のRDFファイル
-- SBCO オントロジー準拠のデータ構造
-- REC (Real Estate Core) オントロジー
-
-### 出力
-- 構造化されたC#オブジェクト
-- JSON形式
-- Orleans用デバイスコントラクト
-- 統計サマリー情報
-
-## 設定とカスタマイズ
-
-### ロギング
-```csharp
-services.AddDataModelAnalyzer(builder =>
-{
-    builder.AddConsole();
-    builder.SetMinimumLevel(LogLevel.Information);
-});
-```
-
-### 拡張性
-- カスタムRDFプロパティマッピング
-- 独自のエクスポート形式追加
-- バリデーションルールのカスタマイズ
-
-## 今後の拡張予定
-
-1. **リアルタイム解析**: ファイル監視によるライブ更新
-2. **スキーマ検証**: RDFスキーマベースの検証機能
-3. **キャッシュ機能**: 解析結果のメモリ/Redis キャッシュ
-4. **API化**: RESTful API としての提供
-5. **フォーマット自動判別**: 拡張子以外のヒューリスティクスによる形式検出の改善
+- gRPC サービスはスキャフォールドのみで、実装はコメントアウトされています。
+- Control Flow はインターフェース定義のみで、制御 Grain/エグレス連携は未実装です。
