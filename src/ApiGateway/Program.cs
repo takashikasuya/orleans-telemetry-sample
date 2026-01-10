@@ -4,6 +4,7 @@ using Grains.Abstractions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Orleans;
+using Telemetry.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<GraphTraversal>();
+builder.Services.Configure<TelemetryStorageOptions>(builder.Configuration.GetSection("TelemetryStorage"));
+builder.Services.AddSingleton<ITelemetryStorageQuery, ParquetTelemetryStorageQuery>();
 
 // Configure gRPC
 builder.Services.AddGrpc();
@@ -101,6 +104,23 @@ app.MapGet("/api/graph/traverse/{nodeId}", async (
     var cappedDepth = Math.Min(Math.Max(requestedDepth, 0), 5);
     var result = await traversal.TraverseAsync(client, tenant, nodeId, cappedDepth, predicate);
     return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/telemetry/{deviceId}", async (
+    string deviceId,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    string? pointId,
+    int? limit,
+    ITelemetryStorageQuery query,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var rangeEnd = to ?? DateTimeOffset.UtcNow;
+    var rangeStart = from ?? rangeEnd.AddMinutes(-15);
+    var request = new TelemetryQueryRequest(tenant, deviceId, rangeStart, rangeEnd, pointId, limit);
+    var results = await query.QueryAsync(request, http.RequestAborted);
+    return Results.Ok(results);
 }).RequireAuthorization();
 
 // gRPC endpoints

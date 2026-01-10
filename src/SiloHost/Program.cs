@@ -11,6 +11,7 @@ using Telemetry.Ingest;
 using Telemetry.Ingest.Kafka;
 using Telemetry.Ingest.RabbitMq;
 using Telemetry.Ingest.Simulator;
+using Telemetry.Storage;
 
 namespace SiloHost;
 
@@ -28,12 +29,15 @@ internal static class Program
                 return grainFactory.GetGrain<ITelemetryRouterGrain>(Guid.Empty);
             });
             var ingestSection = context.Configuration.GetSection("TelemetryIngest");
+            var storageSection = context.Configuration.GetSection("TelemetryStorage");
             services.AddTelemetryIngest(ingestSection);
             // Connector registration stays in code; config controls which ones are enabled.
             services.AddKafkaIngest(ingestSection.GetSection("Kafka"));
             services.AddRabbitMqIngest(ingestSection.GetSection("RabbitMq"));
             services.AddSimulatorIngest(ingestSection.GetSection("Simulator"));
             services.AddLoggingTelemetryEventSink();
+            services.Configure<TelemetryStorageOptions>(storageSection);
+            services.AddTelemetryStorage();
             services.AddHostedService<GraphSeedService>();
         });
         builder.UseOrleans(siloBuilder =>
