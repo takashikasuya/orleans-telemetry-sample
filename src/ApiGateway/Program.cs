@@ -83,9 +83,32 @@ app.MapGet("/api/nodes/{nodeId}/value", async (string nodeId, IClusterClient cli
 {
     var tenant = TenantResolver.ResolveTenant(http);
     var grainKey = GraphNodeKey.Create(tenant, nodeId);
-    var grain = client.GetGrain<IValueBindingGrain>(grainKey);
+    var grain = client.GetGrain<IGraphNodeGrain>(grainKey);
     var snap = await grain.GetAsync();
-    return Results.Ok(snap);
+
+    if (!snap.Node.Attributes.TryGetValue("PointId", out var pointId) || string.IsNullOrWhiteSpace(pointId))
+    {
+        return Results.NotFound(new { Message = "PointId attribute is missing for the requested node." });
+    }
+
+    snap.Node.Attributes.TryGetValue("BuildingName", out var buildingName);
+    snap.Node.Attributes.TryGetValue("SpaceId", out var spaceId);
+    snap.Node.Attributes.TryGetValue("DeviceId", out var deviceId);
+
+    if (string.IsNullOrWhiteSpace(deviceId))
+    {
+        return Results.NotFound(new { Message = "DeviceId attribute is missing for the requested node." });
+    }
+
+    var pointKey = PointGrainKey.Create(
+        tenant,
+        buildingName ?? string.Empty,
+        spaceId ?? string.Empty,
+        deviceId,
+        pointId);
+    var pointGrain = client.GetGrain<IPointGrain>(pointKey);
+    var pointSnap = await pointGrain.GetAsync();
+    return Results.Ok(pointSnap);
 }).RequireAuthorization();
 
 app.MapGet("/api/graph/traverse/{nodeId}", async (
