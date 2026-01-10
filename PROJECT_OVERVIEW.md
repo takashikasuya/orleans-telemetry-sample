@@ -13,6 +13,9 @@
   - gRPC はスキャフォールドのみで、実サービスはコメントアウトされています。
 - `src/Telemetry.Ingest`
   - テレメトリ取り込み基盤。RabbitMQ/Kafka/Simulator コネクタと `TelemetryIngestCoordinator` を提供します。
+- `src/Telemetry.Storage`
+  - テレメトリ永続化モジュール。取り込んだイベントをステージファイル（JSONL）に書き込み、バックグラウンドで Parquet + インデックスに圧縮します。
+  - クエリ API でテナント・デバイス・時間範囲によるテレメトリ検索が可能です。
 - `src/Publisher`
   - RabbitMQ にデモ用テレメトリを送信するコンソールアプリです。
 - `src/DataModel.Analyzer`
@@ -27,8 +30,9 @@
 1. Telemetry.Ingest が RabbitMQ/Kafka/Simulator からメッセージを受信。
 2. `TelemetryRouterGrain` が `DeviceGrain` にルーティングし、最新値を保存。
 3. `DeviceGrain` は Orleans Stream (`DeviceUpdates`) にスナップショットを発行。
-4. REST API (`ApiGateway`) が Grain から最新スナップショットやグラフ情報を取得。
-5. `GraphSeedService` が RDF を解析し、GraphNode/GraphIndex を構築。
+4. `ParquetTelemetryEventSink` がテレメトリイベントをステージファイル（JSONL）に書き込み、バックグラウンドサービスが定期的に Parquet へ圧縮。
+5. REST API (`ApiGateway`) が Grain から最新スナップショットやグラフ情報を取得。クエリ API で過去のテレメトリを Parquet から検索。
+6. `GraphSeedService` が RDF を解析し、GraphNode/GraphIndex を構築。
 
 ## API と認証
 
@@ -40,6 +44,8 @@
 
 - `TelemetryIngest` 設定で有効化コネクタを指定します。
   - `RabbitMq` / `Kafka` / `Simulator` の各オプションを `appsettings.json` などで設定可能です。
+- `TelemetryStorage` 設定で永続化パス、バケット間隔、圧縮間隔を制御します。
+  - `ParquetStorage` を `EventSinks.Enabled` に追加することでストレージ機能を有効化します。
 - RDF シードは `RDF_SEED_PATH` と `TENANT_ID` で制御します。
 
 ## 現状の制約

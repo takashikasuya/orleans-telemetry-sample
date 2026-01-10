@@ -1,14 +1,12 @@
 # Orleans Telemetry Sample
 
-This repository contains a minimal sample that demonstrates how to ingest
-telemetry messages into an Orleans cluster (via RabbitMQ, Kafka, or a simulator),
-map them to device‑scoped grains, and expose the latest state through a REST
-gateway (gRPC scaffolding is present but currently stubbed). A small publisher service publishes random
-temperature/humidity telemetry to RabbitMQ to exercise the pipeline.
+A minimal .NET 8 sample demonstrating telemetry ingestion, storage, and graph-based querying using Orleans.
+This solution shows how to ingest telemetry from RabbitMQ/Kafka/Simulator, map messages to Orleans grains,
+persist events to Parquet, and expose real-time and historical state via REST API.
 
 ## Quick Start
 
-Run the stack with Docker Compose:
+### 1. Run with Docker Compose
 
 ```bash
 docker compose up --build
@@ -16,10 +14,9 @@ docker compose up --build
 
 Once running:
 - REST Swagger: `http://localhost:8080/swagger`
-- REST base: `http://localhost:8080`
-- Mock OIDC issuer (for local tokens): `http://localhost:8081/default`
+- Mock OIDC (for tokens): `http://localhost:8081/default`
 
-Optional: seed the graph from an RDF file:
+### 2. Optional: Seed the Graph from RDF
 
 ```bash
 export RDF_SEED_PATH=/path/to/building-data.ttl
@@ -27,7 +24,18 @@ export TENANT_ID=default
 docker compose up --build
 ```
 
-## Startup Reference
+### 3. Try an API Call
+
+```bash
+# Get a token from the mock OIDC
+TOKEN=$(curl -s http://localhost:8081/default/token | jq -r '.access_token')
+
+# Query latest device state
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/devices/device-1"
+```
+
+## Setup & Startup
 
 ### Docker Compose (recommended)
 
@@ -35,154 +43,42 @@ docker compose up --build
 docker compose up --build
 ```
 
-### Local (without Docker)
+### Local Development (without Docker)
 
-If using RabbitMQ, start it first. Then run each project:
+Start services in separate terminals:
 
 ```bash
+# 1. Start RabbitMQ first
+docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:management
+
+# 2. Run Orleans silo
 dotnet run --project src/SiloHost
+
+# 3. Run API gateway (in another terminal)
 dotnet run --project src/ApiGateway
+
+# 4. Run telemetry publisher (optional, in another terminal)
 dotnet run --project src/Publisher
 ```
 
-Environment variables:
-- `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASS`
-- `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_TOPIC`, `KAFKA_GROUP_ID`
-- `OIDC_AUTHORITY`, `OIDC_AUDIENCE`
-- `RDF_SEED_PATH`: path to RDF file to seed graph nodes/edges on startup
-- `TENANT_ID`: tenant key used by graph seeding (default: `default`)
+### Environment Variables
 
-## Authentication
+- **Telemetry Source**
+  - `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASS`
+  - `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_TOPIC`, `KAFKA_GROUP_ID`
+- **Authentication**
+  - `OIDC_AUTHORITY`, `OIDC_AUDIENCE`
+- **Graph Seeding**
+  - `RDF_SEED_PATH`: path to RDF file for graph initialization
+  - `TENANT_ID`: tenant identifier (default: `default`)
 
-All REST endpoints require a JWT. The API expects a `tenant` claim and falls back
-to `t1` if it is missing. Configure `OIDC_AUTHORITY` and `OIDC_AUDIENCE` to point
-to your provider; Docker Compose boots a mock OIDC server on `http://localhost:8081/default`.
-When using it, ensure your token includes the `tenant` claim and the configured audience.
+## Core Features
 
-## Graph Model (Nodes, Edges, Values)
+### Telemetry Ingestion
 
-The project supports a graph representation of spaces/devices/points based on
-`BuildingDataModel`. Each RDF resource becomes a graph node with edges between
-them. Any node can also have bound values (not just devices).
+Ingest telemetry from multiple sources:
 
-Key endpoints (authorized):
-- `GET /api/nodes/{nodeId}`: node metadata and edges
-- `GET /api/nodes/{nodeId}/value`: latest bound values for a node
-- `GET /api/graph/traverse/{nodeId}?depth=2&predicate=hasArea`: graph traversal
-
-## Telemetry Flow
-
-Telemetry messages are routed to device grains and persisted as the latest
-state. The graph layer sits alongside this so you can traverse spaces/devices
-and bind values to any node.
-
-## Control Flow (Draft Interfaces)
-
-This sample now defines draft interfaces for issuing control commands to
-writable points and routing them through egress connectors. The implementation
-is intentionally scoped to interfaces so each connector can define its own
-acknowledgement and confirmation behavior.
-
-### REST API (planned)
-
-Control requests are submitted per point and return a command status handle:
-
-```
-POST /api/points/{pointId}/control
-{
-  "commandId": "cmd-123",
-  "buildingName": "building",
-  "spaceId": "space",
-  "deviceId": "device-1",
-  "pointId": "setpoint-1",
-  "desiredValue": 22.5,
-  "metadata": { "source": "operator" }
-}
-```
-
-Control status is queried by command id:
-
-```
-GET /api/points/{pointId}/control/{commandId}
-```
-
-### Grain Interface
-
-The control grain accepts a request and returns a status snapshot.
-
-```
-Task<PointControlSnapshot> SubmitAsync(PointControlRequest request);
-Task<PointControlSnapshot?> GetAsync(string commandId);
-```
-
-### Egress Connector Interface
-
-Connectors expose a send API and report their confirmation mode:
-
-```
-Task<ControlEgressResult> SendAsync(ControlEgressRequest request, CancellationToken ct);
-```
-
-### Control Sequence
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client as REST Client
-    participant API as API Gateway
-    participant Ctrl as PointControlGrain
-    participant Egress as ControlEgressCoordinator
-    participant Conn as Egress Connector
-    participant Point as PointGrain
-
-    Client->>API: POST /api/points/{pointId}/control
-    API->>Ctrl: SubmitAsync(request)
-    Ctrl-->>API: Snapshot (Pending)
-    API-->>Client: 202 Accepted (commandId)
-
-    Ctrl->>Egress: Enqueue request
-    Egress->>Conn: SendAsync(request)
-    Conn-->>Egress: Accepted (ACK + correlation)
-    Egress->>Ctrl: Mark Accepted
-
-    alt TelemetryConfirm
-        Point-->>Ctrl: New value observed (Applied)
-    else ReadBackConfirm
-        Conn-->>Ctrl: Read-back ok (Applied)
-    else AckOnly
-        Ctrl-->>Ctrl: Finalize as Accepted
-    end
-```
-
-## Services
-
-The solution is composed of these Docker services:
-
-| Service        | Description                                                       |
-|---------------|-------------------------------------------------------------------|
-| `mq`           | RabbitMQ broker used as the message queue for incoming telemetry (optional).|
-| `silo`         | Orleans host containing grains and telemetry ingest connectors.  |
-| `api`          | ASP.NET Core application that exposes REST endpoints (gRPC is stubbed).   |
-| `publisher`    | .NET console app that publishes random telemetry to the queue (optional).|
-| `mock-oidc`    | Mock OIDC server for local JWTs (development only). |
-
-To run the stack locally you can use Docker Compose:
-
-```bash
-docker compose up --build
-```
-
-Once running you can navigate to `http://localhost:8080/swagger` to inspect
-the REST API. The gRPC service implementation is currently disabled, so gRPC
-clients will not receive responses until the service is enabled.
-
-This sample is intentionally simple and is not hardened for production use.
-
-## Telemetry ingest connectors
-
-Telemetry ingestion is handled by `Telemetry.Ingest`. Connectors are registered in code
-(currently in `src/SiloHost/Program.cs`), and the configuration selects which ones run.
-To run with the built-in simulator:
+#### Simulator (built-in)
 
 ```json
 {
@@ -203,7 +99,7 @@ To run with the built-in simulator:
 }
 ```
 
-To run with RabbitMQ ingestion:
+#### RabbitMQ
 
 ```json
 {
@@ -223,7 +119,7 @@ To run with RabbitMQ ingestion:
 }
 ```
 
-To run with Kafka ingestion (note: Kafka is not included in the default Docker Compose file):
+#### Kafka
 
 ```json
 {
@@ -244,193 +140,414 @@ To run with Kafka ingestion (note: Kafka is not included in the default Docker C
 }
 ```
 
+### Telemetry Storage
+
+Persist events to disk in two stages:
+
+1. **Stage**: incoming events → JSONL files (bucketed by tenant/device/time)
+2. **Compaction**: JSONL → Parquet (background service, periodic)
+3. **Query**: efficient Parquet search with index metadata
+
+#### Configuration
+
+```json
+{
+  "TelemetryStorage": {
+    "StagePath": "storage/stage",
+    "ParquetPath": "storage/parquet",
+    "IndexPath": "storage/index",
+    "BucketMinutes": 15,
+    "CompactionIntervalSeconds": 300,
+    "DefaultQueryLimit": 1000
+  },
+  "TelemetryIngest": {
+    "EventSinks": {
+      "Enabled": [ "ParquetStorage" ]
+    }
+  }
+}
+```
+
+#### Query Historical Telemetry
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/telemetry/device-1?from=2024-01-01T00:00:00Z&to=2024-01-01T23:59:59Z&pointId=p1&limit=100"
+```
+
+Response:
+```json
+[
+  {
+    "tenantId": "t1",
+    "deviceId": "device-1",
+    "pointId": "p1",
+    "occurredAt": "2024-01-01T12:34:56Z",
+    "sequence": 123,
+    "valueJson": "42.5",
+    "payloadJson": null,
+    "tags": null
+  }
+]
+```
+
+#### Storage Layout
+
+```
+storage/
+  stage/
+    tenant={tenantId}/device={deviceId}/date=YYYY-MM-DD/hour=HH/telemetry_YYYYMMdd_HHmm.jsonl
+  parquet/
+    tenant={tenantId}/device={deviceId}/date=YYYY-MM-DD/hour=HH/telemetry_YYYYMMdd_HHmm.parquet
+  index/
+    tenant={tenantId}/device={deviceId}/date=YYYY-MM-DD/hour=HH/telemetry_YYYYMMdd_HHmm.json
+```
+
+#### Key Classes
+
+- [`ParquetTelemetryEventSink`](src/Telemetry.Storage/ParquetTelemetryEventSink.cs): writes stage JSONL
+- [`TelemetryStorageCompactor`](src/Telemetry.Storage/TelemetryStorageCompactor.cs): compacts to Parquet + index
+- [`ParquetTelemetryStorageQuery`](src/Telemetry.Storage/ParquetTelemetryStorageQuery.cs): reads Parquet
+- [`TelemetryStorageBackgroundService`](src/Telemetry.Storage/TelemetryStorageBackgroundService.cs): runs compaction loop
+- [`TelemetryStoragePaths`](src/Telemetry.Storage/TelemetryStoragePaths.cs): path utilities
+- [`TelemetryStageRecord`](src/Telemetry.Storage/TelemetryStageRecord.cs): JSONL format
+- [`TelemetryIndexEntry`](src/Telemetry.Storage/TelemetryIndexEntry.cs): index metadata
+
+### Graph Model (Nodes, Edges, Values)
+
+Query building topology using RDF-based graph model:
+
+- **Nodes**: spaces, devices, points, any custom entity
+- **Edges**: relationships (hasArea, contains, measures, etc.)
+- **Values**: bind telemetry or custom data to any node
+
+#### API Endpoints
+
+```bash
+# Get node metadata and edges
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/nodes/space-1"
+
+# Get current values bound to a node
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/nodes/space-1/value"
+
+# Traverse graph (BFS, limited depth)
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/graph/traverse/building-1?depth=2&predicate=hasArea"
+```
+
+#### Seeding from RDF
+
+Pass RDF file path at startup:
+
+```bash
+export RDF_SEED_PATH=/path/to/building-data.ttl
+export TENANT_ID=default
+dotnet run --project src/SiloHost
+```
+
+RDF resources become nodes; predicates become edges.
+
+### Control Flow (Draft)
+
+**Note**: Control interfaces are defined but not fully implemented.
+
+Issue commands to writable points:
+
+```
+POST /api/points/{pointId}/control
+{
+  "commandId": "cmd-123",
+  "buildingName": "building",
+  "spaceId": "space",
+  "deviceId": "device-1",
+  "pointId": "setpoint-1",
+  "desiredValue": 22.5,
+  "metadata": { "source": "operator" }
+}
+```
+
+Query command status:
+
+```
+GET /api/points/{pointId}/control/{commandId}
+```
+
+Status follows this state machine: Pending → Accepted → Applied or Rejected.
+
+## Authentication
+
+All REST endpoints require a JWT token with:
+- **Issuer**: configured via `OIDC_AUTHORITY`
+- **Audience**: configured via `OIDC_AUDIENCE`
+- **Claim**: `tenant` (optional; falls back to `t1`)
+
+### Mock OIDC for Development
+
+Docker Compose includes a mock OIDC server:
+
+```bash
+# Get a token
+TOKEN=$(curl -s http://localhost:8081/default/token | jq -r '.access_token')
+
+# Use in requests
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/devices"
+```
+
+The mock server does **not** validate signatures; for production, configure a real OIDC provider.
+
+## Architecture
+
+### Services (Docker Compose)
+
+| Service     | Role                                                                  |
+|-----------|-----------------------------------------------------------------------|
+| `silo`    | Orleans host with grains, ingest, storage, and graph logic.          |
+| `api`     | REST/gRPC gateway for querying latest state and history.             |
+| `mq`      | RabbitMQ broker for telemetry messages (optional).                   |
+| `publisher` | Demo app that publishes random telemetry (optional).               |
+| `mock-oidc` | Mock OIDC issuer for local development.                            |
+
+### Key Grain Types
+
+- **`DeviceGrain`**: holds latest telemetry snapshot for a device
+- **`TelemetryRouterGrain`**: routes incoming messages to devices
+- **`GraphNodeGrain`**: represents a building topology node
+- **`ValueBindingGrain`**: binds values (telemetry, custom) to nodes
+- **`GraphIndexGrain`**: indexes nodes by type for traversal
+
+### Ingest Flow
+
+Telemetry → Connector → `TelemetryIngestCoordinator` → Batch → `TelemetryRouterGrain` → `DeviceGrain` → Stream + Storage
+
+
+## Detailed Sequences & Diagrams
+
+### Telemetry & Storage Flow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Seed as Seeder
     actor Pub as Publisher
-    participant MQ as RabbitMQ (queue: telemetry)
-    participant Sim as Simulator Connector
-    participant Ingest as SiloHost: TelemetryIngestCoordinator
-    participant Router as TelemetryRouterGrain (Stateless)
-    participant Dev as DeviceGrain("{tenant}:{deviceId}")
-    participant Node as GraphNodeGrain("{tenant}:{nodeId}")
-    participant Val as ValueBindingGrain("{tenant}:{nodeId}")
-    participant Stream as Orleans Stream("DeviceUpdates")
-    participant API as API Gateway (REST/gRPC stub)
-    actor Rest as REST Client
-    actor Grpc as gRPC Client
+    participant MQ as RabbitMQ
+    participant Ingest as TelemetryIngestCoordinator
+    participant Router as TelemetryRouterGrain
+    participant Dev as DeviceGrain
+    participant Sink as ParquetTelemetryEventSink
+    participant Stage as Stage File (JSONL)
+    participant BG as TelemetryStorageBackgroundService
+    participant Compactor as TelemetryStorageCompactor
+    participant Parquet as Parquet File
 
-    %% --- RDF Seed (Graph) ---
-    Seed->>Node: UpsertAsync(node metadata)
-    Seed->>Node: AddOutgoingEdgeAsync(edge)
-    Seed->>Node: AddIncomingEdgeAsync(edge)
-
-    %% --- 発行 ---
-    alt Simulator enabled
-        Sim->>Ingest: TelemetryPointMsg (periodic)
-    else RabbitMQ enabled
-        Pub->>MQ: JSON {deviceId, sequence, properties}
-        note right of Pub: 任意周期で発行（デモのPublisher）
-    end
-
-    %% --- 取り込み & ルーティング ---
-    opt RabbitMQ enabled
-        Ingest-->>MQ: BasicConsume(prefetch=N)
-        MQ-->>Ingest: Deliver message
-        Ingest->>Ingest: JSONパース/バリデーション
-    end
-    Ingest->>Router: RouteAsync(msg)
-    Router->>Dev: UpsertAsync(msg)\n(key = "{tenant}:{deviceId}")
-
-    %% --- 状態更新 & 重複/逆順排除 ---
-    Dev->>Dev: if (msg.Sequence <= LastSequence) ignore
-    Dev->>Dev: LatestProps を upsert\nLastSequence を更新
-    Dev->>Stream: OnNextAsync(DeviceSnapshot)
+    Pub->>MQ: Publish telemetry message
+    Ingest-->>MQ: Consume batch (prefetch=N)
+    Ingest->>Router: RouteBatchAsync(messages)
+    Router->>Dev: UpsertAsync(message)
+    Dev->>Dev: Dedup by sequence
     Dev-->>Router: OK
-    Router-->>Ingest: OK
-    Ingest-->>MQ: ACK (成功後)
 
-    %% --- API 経由の参照（REST） ---
-    Rest->>API: GET /api/devices/{deviceId}\nAuthorization: Bearer <JWT>
-    API->>API: OIDC検証\n(Authority/Audience, tenant claim)
+    par Device Stream
+        Dev->>Dev: Publish to DeviceUpdates stream
+    and Storage
+        Ingest->>Sink: WriteBatchAsync(envelopes)
+        Sink->>Sink: Group by tenant/device/bucket
+        Sink->>Stage: Append JSONL (file lock)
+        Sink-->>Ingest: OK
+    end
+
+    Ingest-->>MQ: ACK batch
+
+    BG->>BG: PeriodicTimer
+    BG->>Compactor: CompactAsync()
+    Compactor->>Stage: Read JSONL files
+    Compactor->>Parquet: Write compacted Parquet
+    Compactor->>Stage: Delete stage file
+    Compactor-->>BG: Report
+```
+
+### Query Flow (Real-time vs Historical)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client
+    participant API as API Gateway
+    participant Dev as DeviceGrain
+    participant Query as ParquetTelemetryStorageQuery
+    participant Parquet as Parquet/Index
+
+    %% Real-time
+    Client->>API: GET /api/devices/{deviceId}
     API->>Dev: GetAsync()
-    Dev-->>API: DeviceSnapshot(LastSequence, Props, UpdatedAt)
-    API-->>Rest: 200 OK + JSON (+ ETag: W/"LastSequence")
+    Dev-->>API: Latest snapshot
+    API-->>Client: 200 OK (current state)
 
-    %% --- Graph/Value 参照（REST） ---
-    Rest->>API: GET /api/nodes/{nodeId}\nAuthorization: Bearer <JWT>
-    API->>Node: GetAsync()
-    Node-->>API: GraphNodeSnapshot
-    API-->>Rest: 200 OK + JSON
-
-    Rest->>API: GET /api/nodes/{nodeId}/value\nAuthorization: Bearer <JWT>
-    API->>Val: GetAsync()
-    Val-->>API: NodeValueSnapshot
-    API-->>Rest: 200 OK + JSON
-
-    Rest->>API: GET /api/graph/traverse/{nodeId}?depth=2
-    API->>Node: GetAsync() x N
-    API-->>Rest: 200 OK + JSON (nodes + edges)
-
-    %% --- ストリーム配信（gRPC） ---
-    Grpc->>API: DeviceService/StreamUpdates\nAuthorization: Bearer <JWT>
-    API->>API: OIDC検証
-    API->>Stream: Subscribe("{tenant}:{deviceId}")
-    Stream-->>API: 初回スナップショット
-    API-->>Grpc: Snapshot (server-side streaming)
-    note over API,Grpc: gRPC service is currently stubbed
-
-    %% --- 以後の更新（ブロードキャスト） ---
-    loop 新着テレメトリー
-        Ingest->>Router: RouteAsync(msg)
-        Router->>Dev: UpsertAsync(msg)
-        Dev->>Stream: OnNextAsync(DeviceSnapshot)
-        Stream-->>API: Snapshot
-        par push
-            API-->>Grpc: Snapshot
-        and REST polling/ETag
-            Rest->>API: GET (If-None-Match: W/"X")
-            API->>Dev: GetAsync()
-            Dev-->>API: Snapshot
-            API-->>Rest: 200/304
-        end
-    end
+    %% Historical
+    Client->>API: GET /api/telemetry/{deviceId}?from=...&to=...
+    API->>Query: QueryAsync(filters)
+    Query->>Parquet: Read index & Parquet
+    Parquet-->>Query: Records (filtered)
+    Query-->>API: Results
+    API-->>Client: 200 OK (historical data)
 ```
 
-```mermaid
-classDiagram
-    class IGraphNodeGrain {
-      +UpsertAsync(GraphNodeDefinition)
-      +AddOutgoingEdgeAsync(GraphEdge)
-      +AddIncomingEdgeAsync(GraphEdge)
-      +GetAsync() GraphNodeSnapshot
-    }
-    class IValueBindingGrain {
-      +UpsertAsync(NodeValueUpdate)
-      +GetAsync() NodeValueSnapshot
-    }
-    class IGraphIndexGrain {
-      +AddNodeAsync(GraphNodeDefinition)
-      +RemoveNodeAsync(nodeId, nodeType)
-      +GetByTypeAsync(nodeType) List~string~
-    }
-    class GraphNodeDefinition {
-      +NodeId
-      +NodeType
-      +DisplayName
-      +Attributes
-    }
-    class GraphEdge {
-      +Predicate
-      +TargetNodeId
-    }
-    class GraphNodeSnapshot {
-      +Node
-      +OutgoingEdges
-      +IncomingEdges
-    }
-    class NodeValueUpdate {
-      +Sequence
-      +Timestamp
-      +Values
-    }
-    class NodeValueSnapshot {
-      +LastSequence
-      +Values
-      +UpdatedAt
-    }
-    class IDeviceGrain {
-      +UpsertAsync(TelemetryMsg)
-      +GetAsync() DeviceSnapshot
-    }
-    class ITelemetryRouterGrain {
-      +RouteAsync(TelemetryPointMsg)
-      +RouteBatchAsync(TelemetryPointMsg[])
-    }
-    IGraphNodeGrain --> GraphNodeDefinition
-    IGraphNodeGrain --> GraphEdge
-    IGraphNodeGrain --> GraphNodeSnapshot
-    IValueBindingGrain --> NodeValueUpdate
-    IValueBindingGrain --> NodeValueSnapshot
-    ITelemetryRouterGrain --> IDeviceGrain
-```
+### Graph & RDF Seeding
 
 ```mermaid
-flowchart LR
-    subgraph Ingest
-        IngestSvc[TelemetryIngestCoordinator]
-        Sim[Simulator Connector]
-        MQ[(RabbitMQ)]
-        RMQ[RabbitMQ Connector]
-        RouterGrain[TelemetryRouterGrain]
+sequenceDiagram
+    autonumber
+    actor Ops as Operator
+    participant GraphSeedService
+    participant Analyzer as RDF Analyzer
+    participant Node as GraphNodeGrain
+    participant Index as GraphIndexGrain
+
+    Ops->>GraphSeedService: Start with RDF_SEED_PATH
+    GraphSeedService->>Analyzer: ParseRdfAsync(path)
+    Analyzer-->>GraphSeedService: BuildingDataModel
+    loop Each resource
+        GraphSeedService->>Node: UpsertAsync(node)
+        GraphSeedService->>Node: AddOutgoingEdgeAsync(edge)
     end
-    subgraph Orleans["Orleans Silo"]
+    loop Each type
+        GraphSeedService->>Index: AddNodeAsync(nodeId, type)
+    end
+    GraphSeedService-->>Ops: Graph initialized
+```
+
+### High-Level Architecture Diagram
+
+```mermaid
+flowchart TB
+    subgraph Sources["Telemetry Sources"]
+        Sim[Simulator]
+        RMQ[RabbitMQ]
+        Kafka[Kafka]
+    end
+
+    subgraph Ingest["Ingest Layer (SiloHost)"]
+        Coord[TelemetryIngestCoordinator]
+        Router[TelemetryRouterGrain]
+    end
+
+    subgraph Storage["Storage & Persistence"]
+        Sink[ParquetTelemetryEventSink]
+        StageFiles[Stage JSONL Files]
+        BG[BackgroundService]
+        Compactor[TelemetryStorageCompactor]
+        ParquetFiles[Parquet + Index]
+    end
+
+    subgraph Grains["Orleans Grains"]
         DevGrain[DeviceGrain]
         NodeGrain[GraphNodeGrain]
         ValGrain[ValueBindingGrain]
         IndexGrain[GraphIndexGrain]
-        Stream[DeviceUpdates Stream]
-    end
-    subgraph API["API Gateway"]
-        RestApi[REST endpoints]
-        GrpcApi[gRPC stub]
-        Traversal[GraphTraversal]
-    end
-    subgraph Tools
-        SeedSvc[GraphSeedService]
-        Analyzer[DataModel.Analyzer]
     end
 
-    Sim --> IngestSvc --> RouterGrain --> DevGrain --> Stream
-    MQ --> RMQ --> IngestSvc
-    RestApi --> DevGrain
-    RestApi --> NodeGrain
-    RestApi --> ValGrain
-    RestApi --> Traversal
-    Traversal --> NodeGrain
-    GrpcApi --> Stream
-    SeedSvc --> Analyzer --> NodeGrain
-    SeedSvc --> IndexGrain
+    subgraph API["API Gateway"]
+        REST[REST Endpoints]
+        Query[StorageQuery Service]
+    end
+
+    subgraph Clients["Clients"]
+        Web[Web App]
+        Mobile[Mobile App]
+        Tools[CLI Tools]
+    end
+
+    Sources --> Coord
+    Coord --> Router
+    Router --> DevGrain
+    Coord --> Sink
+    Sink --> StageFiles
+    StageFiles --> BG
+    BG --> Compactor
+    Compactor --> ParquetFiles
+
+    DevGrain --> REST
+    NodeGrain --> REST
+    ValGrain --> REST
+    ParquetFiles --> Query
+    Query --> REST
+
+    REST --> Web
+    REST --> Mobile
+    REST --> Tools
 ```
+
+## Development & Testing
+
+### Run Tests
+
+```bash
+# All tests
+dotnet test
+
+# Specific test suite
+dotnet test src/DataModel.Analyzer.Tests
+dotnet test src/Telemetry.Ingest.Tests
+dotnet test src/Telemetry.Storage.Tests
+```
+
+### Build
+
+```bash
+dotnet build
+```
+
+### Local Development Notes
+
+- **Orleans Memory Storage**: SiloHost uses in-memory grain storage (not persisted between restarts)
+- **RDF Parsing**: DataModel.Analyzer converts TTL files to Orleans contracts via SHACL validation
+- **Schema**: See `src/DataModel.Analyzer/Schema` for SHACL shapes
+- **JSON Serialization**: Uses `System.Text.Json` (configured in DataModelExportService)
+
+## Project Structure
+
+```
+src/
+  SiloHost/                       # Orleans silo & ingest setup
+  ApiGateway/                     # REST/gRPC gateway
+  DataModel.Analyzer/             # RDF → BuildingDataModel
+  Telemetry.Ingest/              # Ingest connectors & coordinator
+  Telemetry.Storage/             # Parquet persistence & query
+  Grains.Abstractions/           # Grain interfaces & contracts
+  Publisher/                      # Demo telemetry publisher
+  *Tests/                         # Unit tests
+```
+
+## Notes & Limitations
+
+### Current Status
+
+- ✅ Telemetry ingestion (Simulator, RabbitMQ, Kafka)
+- ✅ Real-time state in Orleans grains
+- ✅ Parquet-based storage & historical queries
+- ✅ Graph model (nodes, edges, values) from RDF
+- ✅ REST API with JWT authentication
+- ⚠️ Control flow (interfaces only, not implemented)
+- ⚠️ gRPC service (stubbed)
+
+### Not for Production
+
+This sample is intentionally simple and lacks:
+- Data encryption/signing
+- Advanced error handling
+- Rate limiting
+- Audit logging
+- Horizontal scaling (Orleans is single-silo)
+- Backup/recovery
+- Performance optimization
+
+For production, add these hardening steps and consider Orleans clustering, persistent storage, and comprehensive monitoring.
+
+## License
+
+This project is licensed under the **MIT License**.
+
+You are free to use, modify, and distribute this software for any purpose (personal, commercial, etc.) as long as you include a copy of the license and copyright notice.
+
+See [LICENSE](LICENSE) file for details.
