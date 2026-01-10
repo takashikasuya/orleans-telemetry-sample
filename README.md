@@ -1,9 +1,9 @@
 # Orleans Telemetry Sample
 
 This repository contains a minimal sample that demonstrates how to ingest
-telemetry messages into an Orleans cluster (via RabbitMQ or a simulator),
+telemetry messages into an Orleans cluster (via RabbitMQ, Kafka, or a simulator),
 map them to device‑scoped grains, and expose the latest state through a REST
-and gRPC gateway. A small publisher service publishes random
+gateway (gRPC scaffolding is present but currently stubbed). A small publisher service publishes random
 temperature/humidity telemetry to RabbitMQ to exercise the pipeline.
 
 ## Quick Start
@@ -17,6 +17,7 @@ docker compose up --build
 Once running:
 - REST Swagger: `http://localhost:8080/swagger`
 - REST base: `http://localhost:8080`
+- Mock OIDC issuer (for local tokens): `http://localhost:8081/default`
 
 Optional: seed the graph from an RDF file:
 
@@ -46,8 +47,17 @@ dotnet run --project src/Publisher
 
 Environment variables:
 - `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASS`
+- `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_TOPIC`, `KAFKA_GROUP_ID`
+- `OIDC_AUTHORITY`, `OIDC_AUDIENCE`
 - `RDF_SEED_PATH`: path to RDF file to seed graph nodes/edges on startup
 - `TENANT_ID`: tenant key used by graph seeding (default: `default`)
+
+## Authentication
+
+All REST endpoints require a JWT. The API expects a `tenant` claim and falls back
+to `t1` if it is missing. Configure `OIDC_AUTHORITY` and `OIDC_AUDIENCE` to point
+to your provider; Docker Compose boots a mock OIDC server on `http://localhost:8081/default`.
+When using it, ensure your token includes the `tenant` claim and the configured audience.
 
 ## Graph Model (Nodes, Edges, Values)
 
@@ -152,8 +162,9 @@ The solution is composed of these Docker services:
 |---------------|-------------------------------------------------------------------|
 | `mq`           | RabbitMQ broker used as the message queue for incoming telemetry (optional).|
 | `silo`         | Orleans host containing grains and telemetry ingest connectors.  |
-| `api`          | ASP.NET Core application that exposes REST and gRPC endpoints.   |
+| `api`          | ASP.NET Core application that exposes REST endpoints (gRPC is stubbed).   |
 | `publisher`    | .NET console app that publishes random telemetry to the queue (optional).|
+| `mock-oidc`    | Mock OIDC server for local JWTs (development only). |
 
 To run the stack locally you can use Docker Compose:
 
@@ -162,7 +173,8 @@ docker compose up --build
 ```
 
 Once running you can navigate to `http://localhost:8080/swagger` to inspect
-the REST API and `http://localhost:8080` to call the gRPC service via a client.
+the REST API. The gRPC service implementation is currently disabled, so gRPC
+clients will not receive responses until the service is enabled.
 
 This sample is intentionally simple and is not hardened for production use.
 
@@ -191,6 +203,47 @@ To run with the built-in simulator:
 }
 ```
 
+To run with RabbitMQ ingestion:
+
+```json
+{
+  "TelemetryIngest": {
+    "Enabled": [ "RabbitMq" ],
+    "BatchSize": 100,
+    "ChannelCapacity": 10000,
+    "RabbitMq": {
+      "HostName": "mq",
+      "Port": 5672,
+      "UserName": "guest",
+      "Password": "guest",
+      "QueueName": "telemetry",
+      "PrefetchCount": 100
+    }
+  }
+}
+```
+
+To run with Kafka ingestion (note: Kafka is not included in the default Docker Compose file):
+
+```json
+{
+  "TelemetryIngest": {
+    "Enabled": [ "Kafka" ],
+    "BatchSize": 100,
+    "ChannelCapacity": 10000,
+    "Kafka": {
+      "BootstrapServers": "localhost:9092",
+      "GroupId": "telemetry-ingest",
+      "Topic": "telemetry",
+      "EnableAutoCommit": false,
+      "AutoOffsetReset": "Latest",
+      "SessionTimeoutMs": 45000,
+      "MaxPollIntervalMs": 300000
+    }
+  }
+}
+```
+
 
 ```mermaid
 sequenceDiagram
@@ -205,10 +258,9 @@ sequenceDiagram
     participant Node as GraphNodeGrain("{tenant}:{nodeId}")
     participant Val as ValueBindingGrain("{tenant}:{nodeId}")
     participant Stream as Orleans Stream("DeviceUpdates")
-    participant API as API Gateway (REST/gRPC/GraphQL)
+    participant API as API Gateway (REST/gRPC stub)
     actor Rest as REST Client
     actor Grpc as gRPC Client
-    actor GQL as GraphQL Client
 
     %% --- RDF Seed (Graph) ---
     Seed->>Node: UpsertAsync(node metadata)
@@ -262,18 +314,13 @@ sequenceDiagram
     API->>Node: GetAsync() x N
     API-->>Rest: 200 OK + JSON (nodes + edges)
 
-    %% --- ストリーム配信（gRPC / GraphQL） ---
+    %% --- ストリーム配信（gRPC） ---
     Grpc->>API: DeviceService/StreamUpdates\nAuthorization: Bearer <JWT>
     API->>API: OIDC検証
     API->>Stream: Subscribe("{tenant}:{deviceId}")
     Stream-->>API: 初回スナップショット
     API-->>Grpc: Snapshot (server-side streaming)
-
-    GQL->>API: GraphQL Subscription (deviceUpdates)\nAuthorization: Bearer <JWT>
-    API->>API: OIDC検証
-    API->>Stream: Subscribe("{tenant}:{deviceId}")
-    Stream-->>API: 初回スナップショット
-    API-->>GQL: Snapshot (WebSocket)
+    note over API,Grpc: gRPC service is currently stubbed
 
     %% --- 以後の更新（ブロードキャスト） ---
     loop 新着テレメトリー
@@ -283,7 +330,6 @@ sequenceDiagram
         Stream-->>API: Snapshot
         par push
             API-->>Grpc: Snapshot
-            API-->>GQL: Snapshot
         and REST polling/ETag
             Rest->>API: GET (If-None-Match: W/"X")
             API->>Dev: GetAsync()
@@ -369,7 +415,7 @@ flowchart LR
     end
     subgraph API["API Gateway"]
         RestApi[REST endpoints]
-        GrpcApi[gRPC endpoints]
+        GrpcApi[gRPC stub]
         Traversal[GraphTraversal]
     end
     subgraph Tools
