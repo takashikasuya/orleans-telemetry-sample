@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using Parquet;
 using Parquet.Data;
+using Parquet.Schema;
 
 namespace Telemetry.Storage;
 

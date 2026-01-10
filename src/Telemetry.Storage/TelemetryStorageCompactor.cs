@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Parquet;
 using Parquet.Data;
+using Parquet.Schema;
 
 namespace Telemetry.Storage;
 
@@ -93,7 +94,7 @@ public sealed class TelemetryStorageCompactor
 
     private static async Task WriteParquetAsync(string parquetPath, List<TelemetryStageRecord> records, CancellationToken ct)
     {
-        var schema = new Schema(
+        var schema = new Parquet.Schema.ParquetSchema(
             new DataField<string>("tenantId"),
             new DataField<string>("buildingName"),
             new DataField<string>("spaceId"),
@@ -103,10 +104,10 @@ public sealed class TelemetryStorageCompactor
             new DateTimeDataField("occurredAt", DateTimeFormat.DateAndTime),
             new DateTimeDataField("ingestedAt", DateTimeFormat.DateAndTime),
             new DataField<int>("eventType"),
-            new DataField<int>("severity", hasNulls: true),
-            new DataField<string>("valueJson", hasNulls: true),
-            new DataField<string>("payloadJson", hasNulls: true),
-            new DataField<string>("tagsJson", hasNulls: true));
+            new DataField<int?>("severity"),
+            new DataField<string?>("valueJson"),
+            new DataField<string?>("payloadJson"),
+            new DataField<string?>("tagsJson"));
 
         await using var fileStream = new FileStream(parquetPath, FileMode.Create, FileAccess.Write, FileShare.Read);
         using var parquetWriter = await ParquetWriter.CreateAsync(schema, fileStream, cancellationToken: ct);
