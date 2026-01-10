@@ -27,7 +27,6 @@ public class RdfAnalyzerService
     private readonly string _schemaFolder;
 
     private const string RecNamespace = "https://w3id.org/rec/";
-    private const string GutpNamespace = "https://www.gutp.jp/bim-wg#";
     private const string SbcoNamespace = "https://www.sbco.or.jp/ont/";
     private const string BrickNamespace = "https://brickschema.org/schema/Brick#";
     private const string DctNamespace = "http://purl.org/dc/terms/";
@@ -398,7 +397,7 @@ public class RdfAnalyzerService
             var levelNumberValue = GetFirstLiteralValue(
                 graph,
                 subject,
-                new[] { $"{SbcoNamespace}levelNumber", $"{GutpNamespace}levelNumber", $"{RecNamespace}levelNumber" });
+                new[] { $"{SbcoNamespace}levelNumber", $"{RecNamespace}levelNumber" });
 
             if (!string.IsNullOrWhiteSpace(levelNumberValue) && int.TryParse(levelNumberValue, out var levelNumber))
             {
@@ -443,7 +442,7 @@ public class RdfAnalyzerService
     private List<Equipment> ExtractEquipment(IGraph graph)
     {
         var equipmentList = new List<Equipment>();
-        var subjects = GetSubjectsOfType(graph, new[] { $"{SbcoNamespace}EquipmentExt", $"{SbcoNamespace}Equipment", $"{GutpNamespace}GUTPEquipment" });
+        var subjects = GetSubjectsOfType(graph, new[] { $"{SbcoNamespace}EquipmentExt", $"{SbcoNamespace}Equipment" });
 
         foreach (var subject in subjects)
         {
@@ -474,7 +473,7 @@ public class RdfAnalyzerService
     private List<Point> ExtractPoints(IGraph graph)
     {
         var points = new List<Point>();
-        var subjects = GetSubjectsOfType(graph, new[] { $"{SbcoNamespace}PointExt", $"{SbcoNamespace}Point", $"{GutpNamespace}GUTPPoint" });
+        var subjects = GetSubjectsOfType(graph, new[] { $"{SbcoNamespace}PointExt", $"{SbcoNamespace}Point" });
 
         foreach (var subject in subjects)
         {
@@ -632,11 +631,11 @@ public class RdfAnalyzerService
     {
         var properties = new Dictionary<string, string>
         {
-            { $"{GutpNamespace}gateway_id", nameof(Equipment.GatewayId) },
-            { $"{GutpNamespace}device_id", nameof(Equipment.DeviceId) },
-            { $"{GutpNamespace}device_type", nameof(Equipment.DeviceType) },
-            { $"{GutpNamespace}supplier", nameof(Equipment.Supplier) },
-            { $"{GutpNamespace}owner", nameof(Equipment.Owner) }
+            { $"{SbcoNamespace}gateway_id", nameof(Equipment.GatewayId) },
+            { $"{SbcoNamespace}device_id", nameof(Equipment.DeviceId) },
+            { $"{SbcoNamespace}device_type", nameof(Equipment.DeviceType) },
+            { $"{SbcoNamespace}supplier", nameof(Equipment.Supplier) },
+            { $"{SbcoNamespace}owner", nameof(Equipment.Owner) }
         };
 
         foreach (var (predicateUri, propertyName) in properties)
@@ -654,14 +653,14 @@ public class RdfAnalyzerService
     {
         var stringProperties = new Dictionary<string, string>
         {
-            { $"{GutpNamespace}point_id", nameof(Point.PointId) },
-            { $"{GutpNamespace}point_type", nameof(Point.PointType) },
-            { $"{GutpNamespace}point_specification", nameof(Point.PointSpecification) },
-            { $"{GutpNamespace}local_id", nameof(Point.LocalId) },
-            { $"{GutpNamespace}unit", nameof(Point.Unit) },
-            { $"{GutpNamespace}device_id_bacnet", nameof(Point.DeviceIdBacnet) },
-            { $"{GutpNamespace}instance_no_bacnet", nameof(Point.InstanceNoBacnet) },
-            { $"{GutpNamespace}object_type_bacnet", nameof(Point.ObjectTypeBacnet) },
+            { $"{SbcoNamespace}point_id", nameof(Point.PointId) },
+            { $"{SbcoNamespace}point_type", nameof(Point.PointType) },
+            { $"{SbcoNamespace}point_specification", nameof(Point.PointSpecification) },
+            { $"{SbcoNamespace}local_id", nameof(Point.LocalId) },
+            { $"{SbcoNamespace}unit", nameof(Point.Unit) },
+            { $"{SbcoNamespace}device_id_bacnet", nameof(Point.DeviceIdBacnet) },
+            { $"{SbcoNamespace}instance_no_bacnet", nameof(Point.InstanceNoBacnet) },
+            { $"{SbcoNamespace}object_type_bacnet", nameof(Point.ObjectTypeBacnet) },
             { $"{SbcoNamespace}pointType", nameof(Point.PointType) },
             { $"{SbcoNamespace}pointSpecification", nameof(Point.PointSpecification) },
             { $"{SbcoNamespace}unit", nameof(Point.Unit) }
@@ -677,16 +676,16 @@ public class RdfAnalyzerService
             }
         }
 
-        var writableValue = GetFirstLiteralValue(graph, subject, new[] { $"{GutpNamespace}writable" });
+        var writableValue = GetFirstLiteralValue(graph, subject, new[] { $"{SbcoNamespace}writable" });
         if (!string.IsNullOrWhiteSpace(writableValue) && bool.TryParse(writableValue, out var writable))
         {
             point.Writable = writable;
         }
 
-        ExtractNumericProperty(graph, subject, new[] { $"{GutpNamespace}interval", $"{SbcoNamespace}intervalCapability" }, value => point.Interval = (int?)value);
-        ExtractNumericProperty(graph, subject, new[] { $"{GutpNamespace}max_pres_value", $"{SbcoNamespace}maxPresValue" }, value => point.MaxPresValue = value);
-        ExtractNumericProperty(graph, subject, new[] { $"{GutpNamespace}min_pres_value", $"{SbcoNamespace}minPresValue" }, value => point.MinPresValue = value);
-        ExtractNumericProperty(graph, subject, new[] { $"{GutpNamespace}scale", $"{SbcoNamespace}scale" }, value => point.Scale = value);
+        ExtractNumericProperty(graph, subject, new[] { $"{SbcoNamespace}interval", $"{SbcoNamespace}intervalCapability" }, value => point.Interval = (int?)value);
+        ExtractNumericProperty(graph, subject, new[] { $"{SbcoNamespace}max_pres_value", $"{SbcoNamespace}maxPresValue" }, value => point.MaxPresValue = value);
+        ExtractNumericProperty(graph, subject, new[] { $"{SbcoNamespace}min_pres_value", $"{SbcoNamespace}minPresValue" }, value => point.MinPresValue = value);
+        ExtractNumericProperty(graph, subject, new[] { $"{SbcoNamespace}scale", $"{SbcoNamespace}scale" }, value => point.Scale = value);
 
         point.HasQuantity = GetFirstObjectValue(graph, subject, new[] { $"{SbcoNamespace}hasQuantity", $"{BrickNamespace}hasQuantity" });
         point.HasSubstance = GetFirstObjectValue(graph, subject, new[] { $"{SbcoNamespace}hasSubstance", $"{BrickNamespace}hasSubstance" });
@@ -809,4 +808,3 @@ public class RdfAnalyzerService
         }
     }
 }
-
