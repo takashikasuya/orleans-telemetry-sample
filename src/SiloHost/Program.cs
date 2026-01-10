@@ -33,6 +33,7 @@ internal static class Program
             services.AddKafkaIngest(ingestSection.GetSection("Kafka"));
             services.AddRabbitMqIngest(ingestSection.GetSection("RabbitMq"));
             services.AddSimulatorIngest(ingestSection.GetSection("Simulator"));
+            services.AddLoggingTelemetryEventSink();
             services.AddHostedService<GraphSeedService>();
         });
         builder.UseOrleans(siloBuilder =>
