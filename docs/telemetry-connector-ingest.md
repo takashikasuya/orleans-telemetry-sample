@@ -28,6 +28,21 @@
 | Timestamp | DateTimeOffset | 測定時刻 |
 | Value | object? | テレメトリー値 |
 
+#### 具体的なスキーマ例
+
+```json
+{
+  "tenantId": "tenant-a",
+  "buildingName": "tokyo-office",
+  "spaceId": "floor-3",
+  "deviceId": "hvac-01",
+  "pointId": "supply-air-temp",
+  "sequence": 3912,
+  "timestamp": "2024-06-01T12:34:56.789+09:00",
+  "value": 21.8
+}
+```
+
 ### TelemetryEventEnvelope（インジェスト → イベントシンク）
 
 インジェスト側がストレージ/ログ用に変換するメッセージです。基本的に `TelemetryPointMsg` をラップし、インジェスト時刻やイベント種別を付与します。【F:src/Telemetry.Ingest/EventEnvelope.cs†L1-L30】【F:src/Telemetry.Ingest/TelemetryEventEnvelopeFactory.cs†L1-L26】
@@ -43,6 +58,50 @@
 | Value | object? | テレメトリー値 |
 | Payload | JsonDocument? | 拡張ペイロード |
 | Tags | IDictionary<string,string>? | タグ |
+
+#### 具体的なスキーマ例
+
+```json
+{
+  "tenantId": "tenant-a",
+  "buildingName": "tokyo-office",
+  "spaceId": "floor-3",
+  "deviceId": "hvac-01",
+  "pointId": "supply-air-temp",
+  "sequence": 3912,
+  "occurredAt": "2024-06-01T12:34:56.789+09:00",
+  "ingestedAt": "2024-06-01T03:34:56.800Z",
+  "eventType": "Telemetry",
+  "severity": null,
+  "value": 21.8,
+  "payload": null,
+  "tags": null
+}
+```
+
+### コネクタによる変換の注意点
+
+- `TelemetryEventEnvelopeFactory` は `TelemetryPointMsg.Timestamp` を `OccurredAt` にマッピングし、`IngestedAt` はインジェスト時刻（UTC）で付与します。【F:src/Telemetry.Ingest/TelemetryEventEnvelopeFactory.cs†L1-L26】
+- `EventType` は `Telemetry` 固定で、`Severity`/`Payload`/`Tags` は現状 `null` に設定されます（ログイベント等は別途拡張が必要）。【F:src/Telemetry.Ingest/TelemetryEventEnvelopeFactory.cs†L1-L26】
+- `Value` は型変換せずにそのまま渡すため、コネクタ側でスキーマの一貫性（数値/文字列/複合型）を担保してください。【F:src/Telemetry.Ingest/TelemetryEventEnvelopeFactory.cs†L1-L26】
+
+## システムとしての特徴（バックプレッシャー/バッチ）
+
+- **バックプレッシャー**: インジェストは `BoundedChannel` を使い、チャネルが満杯になると `Wait` でコネクタの書き込みをブロックします。これにより下流が詰まった場合に入口側へ自然に圧力が返ります。【F:src/Telemetry.Ingest/TelemetryIngestCoordinator.cs†L28-L45】
+- **バッチ処理**: `BatchSize` に達したタイミングでルータとイベントシンクにまとめて流し、I/O を集約します（1件ずつではなくバッチで処理）。【F:src/Telemetry.Ingest/TelemetryIngestCoordinator.cs†L87-L129】
+- **疎結合**: コネクタは `TelemetryPointMsg`、イベントシンクは `TelemetryEventEnvelope` を受けるため、入力・出力それぞれを独立に拡張できます。【F:src/Telemetry.Ingest/ITelemetryIngestConnector.cs†L1-L10】【F:src/Telemetry.Ingest/EventEnvelope.cs†L1-L30】
+
+## インジェスト時に調整するパラメータ
+
+| パラメータ | 役割 | 調整の観点 |
+| --- | --- | --- |
+| TelemetryIngest:BatchSize | バッチ化の単位 | 大きいほどスループット重視、過大だとレイテンシ増/メモリ増。 | 
+| TelemetryIngest:ChannelCapacity | チャネルのバッファ上限 | 小さいと即バックプレッシャーが掛かる。過大だとスパイク吸収はできるがメモリ増。 |
+| TelemetryIngest:Enabled | 起動するコネクタ一覧 | 空の場合は全コネクタが対象。必要なものだけ有効化。 |
+| TelemetryIngest:EventSinks:Enabled | 有効化するイベントシンク | 空の場合は全シンクが対象。用途に応じて限定。 |
+
+> 例: `appsettings.json` では `BatchSize=100`、`ChannelCapacity=10000`、`Enabled` と `EventSinks:Enabled` を設定しています。【F:src/SiloHost/appsettings.json†L1-L20】
+> 既定値は `TelemetryIngestOptions` に定義されています。【F:src/Telemetry.Ingest/TelemetryIngestOptions.cs†L1-L17】
 
 ## コネクタ拡張方法
 
