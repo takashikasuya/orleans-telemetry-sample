@@ -7,6 +7,7 @@ using Grains.Abstractions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Telemetry.Ingest;
+using Telemetry.Ingest.RabbitMq;
 
 namespace Telemetry.Ingest.LoadTest;
 
@@ -24,6 +25,9 @@ internal static class Program
         var quick = args.Contains("--quick", StringComparer.OrdinalIgnoreCase);
         var includeBatchSweep = args.Contains("--batch-sweep", StringComparer.OrdinalIgnoreCase);
         var includeAbnormal = args.Contains("--abnormal", StringComparer.OrdinalIgnoreCase);
+        var includeSoak = args.Contains("--soak", StringComparer.OrdinalIgnoreCase);
+        var includeSpike = args.Contains("--spike", StringComparer.OrdinalIgnoreCase);
+        var includeMultiConnector = args.Contains("--multi-connector", StringComparer.OrdinalIgnoreCase);
         var stages = quick ? BuildQuickStages() : BuildDefaultStages();
 
         if (includeBatchSweep)
@@ -36,6 +40,21 @@ internal static class Program
             stages = stages.Concat(BuildAbnormalStages(quick)).ToArray();
         }
 
+        if (includeSoak)
+        {
+            stages = stages.Concat(BuildRabbitMqSoakStages(quick)).ToArray();
+        }
+
+        if (includeSpike)
+        {
+            stages = stages.Concat(BuildRabbitMqSpikeStages(quick)).ToArray();
+        }
+
+        if (includeMultiConnector)
+        {
+            stages = stages.Concat(BuildMultiConnectorStages(quick)).ToArray();
+        }
+
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
         var runStart = DateTimeOffset.UtcNow;
         var stageResults = new List<StageReport>();
@@ -44,13 +63,16 @@ internal static class Program
         {
             Console.WriteLine($"Stage {stage.Name} running for {stage.DurationSeconds}s...");
             var metrics = new MetricsRecorder();
-            var connector = new LoadTestConnector(stage, metrics);
+            var connectors = BuildConnectors(stage, metrics);
             var router = new SlowRouter(stage.RouterDelayMs, metrics);
             var sink = new SlowSink(stage.SinkDelayMs, stage.SinkFailureRatePercent, metrics);
 
+            var enabledConnectors = connectors.Select(connector => connector.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             var options = Options.Create(new TelemetryIngestOptions
             {
-                Enabled = new[] { connector.Name },
+                Enabled = enabledConnectors,
                 BatchSize = stage.BatchSize,
                 ChannelCapacity = stage.ChannelCapacity,
                 EventSinks = new TelemetryIngestEventSinkOptions
@@ -60,17 +82,24 @@ internal static class Program
             });
 
             var coordinator = new TelemetryIngestCoordinator(
-                new[] { connector },
+                connectors,
                 new[] { sink },
                 router,
                 options,
                 NullLogger<TelemetryIngestCoordinator>.Instance);
 
             var stageStopwatch = Stopwatch.StartNew();
-            await coordinator.StartAsync(CancellationToken.None);
-            await Task.Delay(TimeSpan.FromSeconds(stage.DurationSeconds));
-            await coordinator.StopAsync(CancellationToken.None);
-            stageStopwatch.Stop();
+            try
+            {
+                await coordinator.StartAsync(CancellationToken.None);
+                await Task.Delay(TimeSpan.FromSeconds(stage.DurationSeconds));
+                await coordinator.StopAsync(CancellationToken.None);
+            }
+            finally
+            {
+                stageStopwatch.Stop();
+                await DisposeConnectorsAsync(connectors);
+            }
 
             var result = metrics.CreateStageReport(stage, stageStopwatch.Elapsed);
             stageResults.Add(result);
@@ -119,7 +148,9 @@ internal static class Program
                 RouterDelayMs: 5,
                 SinkDelayMs: 0,
                 SinkFailureRatePercent: 0,
-                ConnectorFailureAfterMessages: 0),
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 1,
+                UseRabbitMqConnector: false),
             new LoadStage(
                 Name: "ramp-1",
                 DurationSeconds: 20,
@@ -131,7 +162,9 @@ internal static class Program
                 RouterDelayMs: 10,
                 SinkDelayMs: 0,
                 SinkFailureRatePercent: 0,
-                ConnectorFailureAfterMessages: 0),
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 1,
+                UseRabbitMqConnector: false),
             new LoadStage(
                 Name: "ramp-2",
                 DurationSeconds: 20,
@@ -143,7 +176,9 @@ internal static class Program
                 RouterDelayMs: 20,
                 SinkDelayMs: 5,
                 SinkFailureRatePercent: 0,
-                ConnectorFailureAfterMessages: 0),
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 1,
+                UseRabbitMqConnector: false),
             new LoadStage(
                 Name: "overload",
                 DurationSeconds: 20,
@@ -155,7 +190,9 @@ internal static class Program
                 RouterDelayMs: 50,
                 SinkDelayMs: 10,
                 SinkFailureRatePercent: 0,
-                ConnectorFailureAfterMessages: 0)
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 1,
+                UseRabbitMqConnector: false)
         };
     }
 
@@ -174,7 +211,9 @@ internal static class Program
                 RouterDelayMs: 5,
                 SinkDelayMs: 0,
                 SinkFailureRatePercent: 0,
-                ConnectorFailureAfterMessages: 0),
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 1,
+                UseRabbitMqConnector: false),
             new LoadStage(
                 Name: "overload",
                 DurationSeconds: 6,
@@ -186,7 +225,9 @@ internal static class Program
                 RouterDelayMs: 50,
                 SinkDelayMs: 10,
                 SinkFailureRatePercent: 0,
-                ConnectorFailureAfterMessages: 0)
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 1,
+                UseRabbitMqConnector: false)
         };
     }
 
@@ -205,7 +246,9 @@ internal static class Program
             RouterDelayMs: 10,
             SinkDelayMs: 5,
             SinkFailureRatePercent: 0,
-            ConnectorFailureAfterMessages: 0)).ToArray();
+            ConnectorFailureAfterMessages: 0,
+            LoadTestConnectorCount: 1,
+            UseRabbitMqConnector: false)).ToArray();
     }
 
     private static IReadOnlyList<LoadStage> BuildAbnormalStages(bool quick)
@@ -224,7 +267,9 @@ internal static class Program
                 RouterDelayMs: 10,
                 SinkDelayMs: 10,
                 SinkFailureRatePercent: 5,
-                ConnectorFailureAfterMessages: 0),
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 1,
+                UseRabbitMqConnector: false),
             new LoadStage(
                 Name: "connector-stop-early",
                 DurationSeconds: duration,
@@ -236,8 +281,112 @@ internal static class Program
                 RouterDelayMs: 10,
                 SinkDelayMs: 5,
                 SinkFailureRatePercent: 0,
-                ConnectorFailureAfterMessages: quick ? 500 : 2000)
+                ConnectorFailureAfterMessages: quick ? 500 : 2000,
+                LoadTestConnectorCount: 1,
+                UseRabbitMqConnector: false)
         };
+    }
+
+    private static IReadOnlyList<LoadStage> BuildRabbitMqSoakStages(bool quick)
+    {
+        return new[]
+        {
+            new LoadStage(
+                Name: "rabbitmq-soak",
+                DurationSeconds: quick ? 60 : 1800,
+                ChannelCapacity: 200,
+                BatchSize: 50,
+                DeviceCount: 0,
+                PointsPerDevice: 0,
+                IntervalMilliseconds: 0,
+                RouterDelayMs: 5,
+                SinkDelayMs: 5,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 0,
+                UseRabbitMqConnector: true)
+        };
+    }
+
+    private static IReadOnlyList<LoadStage> BuildRabbitMqSpikeStages(bool quick)
+    {
+        return new[]
+        {
+            new LoadStage(
+                Name: "rabbitmq-spike",
+                DurationSeconds: quick ? 45 : 120,
+                ChannelCapacity: 150,
+                BatchSize: 50,
+                DeviceCount: 0,
+                PointsPerDevice: 0,
+                IntervalMilliseconds: 0,
+                RouterDelayMs: 10,
+                SinkDelayMs: 5,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 0,
+                UseRabbitMqConnector: true)
+        };
+    }
+
+    private static IReadOnlyList<LoadStage> BuildMultiConnectorStages(bool quick)
+    {
+        return new[]
+        {
+            new LoadStage(
+                Name: "mixed-connectors",
+                DurationSeconds: quick ? 30 : 90,
+                ChannelCapacity: 150,
+                BatchSize: 50,
+                DeviceCount: 20,
+                PointsPerDevice: 10,
+                IntervalMilliseconds: 50,
+                RouterDelayMs: 10,
+                SinkDelayMs: 5,
+                SinkFailureRatePercent: 0,
+                ConnectorFailureAfterMessages: 0,
+                LoadTestConnectorCount: 2,
+                UseRabbitMqConnector: true)
+        };
+    }
+
+    private static List<ITelemetryIngestConnector> BuildConnectors(LoadStage stage, MetricsRecorder metrics)
+    {
+        var connectors = new List<ITelemetryIngestConnector>();
+        for (var i = 0; i < stage.LoadTestConnectorCount; i++)
+        {
+            connectors.Add(new LoadTestConnector(stage, metrics));
+        }
+
+        if (stage.UseRabbitMqConnector)
+        {
+            var options = Options.Create(new RabbitMqIngestOptions());
+            var rabbitConnector = new RabbitMqIngestConnector(options, NullLogger<RabbitMqIngestConnector>.Instance);
+            connectors.Add(new InstrumentedConnector(rabbitConnector, metrics));
+        }
+
+        if (connectors.Count == 0)
+        {
+            throw new InvalidOperationException($"Stage {stage.Name} does not configure any connectors.");
+        }
+
+        return connectors;
+    }
+
+    private static async Task DisposeConnectorsAsync(IEnumerable<ITelemetryIngestConnector> connectors)
+    {
+        foreach (var connector in connectors)
+        {
+            switch (connector)
+            {
+                case IAsyncDisposable asyncDisposable:
+                    await asyncDisposable.DisposeAsync();
+                    break;
+                case IDisposable disposable:
+                    disposable.Dispose();
+                    break;
+            }
+        }
     }
 }
 
@@ -252,7 +401,9 @@ internal sealed record LoadStage(
     int RouterDelayMs,
     int SinkDelayMs,
     int SinkFailureRatePercent,
-    int ConnectorFailureAfterMessages);
+    int ConnectorFailureAfterMessages,
+    int LoadTestConnectorCount,
+    bool UseRabbitMqConnector);
 
 internal sealed record LoadTestReport(
     string RunId,
@@ -272,6 +423,9 @@ internal sealed record StageReport(
     int SinkDelayMs,
     int SinkFailureRatePercent,
     int ConnectorFailureAfterMessages,
+    int LoadTestConnectorCount,
+    bool UseRabbitMqConnector,
+    string ConnectorSummary,
     string ConnectorName,
     string RouterName,
     string SinkName,
@@ -326,7 +480,8 @@ internal static class ReportFormatter
                 $"ChannelCapacity={stage.ChannelCapacity}, BatchSize={stage.BatchSize}, " +
                 $"Devices={stage.DeviceCount}, PointsPerDevice={stage.PointsPerDevice}, " +
                 $"IntervalMs={stage.IntervalMilliseconds}, RouterDelayMs={stage.RouterDelayMs}, " +
-                $"SinkDelayMs={stage.SinkDelayMs}, SinkFailureRate={stage.SinkFailureRatePercent}%");
+                $"SinkDelayMs={stage.SinkDelayMs}, SinkFailureRate={stage.SinkFailureRatePercent}%, " +
+                $"LoadTestConnectors={stage.LoadTestConnectorCount}, UseRabbitMq={stage.UseRabbitMqConnector}");
             lines.Add(string.Empty);
         }
 
@@ -340,8 +495,9 @@ internal static class ReportFormatter
                 $"Devices={stage.DeviceCount}, PointsPerDevice={stage.PointsPerDevice}, " +
                 $"IntervalMs={stage.IntervalMilliseconds}, RouterDelayMs={stage.RouterDelayMs}, " +
                 $"SinkDelayMs={stage.SinkDelayMs}, SinkFailureRate={stage.SinkFailureRatePercent}%, " +
-                $"ConnectorFailureAfterMessages={stage.ConnectorFailureAfterMessages}");
-            lines.Add($"Connector: {stage.ConnectorName}");
+                $"ConnectorFailureAfterMessages={stage.ConnectorFailureAfterMessages}, " +
+                $"LoadTestConnectors={stage.LoadTestConnectorCount}, UseRabbitMq={stage.UseRabbitMqConnector}");
+            lines.Add($"Connector: {stage.ConnectorSummary}");
             lines.Add($"Router: {stage.RouterName}");
             lines.Add($"Sink: {stage.SinkName}");
             lines.Add($"Sink failures: {stage.SinkFailureCount}");
@@ -437,6 +593,7 @@ internal sealed class MetricsRecorder
         var waitMaxMs = ToMilliseconds(waitMaxTicks);
         var waitP95Ms = ComputePercentileMs(0.95, produced);
         var blockedPercent = produced == 0 ? 0 : blocked * 100.0 / produced;
+        var connectorSummary = DescribeConnectors(stage);
 
         return new StageReport(
             stage.Name,
@@ -450,7 +607,10 @@ internal sealed class MetricsRecorder
             stage.SinkDelayMs,
             stage.SinkFailureRatePercent,
             stage.ConnectorFailureAfterMessages,
-            "LoadTestConnector",
+            stage.LoadTestConnectorCount,
+            stage.UseRabbitMqConnector,
+            connectorSummary,
+            connectorSummary,
             "SlowRouter",
             "SlowSink",
             elapsedSeconds,
@@ -521,6 +681,22 @@ internal sealed class MetricsRecorder
     private static double ToMilliseconds(long ticks)
     {
         return ticks * 1000.0 / Stopwatch.Frequency;
+    }
+
+    private static string DescribeConnectors(LoadStage stage)
+    {
+        var parts = new List<string>();
+        if (stage.LoadTestConnectorCount > 0)
+        {
+            parts.Add($"LoadTest x{stage.LoadTestConnectorCount}");
+        }
+
+        if (stage.UseRabbitMqConnector)
+        {
+            parts.Add("RabbitMq");
+        }
+
+        return parts.Count == 0 ? "None" : string.Join(" + ", parts);
     }
 }
 
@@ -600,6 +776,69 @@ internal sealed class LoadTestConnector : ITelemetryIngestConnector
                 return;
             }
         }
+    }
+}
+
+internal sealed class InstrumentedConnector : ITelemetryIngestConnector
+{
+    private readonly ITelemetryIngestConnector _inner;
+    private readonly MetricsRecorder _metrics;
+
+    public InstrumentedConnector(ITelemetryIngestConnector inner, MetricsRecorder metrics)
+    {
+        _inner = inner;
+        _metrics = metrics;
+    }
+
+    public string Name => _inner.Name;
+
+    public Task StartAsync(ChannelWriter<TelemetryPointMsg> writer, CancellationToken ct)
+    {
+        var instrumentedWriter = new MetricsChannelWriter(writer, _metrics);
+        return _inner.StartAsync(instrumentedWriter, ct);
+    }
+}
+
+internal sealed class MetricsChannelWriter : ChannelWriter<TelemetryPointMsg>
+{
+    private readonly ChannelWriter<TelemetryPointMsg> _inner;
+    private readonly MetricsRecorder _metrics;
+
+    public MetricsChannelWriter(ChannelWriter<TelemetryPointMsg> inner, MetricsRecorder metrics)
+    {
+        _inner = inner;
+        _metrics = metrics;
+    }
+
+    public override bool TryComplete(Exception? error = null)
+    {
+        return _inner.TryComplete(error);
+    }
+
+    public override bool TryWrite(TelemetryPointMsg item)
+    {
+        var written = _inner.TryWrite(item);
+        if (written)
+        {
+            _metrics.TryRecordSample(item);
+            _metrics.RecordProduced(0);
+        }
+
+        return written;
+    }
+
+    public override ValueTask WriteAsync(TelemetryPointMsg item, CancellationToken cancellationToken = default)
+    {
+        return WriteAsyncInternal(item, cancellationToken);
+    }
+
+    private async ValueTask WriteAsyncInternal(TelemetryPointMsg item, CancellationToken cancellationToken)
+    {
+        var start = Stopwatch.GetTimestamp();
+        await _inner.WriteAsync(item, cancellationToken);
+        var elapsedTicks = Stopwatch.GetTimestamp() - start;
+        _metrics.TryRecordSample(item);
+        _metrics.RecordProduced(elapsedTicks);
     }
 }
 
