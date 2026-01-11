@@ -53,7 +53,6 @@ internal static class Program
             siloBuilder.AddMemoryGrainStorage("DeviceStore");
             siloBuilder.AddMemoryGrainStorage("GraphStore");
             siloBuilder.AddMemoryGrainStorage("GraphIndexStore");
-            siloBuilder.AddMemoryGrainStorage("ValueStore");
             siloBuilder.AddMemoryStreams("DeviceUpdates");
             siloBuilder.AddMemoryGrainStorage("PointStore");
             siloBuilder.AddMemoryStreams("PointUpdates");

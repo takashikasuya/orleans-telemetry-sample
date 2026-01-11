@@ -39,22 +39,6 @@ public sealed class GraphNodeSnapshot
 }
 
 [GenerateSerializer]
-public sealed class NodeValueUpdate
-{
-    [Id(0)] public long Sequence { get; set; }
-    [Id(1)] public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
-    [Id(2)] public Dictionary<string, object> Values { get; set; } = new();
-}
-
-[GenerateSerializer]
-public sealed class NodeValueSnapshot
-{
-    [Id(0)] public long LastSequence { get; set; }
-    [Id(1)] public IReadOnlyDictionary<string, object> Values { get; set; } = new Dictionary<string, object>();
-    [Id(2)] public DateTimeOffset UpdatedAt { get; set; }
-}
-
-[GenerateSerializer]
 public sealed class GraphSeedData
 {
     [Id(0)] public List<GraphNodeDefinition> Nodes { get; set; } = new();
@@ -80,12 +64,6 @@ public interface IGraphNodeGrain : IGrainWithStringKey
     Task AddOutgoingEdgeAsync(GraphEdge edge);
     Task AddIncomingEdgeAsync(GraphEdge edge);
     Task<GraphNodeSnapshot> GetAsync();
-}
-
-public interface IValueBindingGrain : IGrainWithStringKey
-{
-    Task UpsertAsync(NodeValueUpdate update);
-    Task<NodeValueSnapshot> GetAsync();
 }
 
 public interface IGraphIndexGrain : IGrainWithStringKey

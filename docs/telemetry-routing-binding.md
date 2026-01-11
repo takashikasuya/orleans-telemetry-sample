@@ -58,7 +58,6 @@ Graph ノード側の属性が **PointGrain の参照キー**を持ち、API が
 - Graph ノードは `GraphNodeGrain` に保存され、`Attributes` に `PointId` / `DeviceId` / `BuildingName` / `SpaceId` が入る想定。
 - `/api/nodes/{nodeId}/value` は `GraphNodeGrain` を取得し、属性から `PointGrainKey` を組み立て、
   `PointGrain` の最新値を返します。
-- **ValueBindingGrain** は「ノード単位の値ストア」として用意されています（現在の API では直接使用していません）。
 
 ### シーケンス図（Graph ノード → 値取得）
 
@@ -92,7 +91,6 @@ graph TB
     subgraph Grains["Orleans Grains"]
         Point["PointGrain"]
         Node["GraphNodeGrain"]
-        Value["ValueBindingGrain"]
         Device["DeviceGrain"]
     end
 
@@ -107,7 +105,6 @@ graph TB
     NodeApi --> Node
     Node --> Point
     DeviceApi --> Device
-    Value -.optional.-> Node
 ```
 
 ## 補足

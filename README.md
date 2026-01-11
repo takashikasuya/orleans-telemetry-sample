@@ -325,7 +325,6 @@ The mock server does **not** validate signatures; for production, configure a re
 - **`DeviceGrain`**: holds latest telemetry snapshot for a device
 - **`TelemetryRouterGrain`**: routes incoming messages to devices
 - **`GraphNodeGrain`**: represents a building topology node
-- **`ValueBindingGrain`**: binds values (telemetry, custom) to nodes
 - **`GraphIndexGrain`**: indexes nodes by type for traversal
 
 ### Ingest Flow
@@ -453,7 +452,6 @@ flowchart TB
     subgraph Grains["Orleans Grains"]
         DevGrain[DeviceGrain]
         NodeGrain[GraphNodeGrain]
-        ValGrain[ValueBindingGrain]
         IndexGrain[GraphIndexGrain]
     end
 
@@ -479,7 +477,6 @@ flowchart TB
 
     DevGrain --> REST
     NodeGrain --> REST
-    ValGrain --> REST
     ParquetFiles --> Query
     Query --> REST
 
