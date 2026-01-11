@@ -249,6 +249,10 @@ dotnet run --project src/SiloHost
 
 RDF resources become nodes; predicates become edges.
 
+#### Documentation
+
+- [docs/rdf-loading-and-grains.md](docs/rdf-loading-and-grains.md): RDF 読み込みと Orleans Grain 化の概要（データモデル/オントロジー含む）
+
 ### Control Flow (Draft)
 
 **Note**: Control interfaces are defined but not fully implemented.
@@ -304,6 +308,7 @@ The mock server does **not** validate signatures; for production, configure a re
 
 - [コネクタ & テレメトリーインジェスト](docs/telemetry-connector-ingest.md)
 - [テレメトリーのルーティングと値バインディング](docs/telemetry-routing-binding.md)
+- [テレメトリーストレージ (Parquet)](docs/telemetry-storage.md)
 
 ### Services (Docker Compose)
 

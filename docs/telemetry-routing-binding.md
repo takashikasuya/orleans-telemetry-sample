@@ -82,29 +82,32 @@ sequenceDiagram
 ## コンポーネント図
 
 ```mermaid
-flowchart TB
-    subgraph Ingest[Telemetry Ingest]
-        Conn[Ingest Connectors]
-        Coord[TelemetryIngestCoordinator]
-        Router[TelemetryRouterGrain]
+graph TB
+    subgraph Ingest["Telemetry Ingest"]
+        Conn["Ingest Connectors"]
+        Coord["TelemetryIngestCoordinator"]
+        Router["TelemetryRouterGrain"]
     end
 
-    subgraph Grains[Orleans Grains]
-        Point[PointGrain]
-        Node[GraphNodeGrain]
-        Value[ValueBindingGrain]
-        Device[DeviceGrain]
+    subgraph Grains["Orleans Grains"]
+        Point["PointGrain"]
+        Node["GraphNodeGrain"]
+        Value["ValueBindingGrain"]
+        Device["DeviceGrain"]
     end
 
-    subgraph API[ApiGateway]
-        NodeApi[/nodes/{nodeId}/value]
-        DeviceApi[/devices/{deviceId}]
+    subgraph API["ApiGateway"]
+        NodeApi["/nodes/{nodeId}/value"]
+        DeviceApi["/devices/{deviceId}"]
     end
 
-    Conn --> Coord --> Router --> Point
-    NodeApi --> Node --> Point
+    Conn --> Coord
+    Coord --> Router
+    Router --> Point
+    NodeApi --> Node
+    Node --> Point
     DeviceApi --> Device
-    Value -. optional .-> Node
+    Value -.optional.-> Node
 ```
 
 ## 補足

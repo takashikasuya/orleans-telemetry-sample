@@ -62,9 +62,11 @@ public sealed class ParquetTelemetryStorageTests
         count.Should().Be(1);
 
         var bucketStart = TelemetryStoragePaths.GetBucketStart(timestamp, 15);
+        var stageFile = TelemetryStoragePaths.BuildStageFilePath(stageRoot, "tenant-a", "device-1", bucketStart);
         var parquetFile = TelemetryStoragePaths.BuildParquetFilePath(parquetRoot, "tenant-a", "device-1", bucketStart);
         var indexFile = TelemetryStoragePaths.BuildIndexFilePath(indexRoot, "tenant-a", "device-1", bucketStart);
 
+        File.Exists(stageFile).Should().BeFalse();
         File.Exists(parquetFile).Should().BeTrue();
         File.Exists(indexFile).Should().BeTrue();
 
@@ -116,13 +118,57 @@ public sealed class ParquetTelemetryStorageTests
         results[0].ValueJson.Should().Be("101");
     }
 
+    [Fact]
+    public async Task QueryAsync_ReturnsPayloadAndTagsFromParquet()
+    {
+        var stageRoot = CreateTempDirectory();
+        var parquetRoot = CreateTempDirectory();
+        var indexRoot = CreateTempDirectory();
+        var options = Options.Create(new TelemetryStorageOptions
+        {
+            StagePath = stageRoot,
+            ParquetPath = parquetRoot,
+            IndexPath = indexRoot,
+            BucketMinutes = 15,
+            DefaultQueryLimit = 10
+        });
+        var sink = new ParquetTelemetryEventSink(options, NullLogger<ParquetTelemetryEventSink>.Instance);
+        var compactor = new TelemetryStorageCompactor(options, NullLogger<TelemetryStorageCompactor>.Instance);
+        var query = new ParquetTelemetryStorageQuery(options);
+
+        var timestamp = new DateTimeOffset(2024, 4, 1, 8, 0, 0, TimeSpan.Zero);
+        using var payload = JsonDocument.Parse("{\"note\":\"ok\"}");
+        var tags = new Dictionary<string, string> { { "source", "unit-test" } };
+        var envelope = CreateEnvelope(timestamp, "tenant-a", "device-1", "point-1", 1, 123, payload, tags);
+
+        await sink.WriteBatchAsync(new[] { envelope }, CancellationToken.None);
+        await compactor.CompactAsync(CancellationToken.None);
+
+        var results = await query.QueryAsync(
+            new TelemetryQueryRequest(
+                "tenant-a",
+                "device-1",
+                timestamp.AddMinutes(-1),
+                timestamp.AddMinutes(1),
+                "point-1",
+                null),
+            CancellationToken.None);
+
+        results.Should().HaveCount(1);
+        results[0].PayloadJson.Should().Be("{\"note\":\"ok\"}");
+        results[0].Tags.Should().NotBeNull();
+        results[0].Tags!["source"].Should().Be("unit-test");
+    }
+
     private static TelemetryEventEnvelope CreateEnvelope(
         DateTimeOffset timestamp,
         string tenantId,
         string deviceId,
         string pointId,
         long sequence,
-        object value)
+        object value,
+        JsonDocument? payload = null,
+        IReadOnlyDictionary<string, string>? tags = null)
     {
         return new TelemetryEventEnvelope(
             tenantId,
@@ -136,8 +182,8 @@ public sealed class ParquetTelemetryStorageTests
             TelemetryEventType.Telemetry,
             null,
             value,
-            null,
-            null);
+            payload,
+            tags);
     }
 
     private static string CreateTempDirectory()

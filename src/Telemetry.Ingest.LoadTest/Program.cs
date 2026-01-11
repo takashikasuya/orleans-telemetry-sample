@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Grains.Abstractions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Telemetry.Ingest;
@@ -22,6 +23,7 @@ internal static class Program
     private static async Task<int> Main(string[] args)
     {
         var outputDir = GetArgValue(args, "--output-dir") ?? "reports";
+        var configPath = GetArgValue(args, "--config") ?? "appsettings.loadtest.json";
         var quick = args.Contains("--quick", StringComparer.OrdinalIgnoreCase);
         var includeBatchSweep = args.Contains("--batch-sweep", StringComparer.OrdinalIgnoreCase);
         var includeAbnormal = args.Contains("--abnormal", StringComparer.OrdinalIgnoreCase);
@@ -29,6 +31,13 @@ internal static class Program
         var includeSpike = args.Contains("--spike", StringComparer.OrdinalIgnoreCase);
         var includeMultiConnector = args.Contains("--multi-connector", StringComparer.OrdinalIgnoreCase);
         var stages = quick ? BuildQuickStages() : BuildDefaultStages();
+
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile(configPath, optional: true)
+            .AddEnvironmentVariables()
+            .Build();
+        var rabbitMqOptions = configuration.GetSection("RabbitMq").Get<RabbitMqIngestOptions>() ?? new RabbitMqIngestOptions();
 
         if (includeBatchSweep)
         {
@@ -63,7 +72,7 @@ internal static class Program
         {
             Console.WriteLine($"Stage {stage.Name} running for {stage.DurationSeconds}s...");
             var metrics = new MetricsRecorder();
-            var connectors = BuildConnectors(stage, metrics);
+            var connectors = BuildConnectors(stage, metrics, rabbitMqOptions);
             var router = new SlowRouter(stage.RouterDelayMs, metrics);
             var sink = new SlowSink(stage.SinkDelayMs, stage.SinkFailureRatePercent, metrics);
 
@@ -350,7 +359,10 @@ internal static class Program
         };
     }
 
-    private static List<ITelemetryIngestConnector> BuildConnectors(LoadStage stage, MetricsRecorder metrics)
+    private static List<ITelemetryIngestConnector> BuildConnectors(
+        LoadStage stage,
+        MetricsRecorder metrics,
+        RabbitMqIngestOptions rabbitMqOptions)
     {
         var connectors = new List<ITelemetryIngestConnector>();
         for (var i = 0; i < stage.LoadTestConnectorCount; i++)
@@ -360,7 +372,7 @@ internal static class Program
 
         if (stage.UseRabbitMqConnector)
         {
-            var options = Options.Create(new RabbitMqIngestOptions());
+            var options = Options.Create(rabbitMqOptions);
             var rabbitConnector = new RabbitMqIngestConnector(options, NullLogger<RabbitMqIngestConnector>.Instance);
             connectors.Add(new InstrumentedConnector(rabbitConnector, metrics));
         }
@@ -825,6 +837,11 @@ internal sealed class MetricsChannelWriter : ChannelWriter<TelemetryPointMsg>
         }
 
         return written;
+    }
+
+    public override ValueTask<bool> WaitToWriteAsync(CancellationToken cancellationToken = default)
+    {
+        return _inner.WaitToWriteAsync(cancellationToken);
     }
 
     public override ValueTask WriteAsync(TelemetryPointMsg item, CancellationToken cancellationToken = default)
