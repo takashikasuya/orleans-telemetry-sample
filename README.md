@@ -303,6 +303,7 @@ The mock server does **not** validate signatures; for production, configure a re
 ### Component Docs
 
 - [コネクタ & テレメトリーインジェスト](docs/telemetry-connector-ingest.md)
+- [テレメトリーのルーティングと値バインディング](docs/telemetry-routing-binding.md)
 
 ### Services (Docker Compose)
 
