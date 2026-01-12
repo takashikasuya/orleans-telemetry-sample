@@ -47,6 +47,22 @@ curl -H "Authorization: Bearer $TOKEN" \
 docker compose up --build
 ```
 
+### Helper scripts (Docker + simulator seed)
+
+- Start stack with the same simulator/Parquet/RDF seed settings used by the E2E script: [scripts/start-system.sh](scripts/start-system.sh)
+- Stop stack with matching override teardown and cleanup: [scripts/stop-system.sh](scripts/stop-system.sh)
+
+```bash
+./scripts/start-system.sh
+# ... interact with the API, admin, etc.
+./scripts/stop-system.sh
+```
+
+Notes:
+- Uses [src/Telemetry.E2E.Tests/seed.ttl](src/Telemetry.E2E.Tests/seed.ttl) with `TENANT_ID=t1`, simulator ingest (1 device × 1 point, 500 ms interval), and Parquet storage mounted to [storage](storage).
+- Persists reports under [reports](reports) (override with `TELEMETRY_E2E_REPORT_DIR`) and records the generated compose override at [scripts/.system-state](scripts/.system-state) for the stop script.
+- Exposes Swagger at http://localhost:8080/swagger (enabled via `ASPNETCORE_ENVIRONMENT=Development` in the helper override), admin UI at http://localhost:8082/, and mock OIDC at http://localhost:8081/default once running.
+
 ### Local Development (without Docker)
 
 Start services in separate terminals:
