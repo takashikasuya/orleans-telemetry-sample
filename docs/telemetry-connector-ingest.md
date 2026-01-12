@@ -85,8 +85,6 @@
 このためコネクタ実装は受信直後に `PointId` をキーにして、RDF/Graph から `BuildingName`・`SpaceId`・`DeviceId`（と `TenantId`）を補完したうえで `TelemetryPointMsg` をチャネルに書き込んでください。Graph 側では `OrleansIntegrationService.AddPointBindingAttributes` が `GraphNodeDefinition.Attributes` に `PointId`/`DeviceId`/`SpaceId`/`BuildingName` を追加しており、`GraphNode` はポイント URI（`point:{PointId}` など）を NodeId として管理しているため、ApiGateway の `/api/nodes/{nodeId}` や内部の Graph Registry から逆引きできます。【F:src/DataModel.Analyzer/Integration/OrleansIntegrationService.cs†L318-L375】【F:docs/telemetry-routing-binding.md†L48-L115】【F:docs/rdf-loading-and-grains.md†L22-L77】
 PointId をベースにした逆引きが難しい場合は、コネクタ自身で RDF ソースや Graph シードをパースし、`PointId → (Building, Area, Device)` のマップを保持しておけば十分です。Graph から取得した属性をそのまま `TelemetryPointMsg` に流せばルータ/ストレージの整合性が保たれ、`SpaceId`/`DeviceId` が不要になるという前提は不要になります。
 
-補足: `BuildingName` は RDF に登録された建物の名前（`Building.Name`）をそのまま使っており、他の Identifier（例: `Equipment.DeviceId` に付く `id:` プレフィックス）とは命名ルールが異なるため「buildingId」にはなりません。人が読めるラベルとして扱ってください。【F:src/DataModel.Analyzer/Integration/OrleansIntegrationService.cs†L318-L375】
-
 ### コネクタによる変換の注意点
 
 - `TelemetryEventEnvelopeFactory` は `TelemetryPointMsg.Timestamp` を `OccurredAt` にマッピングし、`IngestedAt` はインジェスト時刻（UTC）で付与します。【F:src/Telemetry.Ingest/TelemetryEventEnvelopeFactory.cs†L1-L26】

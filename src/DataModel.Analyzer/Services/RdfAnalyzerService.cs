@@ -33,6 +33,17 @@ public class RdfAnalyzerService
     private const string RdfTypeUri = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
     private const string ShaclFileName = "building_model.shacl.ttl";
     private const string SchemaDirectoryName = "Schema";
+    private static readonly string[] DocumentationPredicates = { $"{SbcoNamespace}documentation", $"{RecNamespace}documentation" };
+    private static readonly string[] AddressPredicates = { $"{SbcoNamespace}address", $"{RecNamespace}address" };
+    private static readonly string[] CustomPropertiesPredicates = { $"{SbcoNamespace}customProperties", $"{RecNamespace}customProperties" };
+    private static readonly string[] CustomTagsPredicates = { $"{SbcoNamespace}customTags", $"{RecNamespace}customTags" };
+    private static readonly string[] DescriptionPredicates = { $"{SbcoNamespace}description", $"{RecNamespace}description" };
+    private static readonly string[] FormatPredicates = { $"{SbcoNamespace}format", $"{RecNamespace}format" };
+    private static readonly string[] LanguagePredicates = { $"{SbcoNamespace}language", $"{RecNamespace}language" };
+    private static readonly string[] VersionPredicates = { $"{SbcoNamespace}version", $"{RecNamespace}version" };
+    private static readonly string[] UrlPredicates = { $"{SbcoNamespace}url", $"{RecNamespace}url" };
+    private static readonly string[] ChecksumPredicates = { $"{SbcoNamespace}checksum", $"{RecNamespace}checksum" };
+    private static readonly string[] SizePredicates = { $"{SbcoNamespace}size", $"{RecNamespace}size" };
 
     public RdfAnalyzerService(ILogger<RdfAnalyzerService> logger)
         : this(logger, Microsoft.Extensions.Options.Options.Create(new RdfAnalyzerOptions()))
@@ -347,6 +358,8 @@ public class RdfAnalyzerService
             var site = new Site { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, site);
+            site.Documentation.AddRange(ExtractDocuments(graph, subject));
+            site.Address.AddRange(ExtractPostalAddresses(graph, subject));
 
             var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
             if (hasPartUris.Count > 0)
@@ -370,6 +383,8 @@ public class RdfAnalyzerService
             var building = new Building { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, building);
+            building.Documentation.AddRange(ExtractDocuments(graph, subject));
+            building.Address.AddRange(ExtractPostalAddresses(graph, subject));
 
             var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
             if (hasPartUris.Count > 0)
@@ -393,6 +408,8 @@ public class RdfAnalyzerService
             var level = new Level { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, level);
+            level.Documentation.AddRange(ExtractDocuments(graph, subject));
+            level.Address.AddRange(ExtractPostalAddresses(graph, subject));
 
             var levelNumberValue = GetFirstLiteralValue(
                 graph,
@@ -426,6 +443,7 @@ public class RdfAnalyzerService
             var area = new Area { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, area);
+            area.Documentation.AddRange(ExtractDocuments(graph, subject));
 
             var equipmentUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}isLocationOf", $"{SbcoNamespace}isLocationOf" });
             if (equipmentUris.Count > 0)
@@ -451,6 +469,7 @@ public class RdfAnalyzerService
             ExtractCommonProperties(graph, subject, equipment);
             ExtractAssetProperties(graph, subject, equipment);
             ExtractGutpEquipmentProperties(graph, subject, equipment);
+            equipment.Documentation.AddRange(ExtractDocuments(graph, subject));
 
             var pointUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPoint", $"{SbcoNamespace}hasPoint" });
             if (pointUris.Count > 0)
@@ -625,6 +644,8 @@ public class RdfAnalyzerService
         }
 
         ExtractIdentifiers(graph, subject, resource);
+        ExtractCustomProperties(graph, subject, resource);
+        ExtractCustomTags(graph, subject, resource);
     }
 
     private void ExtractGutpEquipmentProperties(IGraph graph, INode subject, Equipment equipment)
@@ -697,6 +718,146 @@ public class RdfAnalyzerService
         {
             setValue(numericValue);
         }
+    }
+
+    private List<Document> ExtractDocuments(IGraph graph, INode subject)
+    {
+        return GetObjectNodes(graph, subject, DocumentationPredicates)
+            .Select(node => BuildDocument(graph, node))
+            .ToList();
+    }
+
+    private List<PostalAddress> ExtractPostalAddresses(IGraph graph, INode subject)
+    {
+        return GetObjectNodes(graph, subject, AddressPredicates)
+            .Select(node => BuildPostalAddress(graph, node))
+            .ToList();
+    }
+
+    private Document BuildDocument(IGraph graph, INode node)
+    {
+        var document = new Document
+        {
+            Uri = node.ToString()
+        };
+        ExtractCommonProperties(graph, node, document);
+
+        document.Description = GetFirstLiteralValue(graph, node, DescriptionPredicates);
+        document.Format = GetFirstLiteralValue(graph, node, FormatPredicates);
+        document.Language = GetFirstLiteralValue(graph, node, LanguagePredicates);
+        document.Version = GetFirstLiteralValue(graph, node, VersionPredicates);
+        document.Url = GetFirstLiteralValue(graph, node, UrlPredicates);
+        document.Checksum = GetFirstLiteralValue(graph, node, ChecksumPredicates);
+        document.Size = GetFirstIntegerValue(graph, node, SizePredicates);
+
+        return document;
+    }
+
+    private PostalAddress BuildPostalAddress(IGraph graph, INode node)
+    {
+        var address = new PostalAddress
+        {
+            Uri = node.ToString()
+        };
+        ExtractCommonProperties(graph, node, address);
+        return address;
+    }
+
+    private void ExtractCustomProperties(IGraph graph, INode subject, RdfResource resource)
+    {
+        foreach (var predicateUri in CustomPropertiesPredicates)
+        {
+            var predicateNode = graph.CreateUriNode(UriFactory.Create(predicateUri));
+            foreach (var triple in graph.GetTriplesWithSubjectPredicate(subject, predicateNode))
+            {
+                var entryNode = triple.Object;
+                var outerKey = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}key" });
+                if (string.IsNullOrWhiteSpace(outerKey))
+                {
+                    continue;
+                }
+
+                var nestedEntries = GetObjectNodes(graph, entryNode, new[] { $"{SbcoNamespace}entries" }).ToList();
+                if (nestedEntries.Count > 0)
+                {
+                    var nested = new Dictionary<string, string>();
+                    foreach (var nestedEntry in nestedEntries)
+                    {
+                        var nestedKey = GetFirstLiteralValue(graph, nestedEntry, new[] { $"{SbcoNamespace}key" });
+                        var nestedValue = GetFirstLiteralValue(graph, nestedEntry, new[] { $"{SbcoNamespace}value" });
+                        if (string.IsNullOrWhiteSpace(nestedKey) || nestedValue is null)
+                        {
+                            continue;
+                        }
+
+                        nested[nestedKey] = nestedValue;
+                    }
+
+                    if (nested.Count > 0)
+                    {
+                        resource.CustomProperties[outerKey] = nested;
+                        continue;
+                    }
+                }
+
+                var literalValue = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}value" });
+                if (!string.IsNullOrWhiteSpace(literalValue))
+                {
+                    resource.CustomProperties[outerKey] = literalValue;
+                }
+            }
+        }
+    }
+
+    private void ExtractCustomTags(IGraph graph, INode subject, RdfResource resource)
+    {
+        foreach (var predicateUri in CustomTagsPredicates)
+        {
+            var predicateNode = graph.CreateUriNode(UriFactory.Create(predicateUri));
+            foreach (var triple in graph.GetTriplesWithSubjectPredicate(subject, predicateNode))
+            {
+                var entryNode = triple.Object;
+                var key = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}key" });
+                var flagValue = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}flag" });
+                if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(flagValue))
+                {
+                    continue;
+                }
+
+                if (bool.TryParse(flagValue, out var flag))
+                {
+                    resource.CustomTags[key] = flag;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<INode> GetObjectNodes(IGraph graph, INode subject, IEnumerable<string> predicateUris)
+    {
+        var seen = new HashSet<string>();
+        foreach (var predicateUri in predicateUris)
+        {
+            var predicateNode = graph.CreateUriNode(UriFactory.Create(predicateUri));
+            foreach (var triple in graph.GetTriplesWithSubjectPredicate(subject, predicateNode))
+            {
+                var key = triple.Object.ToString();
+                if (seen.Add(key))
+                {
+                    yield return triple.Object;
+                }
+            }
+        }
+    }
+
+    private static long? GetFirstIntegerValue(IGraph graph, INode subject, IEnumerable<string> predicateUris)
+    {
+        var value = GetFirstLiteralValue(graph, subject, predicateUris);
+        if (!string.IsNullOrWhiteSpace(value) && long.TryParse(value, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
     }
 
     private void BuildHierarchy(BuildingDataModel model)

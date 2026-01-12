@@ -1,3 +1,4 @@
+using System.Linq;
 using DataModel.Analyzer.Models;
 using DataModel.Analyzer.Services;
 using Grains.Abstractions;
@@ -400,7 +401,7 @@ public class OrleansIntegrationService
             {
                 continue;
             }
-            attributes[$"prop:{kv.Key}"] = kv.Value.ToString() ?? string.Empty;
+            attributes[$"prop:{kv.Key}"] = FormatAttributeValue(kv.Value);
         }
 
         extras?.Invoke(attributes);
@@ -412,6 +413,23 @@ public class OrleansIntegrationService
             DisplayName = resource.Name,
             Attributes = attributes
         };
+    }
+
+    private static string FormatAttributeValue(object? value)
+    {
+        switch (value)
+        {
+            case IDictionary<string, Dictionary<string, string>> nestedDict:
+                return string.Join(";", nestedDict.Select(kv => $"{kv.Key}=[{FormatAttributeValue(kv.Value)}]"));
+            case IDictionary<string, string> dict:
+                return string.Join(";", dict.Select(kv => $"{kv.Key}={kv.Value}"));
+            case IEnumerable<string> strings:
+                return string.Join(",", strings);
+            case IEnumerable<object> objects:
+                return string.Join(",", objects.Select(o => o?.ToString() ?? string.Empty));
+            default:
+                return value?.ToString() ?? string.Empty;
+        }
     }
 
     private string ResolveNodeId(RdfResource resource, string prefix, string fallbackId)
