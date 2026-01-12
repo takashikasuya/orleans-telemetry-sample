@@ -90,10 +90,11 @@ public class TelemetryMsg
 /// <summary>
 /// Snapshot returned by the grain representing the latest state for a device.
 /// </summary>
+[GenerateSerializer]
 public sealed record DeviceSnapshot(
-    long LastSequence,
-    IReadOnlyDictionary<string, object> LatestProps,
-    DateTimeOffset UpdatedAt);
+    [property: Id(0)] long LastSequence,
+    [property: Id(1)] IReadOnlyDictionary<string, object> LatestProps,
+    [property: Id(2)] DateTimeOffset UpdatedAt);
 
 /// <summary>
 /// Telemetry message for a single point value.
@@ -114,10 +115,11 @@ public class TelemetryPointMsg
 /// <summary>
 /// Snapshot returned by the grain representing the latest state for a point.
 /// </summary>
+[GenerateSerializer]
 public sealed record PointSnapshot(
-    long LastSequence,
-    object? LatestValue,
-    DateTimeOffset UpdatedAt);
+    [property: Id(0)] long LastSequence,
+    [property: Id(1)] object? LatestValue,
+    [property: Id(2)] DateTimeOffset UpdatedAt);
 
 /// <summary>
 /// Grain interface for device state management.  Each device is keyed by

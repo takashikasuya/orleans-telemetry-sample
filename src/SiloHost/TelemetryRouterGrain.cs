@@ -18,6 +18,23 @@ public class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
         var key = PointGrainKey.Create(msg.TenantId, msg.BuildingName, msg.SpaceId, msg.DeviceId, msg.PointId);
         var pointGrain = GrainFactory.GetGrain<IPointGrain>(key);
         await pointGrain.UpsertAsync(msg);
+
+        var deviceKey = DeviceGrainKey.Create(msg.TenantId, msg.DeviceId);
+        var deviceGrain = GrainFactory.GetGrain<IDeviceGrain>(deviceKey);
+        var deviceMsg = new TelemetryMsg
+        {
+            TenantId = msg.TenantId,
+            DeviceId = msg.DeviceId,
+            Sequence = msg.Sequence,
+            Timestamp = msg.Timestamp,
+            BuildingName = msg.BuildingName,
+            SpaceId = msg.SpaceId,
+            Properties = new Dictionary<string, object>
+            {
+                [msg.PointId] = msg.Value ?? string.Empty
+            }
+        };
+        await deviceGrain.UpsertAsync(deviceMsg);
     }
 
     public async Task RouteBatchAsync(IReadOnlyList<TelemetryPointMsg> batch)
@@ -49,10 +66,27 @@ public class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
                 tupleKey.DeviceId,
                 tupleKey.PointId);
             var grain = GrainFactory.GetGrain<IPointGrain>(grainKey);
+            var deviceKey = DeviceGrainKey.Create(tupleKey.TenantId, tupleKey.DeviceId);
+            var deviceGrain = GrainFactory.GetGrain<IDeviceGrain>(deviceKey);
             messages.Sort((left, right) => left.Sequence.CompareTo(right.Sequence));
             foreach (var msg in messages)
             {
                 await grain.UpsertAsync(msg);
+
+                var deviceMsg = new TelemetryMsg
+                {
+                    TenantId = msg.TenantId,
+                    DeviceId = msg.DeviceId,
+                    Sequence = msg.Sequence,
+                    Timestamp = msg.Timestamp,
+                    BuildingName = msg.BuildingName,
+                    SpaceId = msg.SpaceId,
+                    Properties = new Dictionary<string, object>
+                    {
+                        [msg.PointId] = msg.Value ?? string.Empty
+                    }
+                };
+                await deviceGrain.UpsertAsync(deviceMsg);
             }
         }
     }

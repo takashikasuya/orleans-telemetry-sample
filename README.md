@@ -28,7 +28,10 @@ docker compose up --build
 
 ```bash
 # Get a token from the mock OIDC
-TOKEN=$(curl -s http://localhost:8081/default/token | jq -r '.access_token')
+TOKEN=$(curl -s -X POST http://localhost:8081/default/token \
+  -u "test-client:test-secret" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" | jq -r '.access_token')
 
 # Query latest device state
 curl -H "Authorization: Bearer $TOKEN" \
@@ -293,7 +296,10 @@ Docker Compose includes a mock OIDC server:
 
 ```bash
 # Get a token
-TOKEN=$(curl -s http://localhost:8081/default/token | jq -r '.access_token')
+TOKEN=$(curl -s -X POST http://localhost:8081/default/token \
+  -u "test-client:test-secret" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" | jq -r '.access_token')
 
 # Use in requests
 curl -H "Authorization: Bearer $TOKEN" \

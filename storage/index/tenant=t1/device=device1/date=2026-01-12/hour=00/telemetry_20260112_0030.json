@@ -1,0 +1,1 @@
+{"TenantId":"t1","DeviceId":"device1","BucketStart":"2026-01-12T00:30:00+00:00","MinOccurredAt":"2026-01-12T00:32:18.3918604+00:00","MaxOccurredAt":"2026-01-12T00:44:02.2109084+00:00","RecordCount":24,"PointIds":["p1"],"ParquetFile":"telemetry_20260112_0030.parquet"}

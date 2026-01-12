@@ -1,0 +1,459 @@
+using System.Net.Http.Json;
+using System.Text.Json;
+using DataModel.Analyzer.Extensions;
+using FluentAssertions;
+using Grains.Abstractions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Orleans;
+using Orleans.Hosting;
+using Telemetry.Ingest;
+using Telemetry.Ingest.Kafka;
+using Telemetry.Ingest.RabbitMq;
+using Telemetry.Ingest.Simulator;
+using Telemetry.Storage;
+using Xunit;
+
+namespace Telemetry.E2E.Tests;
+
+public sealed class TelemetryE2ETests
+{
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    [Fact]
+    public async Task EndToEndReport_IsGenerated()
+    {
+        var report = new TelemetryE2EReport
+        {
+            RunId = $"telemetry-e2e-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}",
+            StartedAt = DateTimeOffset.UtcNow
+        };
+
+        IHost? siloHost = null;
+        ApiGatewayFactory? apiFactory = null;
+
+        try
+        {
+            var options = LoadOptions();
+            report.MaxApiLagMilliseconds = options.MaxApiLagMilliseconds;
+            report.ReportDirectory = ResolveReportPath(options.ReportPath);
+
+            var tenantId = "t1";
+            report.TenantId = tenantId;
+            TestAuthHandler.TenantId = tenantId;
+
+            var rdfPath = Path.Combine(AppContext.BaseDirectory, "seed.ttl");
+            report.RdfSeedPath = rdfPath;
+
+            var tempRoot = CreateTempDirectory();
+            var stageRoot = Path.Combine(tempRoot, "stage");
+            var parquetRoot = Path.Combine(tempRoot, "parquet");
+            var indexRoot = Path.Combine(tempRoot, "index");
+            Directory.CreateDirectory(stageRoot);
+            Directory.CreateDirectory(parquetRoot);
+            Directory.CreateDirectory(indexRoot);
+
+            report.Simulator = new TelemetryE2ESimulatorConfig
+            {
+                TenantId = tenantId,
+                BuildingName = "building",
+                SpaceId = "space",
+                DeviceIdPrefix = "device",
+                DeviceCount = 1,
+                PointsPerDevice = 1,
+                IntervalMilliseconds = 500
+            };
+
+            Environment.SetEnvironmentVariable("RDF_SEED_PATH", rdfPath);
+            Environment.SetEnvironmentVariable("TENANT_ID", tenantId);
+
+            var siloConfig = BuildSiloConfig(stageRoot, parquetRoot, indexRoot, report.Simulator);
+            siloHost = CreateSiloHost(siloConfig);
+            await siloHost.StartAsync();
+
+            var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot);
+            apiFactory = new ApiGatewayFactory(apiConfig);
+            using var client = apiFactory.CreateClient();
+
+            var timeout = TimeSpan.FromSeconds(options.WaitTimeoutSeconds);
+            var nodeId = "urn:point-1";
+            var nodeSnapshot = await WaitForNodeSnapshotAsync(client, nodeId, timeout);
+            report.Graph = new TelemetryE2EGraphBinding
+            {
+                NodeId = nodeId,
+                Attributes = nodeSnapshot.Node.Attributes
+            };
+
+            var stageRecord = await WaitForStageRecordAsync(stageRoot, timeout);
+            report.SeedEvent = new TelemetryE2EEvent
+            {
+                TenantId = stageRecord.TenantId,
+                BuildingName = stageRecord.BuildingName,
+                SpaceId = stageRecord.SpaceId,
+                DeviceId = stageRecord.DeviceId,
+                PointId = stageRecord.PointId,
+                Sequence = stageRecord.Sequence,
+                OccurredAt = stageRecord.OccurredAt,
+                IngestedAt = stageRecord.IngestedAt,
+                ValueJson = stageRecord.ValueJson
+            };
+
+            var compactor = siloHost.Services.GetRequiredService<TelemetryStorageCompactor>();
+            var compacted = await compactor.CompactAsync(CancellationToken.None);
+
+            var bucketStart = TelemetryStoragePaths.GetBucketStart(stageRecord.OccurredAt, 15);
+            var stageFile = TelemetryStoragePaths.BuildStageFilePath(stageRoot, stageRecord.TenantId, stageRecord.DeviceId, bucketStart);
+            var parquetFile = TelemetryStoragePaths.BuildParquetFilePath(parquetRoot, stageRecord.TenantId, stageRecord.DeviceId, bucketStart);
+            var indexFile = TelemetryStoragePaths.BuildIndexFilePath(indexRoot, stageRecord.TenantId, stageRecord.DeviceId, bucketStart);
+            report.Storage = new TelemetryE2EStorageCheck
+            {
+                StageFilePath = stageFile,
+                ParquetFilePath = parquetFile,
+                IndexFilePath = indexFile,
+                StageExists = File.Exists(stageFile),
+                ParquetExists = File.Exists(parquetFile),
+                IndexExists = File.Exists(indexFile),
+                CompactedBuckets = compacted
+            };
+
+            var pointResult = await WaitForPointSnapshotAsync(client, nodeId, stageRecord.Sequence, timeout);
+            report.Api = new TelemetryE2EApiCheck
+            {
+                PointLastSequence = pointResult.Snapshot.LastSequence,
+                PointUpdatedAt = pointResult.Snapshot.UpdatedAt,
+                PointLatestValueJson = JsonSerializer.Serialize(pointResult.Snapshot.LatestValue, JsonOptions),
+                PointReadAt = pointResult.ReadAt,
+                PointLagMilliseconds = pointResult.LagMilliseconds
+            };
+
+            report.Api.PointLagMilliseconds.Should().BeLessThanOrEqualTo(options.MaxApiLagMilliseconds);
+
+            var deviceSnapshot = await WaitForDeviceSnapshotAsync(client, stageRecord.DeviceId, stageRecord.Sequence, timeout);
+            report.Api.DeviceLastSequence = deviceSnapshot.LastSequence;
+            report.Api.DeviceUpdatedAt = deviceSnapshot.UpdatedAt;
+            report.Api.DevicePropertiesJson = deviceSnapshot.PropertiesJson;
+
+            var telemetryResult = await WaitForTelemetryResultsAsync(client, stageRecord, timeout);
+            report.Api.TelemetryResultCount = telemetryResult.Count;
+            report.Api.TelemetryFirstResultJson = telemetryResult.Count > 0 ? telemetryResult[0].GetRawText() : string.Empty;
+
+            report.Storage.ParquetExists.Should().BeTrue();
+            report.Storage.IndexExists.Should().BeTrue();
+            telemetryResult.Count.Should().BeGreaterThan(0);
+
+            report.Graph.Attributes.Should().ContainKey("PointId");
+            report.Graph.Attributes["PointId"].Should().Be(stageRecord.PointId);
+            report.Graph.Attributes.Should().ContainKey("DeviceId");
+            report.Graph.Attributes["DeviceId"].Should().Be(stageRecord.DeviceId);
+
+            report.Status = "Passed";
+        }
+        catch (Exception ex)
+        {
+            report.Status = "Failed";
+            report.Error = ex.ToString();
+            throw;
+        }
+        finally
+        {
+            report.CompletedAt = DateTimeOffset.UtcNow;
+
+            if (!string.IsNullOrWhiteSpace(report.ReportDirectory))
+            {
+                await TelemetryE2EReportWriter.WriteAsync(report, report.ReportDirectory);
+            }
+
+            if (apiFactory is not null)
+            {
+                apiFactory.Dispose();
+            }
+
+            if (siloHost is not null)
+            {
+                await siloHost.StopAsync();
+                siloHost.Dispose();
+            }
+
+            Environment.SetEnvironmentVariable("RDF_SEED_PATH", null);
+            Environment.SetEnvironmentVariable("TENANT_ID", null);
+        }
+    }
+
+    private static TelemetryE2EReportOptions LoadOptions()
+    {
+        var config = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: true)
+            .AddEnvironmentVariables()
+            .Build();
+
+        return config.GetSection("TelemetryE2E").Get<TelemetryE2EReportOptions>() ?? new TelemetryE2EReportOptions();
+    }
+
+    private static string ResolveReportPath(string reportPath)
+    {
+        if (string.IsNullOrWhiteSpace(reportPath))
+        {
+            reportPath = "reports";
+        }
+
+        return Path.IsPathRooted(reportPath)
+            ? reportPath
+            : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), reportPath));
+    }
+
+    private static Dictionary<string, string?> BuildSiloConfig(
+        string stageRoot,
+        string parquetRoot,
+        string indexRoot,
+        TelemetryE2ESimulatorConfig simulator)
+    {
+        return new Dictionary<string, string?>
+        {
+            ["TelemetryIngest:Enabled:0"] = "Simulator",
+            ["TelemetryIngest:BatchSize"] = "10",
+            ["TelemetryIngest:ChannelCapacity"] = "100",
+            ["TelemetryIngest:EventSinks:Enabled:0"] = "ParquetStorage",
+            ["TelemetryIngest:Simulator:TenantId"] = simulator.TenantId,
+            ["TelemetryIngest:Simulator:BuildingName"] = simulator.BuildingName,
+            ["TelemetryIngest:Simulator:SpaceId"] = simulator.SpaceId,
+            ["TelemetryIngest:Simulator:DeviceIdPrefix"] = simulator.DeviceIdPrefix,
+            ["TelemetryIngest:Simulator:DeviceCount"] = simulator.DeviceCount.ToString(),
+            ["TelemetryIngest:Simulator:PointsPerDevice"] = simulator.PointsPerDevice.ToString(),
+            ["TelemetryIngest:Simulator:IntervalMilliseconds"] = simulator.IntervalMilliseconds.ToString(),
+            ["TelemetryStorage:StagePath"] = stageRoot,
+            ["TelemetryStorage:ParquetPath"] = parquetRoot,
+            ["TelemetryStorage:IndexPath"] = indexRoot,
+            ["TelemetryStorage:BucketMinutes"] = "15",
+            ["TelemetryStorage:CompactionIntervalSeconds"] = "2",
+            ["TelemetryStorage:DefaultQueryLimit"] = "100"
+        };
+    }
+
+    private static Dictionary<string, string?> BuildApiConfig(string stageRoot, string parquetRoot, string indexRoot)
+    {
+        return new Dictionary<string, string?>
+        {
+            ["TelemetryStorage:StagePath"] = stageRoot,
+            ["TelemetryStorage:ParquetPath"] = parquetRoot,
+            ["TelemetryStorage:IndexPath"] = indexRoot,
+            ["TelemetryStorage:DefaultQueryLimit"] = "100",
+            ["Orleans:GatewayHost"] = "127.0.0.1",
+            ["Orleans:GatewayPort"] = "30000"
+        };
+    }
+
+    private static IHost CreateSiloHost(Dictionary<string, string?> overrides)
+    {
+        var builder = Host.CreateDefaultBuilder();
+
+        builder.ConfigureAppConfiguration(config =>
+        {
+            config.AddInMemoryCollection(overrides);
+        });
+
+        builder.ConfigureServices((context, services) =>
+        {
+            services.AddDataModelAnalyzer();
+            services.AddSingleton<ITelemetryRouterGrain>(provider =>
+            {
+                var grainFactory = provider.GetRequiredService<IGrainFactory>();
+                return grainFactory.GetGrain<ITelemetryRouterGrain>(Guid.Empty);
+            });
+
+            var ingestSection = context.Configuration.GetSection("TelemetryIngest");
+            var storageSection = context.Configuration.GetSection("TelemetryStorage");
+            services.AddTelemetryIngest(ingestSection);
+            services.AddKafkaIngest(ingestSection.GetSection("Kafka"));
+            services.AddRabbitMqIngest(ingestSection.GetSection("RabbitMq"));
+            services.AddSimulatorIngest(ingestSection.GetSection("Simulator"));
+            services.AddLoggingTelemetryEventSink();
+            services.Configure<TelemetryStorageOptions>(storageSection);
+            services.AddTelemetryStorage();
+            services.AddHostedService<TestGraphSeedService>();
+        });
+
+        builder.UseOrleans(siloBuilder =>
+        {
+            siloBuilder.UseLocalhostClustering();
+            siloBuilder.Configure<Orleans.Configuration.ClusterOptions>(options =>
+            {
+                options.ClusterId = "telemetry-cluster";
+                options.ServiceId = "telemetry-service";
+            });
+            siloBuilder.AddMemoryGrainStorage("DeviceStore");
+            siloBuilder.AddMemoryGrainStorage("GraphStore");
+            siloBuilder.AddMemoryGrainStorage("GraphIndexStore");
+            siloBuilder.AddMemoryStreams("DeviceUpdates");
+            siloBuilder.AddMemoryGrainStorage("PointStore");
+            siloBuilder.AddMemoryStreams("PointUpdates");
+            siloBuilder.AddMemoryGrainStorage("PubSubStore");
+        });
+
+        return builder.Build();
+    }
+
+    private static async Task<GraphNodeSnapshot> WaitForNodeSnapshotAsync(HttpClient client, string nodeId, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        var encoded = Uri.EscapeDataString(nodeId);
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var response = await client.GetAsync($"/api/nodes/{encoded}");
+            if (response.IsSuccessStatusCode)
+            {
+                var snapshot = await response.Content.ReadFromJsonAsync<GraphNodeSnapshot>(JsonOptions);
+                if (snapshot is not null && snapshot.Node.Attributes.Count > 0)
+                {
+                    return snapshot;
+                }
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException("Graph node was not available within the timeout.");
+    }
+
+    private static async Task<TelemetryStageRecord> WaitForStageRecordAsync(string stageRoot, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (Directory.Exists(stageRoot))
+            {
+                var files = Directory.GetFiles(stageRoot, "*.jsonl", SearchOption.AllDirectories);
+                if (files.Length > 0)
+                {
+                    var lines = await File.ReadAllLinesAsync(files[0]);
+                    if (lines.Length > 0)
+                    {
+                        var record = JsonSerializer.Deserialize<TelemetryStageRecord>(lines[0], JsonOptions);
+                        if (record is not null)
+                        {
+                            return record;
+                        }
+                    }
+                }
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException("Stage file was not created within the timeout.");
+    }
+
+    private static async Task<PointSnapshotResult> WaitForPointSnapshotAsync(
+        HttpClient client,
+        string nodeId,
+        long minSequence,
+        TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        var encoded = Uri.EscapeDataString(nodeId);
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var response = await client.GetAsync($"/api/nodes/{encoded}/value");
+            if (response.IsSuccessStatusCode)
+            {
+                var readAt = DateTimeOffset.UtcNow;
+                var snapshot = await response.Content.ReadFromJsonAsync<PointSnapshot>(JsonOptions);
+                if (snapshot is not null && snapshot.LastSequence >= minSequence)
+                {
+                    var lagMs = (readAt - snapshot.UpdatedAt).TotalMilliseconds;
+                    return new PointSnapshotResult(snapshot, readAt, lagMs);
+                }
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException("Point snapshot was not updated within the timeout.");
+    }
+
+    private static async Task<DeviceSnapshotResult> WaitForDeviceSnapshotAsync(HttpClient client, string deviceId, long minSequence, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var response = await client.GetFromJsonAsync<JsonElement>($"/api/devices/{deviceId}");
+            if (response.ValueKind != JsonValueKind.Undefined)
+            {
+                var lastSequence = GetPropertyCaseInsensitive(response, "lastSequence").GetInt64();
+                var updatedAt = GetPropertyCaseInsensitive(response, "updatedAt").GetDateTimeOffset();
+                var props = GetPropertyCaseInsensitive(response, "properties").GetRawText();
+                if (lastSequence >= minSequence)
+                {
+                    return new DeviceSnapshotResult(lastSequence, updatedAt, props);
+                }
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException("Device snapshot was not updated within the timeout.");
+    }
+
+    private static async Task<List<JsonElement>> WaitForTelemetryResultsAsync(HttpClient client, TelemetryStageRecord stageRecord, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        var from = stageRecord.OccurredAt.AddMinutes(-1).ToUniversalTime().ToString("O");
+        var to = stageRecord.OccurredAt.AddMinutes(1).ToUniversalTime().ToString("O");
+        var fromEncoded = Uri.EscapeDataString(from);
+        var toEncoded = Uri.EscapeDataString(to);
+        var url = $"/api/telemetry/{stageRecord.DeviceId}?from={fromEncoded}&to={toEncoded}&pointId={stageRecord.PointId}&limit=10";
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            using var response = await client.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var payload = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+                if (payload.ValueKind == JsonValueKind.Array)
+                {
+                    var list = payload.EnumerateArray().ToList();
+                    if (list.Count > 0)
+                    {
+                        return list;
+                    }
+                }
+            }
+
+            await Task.Delay(200);
+        }
+
+        return new List<JsonElement>();
+    }
+
+    private static JsonElement GetPropertyCaseInsensitive(JsonElement element, string name)
+    {
+        foreach (var prop in element.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return prop.Value;
+            }
+        }
+
+        throw new InvalidOperationException($"Missing property '{name}'.");
+    }
+
+    private static string CreateTempDirectory()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "telemetry-e2e-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private sealed record PointSnapshotResult(PointSnapshot Snapshot, DateTimeOffset ReadAt, double LagMilliseconds);
+
+    private sealed record DeviceSnapshotResult(long LastSequence, DateTimeOffset UpdatedAt, string PropertiesJson);
+}

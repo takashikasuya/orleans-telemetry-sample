@@ -1,0 +1,31 @@
+@prefix rec: <https://w3id.org/rec/> .
+@prefix sbco: <https://www.sbco.or.jp/ont/> .
+
+<urn:site-1> a sbco:Site ;
+  sbco:name "Test Site" ;
+  rec:hasPart <urn:building-1> .
+
+<urn:building-1> a sbco:Building ;
+  sbco:name "building" ;
+  rec:hasPart <urn:level-1> .
+
+<urn:level-1> a sbco:Level ;
+  sbco:name "level-1" ;
+  rec:hasPart <urn:space-1> .
+
+<urn:space-1> a sbco:Space ;
+  sbco:name "space" ;
+  rec:isLocationOf <urn:equipment-1> .
+
+<urn:equipment-1> a sbco:Equipment ;
+  sbco:name "equip-1" ;
+  sbco:device_id "device1" ;
+  sbco:device_type "sim" ;
+  sbco:locatedIn <urn:space-1> ;
+  rec:hasPoint <urn:point-1> .
+
+<urn:point-1> a sbco:Point ;
+  sbco:name "point-1" ;
+  sbco:point_id "p1" ;
+  sbco:point_type "temperature" ;
+  rec:isPointOf <urn:equipment-1> .

@@ -12,6 +12,8 @@ RUN dotnet restore
 RUN dotnet publish -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+ARG PROJECT
+ENV PROJECT=$PROJECT
 WORKDIR /app
 COPY --from=build /app/publish .
-ENTRYPOINT ["dotnet", "${PROJECT}.dll"]
+ENTRYPOINT ["/bin/sh", "-c", "dotnet \"${PROJECT##*/}.dll\""]

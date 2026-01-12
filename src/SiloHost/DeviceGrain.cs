@@ -23,11 +23,27 @@ public sealed class DeviceGrain : Grain, IDeviceGrain
 
     public override Task OnActivateAsync(CancellationToken cancellationToken)
     {
-        // Bind to a stream per device for update notifications.
-        var provider = this.GetStreamProvider("DeviceUpdates");
-        var streamId = StreamId.Create("DeviceUpdatesNs", this.GetPrimaryKeyString());
-        _stream = provider.GetStream<DeviceSnapshot>(streamId);
+        TryInitStream();
         return Task.CompletedTask;
+    }
+
+    private void TryInitStream()
+    {
+        if (_stream is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            var provider = this.GetStreamProvider("DeviceUpdates");
+            var streamId = StreamId.Create("DeviceUpdatesNs", this.GetPrimaryKeyString());
+            _stream = provider.GetStream<DeviceSnapshot>(streamId);
+        }
+        catch
+        {
+            _stream = null;
+        }
     }
 
     public async Task UpsertAsync(TelemetryMsg msg)
@@ -46,6 +62,7 @@ public sealed class DeviceGrain : Grain, IDeviceGrain
         _state.State.UpdatedAt = msg.Timestamp.ToUniversalTime();
         await _state.WriteStateAsync();
         // emit snapshot
+        TryInitStream();
         if (_stream is not null)
         {
             var snap = new DeviceSnapshot(

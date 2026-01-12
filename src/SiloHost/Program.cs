@@ -1,6 +1,9 @@
 using System;
+using System.Linq;
+using System.Net;
 using DataModel.Analyzer.Extensions;
 using Grains.Abstractions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Orleans;
@@ -40,10 +43,27 @@ internal static class Program
             services.AddTelemetryStorage();
             services.AddHostedService<GraphSeedService>();
         });
-        builder.UseOrleans(siloBuilder =>
+        builder.UseOrleans((context, siloBuilder) =>
         {
-            // use localhost clustering for dev; in production configure appropriately
-            siloBuilder.UseLocalhostClustering();
+            var orleansSection = context.Configuration.GetSection("Orleans");
+            var advertisedHost = orleansSection["AdvertisedIPAddress"];
+            var siloPort = orleansSection.GetValue("SiloPort", 11111);
+            var gatewayPort = orleansSection.GetValue("GatewayPort", 30000);
+
+            // use localhost clustering for dev; override advertised address for Docker when configured
+            siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
+            if (!string.IsNullOrWhiteSpace(advertisedHost))
+            {
+                var advertisedAddress = ResolveAdvertisedAddress(advertisedHost);
+                siloBuilder.Configure<EndpointOptions>(options =>
+                {
+                    options.AdvertisedIPAddress = advertisedAddress;
+                    options.SiloPort = siloPort;
+                    options.GatewayPort = gatewayPort;
+                    options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, siloPort);
+                    options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, gatewayPort);
+                });
+            }
             siloBuilder.Configure<ClusterOptions>(options =>
             {
                 options.ClusterId = "telemetry-cluster";
@@ -62,5 +82,15 @@ internal static class Program
         });
         var host = builder.Build();
         await host.RunAsync();
+    }
+
+    private static IPAddress ResolveAdvertisedAddress(string host)
+    {
+        if (IPAddress.TryParse(host, out var parsed))
+        {
+            return parsed;
+        }
+
+        return Dns.GetHostAddresses(host).First(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
     }
 }

@@ -21,6 +21,9 @@ services:
       - mq
     environment:
       RABBITMQ_HOST: mq
+      Orleans__AdvertisedIPAddress: silo
+      Orleans__SiloPort: "11111"
+      Orleans__GatewayPort: "30000"
     ports:
       - "11111:11111"
       - "30000:30000"
@@ -35,7 +38,10 @@ services:
       - silo
     environment:
       OIDC_AUTHORITY: ${OIDC_AUTHORITY:-http://mock-oidc:8080/default}
-      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-api}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-default}
+      Orleans__GatewayHost: silo
+      Orleans__GatewayPort: "30000"
+      ASPNETCORE_URLS: http://+:80
     ports:
       - "8080:80"
 

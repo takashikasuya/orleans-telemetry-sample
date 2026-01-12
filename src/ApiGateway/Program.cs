@@ -1,3 +1,4 @@
+using System.Net;
 using ApiGateway.Infrastructure;
 using ApiGateway.Services;
 using Grains.Abstractions;
@@ -32,9 +33,14 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Configure Orleans client
+var orleansHost = builder.Configuration["Orleans:GatewayHost"] ?? "127.0.0.1";
+var orleansPort = int.TryParse(builder.Configuration["Orleans:GatewayPort"], out var parsedPort) ? parsedPort : 30000;
+var orleansAddresses = Dns.GetHostAddresses(orleansHost);
+var orleansAddress = orleansAddresses.Length > 0 ? orleansAddresses[0] : IPAddress.Loopback;
+
 builder.Host.UseOrleansClient(client =>
 {
-    client.UseStaticClustering(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 11111));
+    client.UseStaticClustering(new IPEndPoint(orleansAddress, orleansPort));
     client.Configure<Orleans.Configuration.ClusterOptions>(opts =>
     {
         opts.ClusterId = "telemetry-cluster";
@@ -150,3 +156,5 @@ app.MapGet("/api/telemetry/{deviceId}", async (
 app.MapGrpcService<DeviceService>().RequireAuthorization();
 
 app.Run();
+
+public partial class Program { }

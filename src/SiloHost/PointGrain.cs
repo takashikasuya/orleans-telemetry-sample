@@ -22,10 +22,27 @@ public sealed class PointGrain : Grain, IPointGrain
 
     public override Task OnActivateAsync(CancellationToken cancellationToken)
     {
-        var provider = this.GetStreamProvider("PointUpdates");
-        var streamId = StreamId.Create("PointUpdatesNs", this.GetPrimaryKeyString());
-        _stream = provider.GetStream<PointSnapshot>(streamId);
+        TryInitStream();
         return Task.CompletedTask;
+    }
+
+    private void TryInitStream()
+    {
+        if (_stream is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            var provider = this.GetStreamProvider("PointUpdates");
+            var streamId = StreamId.Create("PointUpdatesNs", this.GetPrimaryKeyString());
+            _stream = provider.GetStream<PointSnapshot>(streamId);
+        }
+        catch
+        {
+            _stream = null;
+        }
     }
 
     public async Task UpsertAsync(TelemetryPointMsg msg)
@@ -40,6 +57,7 @@ public sealed class PointGrain : Grain, IPointGrain
         _state.State.UpdatedAt = msg.Timestamp.ToUniversalTime();
         await _state.WriteStateAsync();
 
+        TryInitStream();
         if (_stream is not null)
         {
             var snap = new PointSnapshot(
