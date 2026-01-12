@@ -8,6 +8,7 @@ storage/
 *.suo
 *.userosscache
 *.sln.docstates
+*.parquet
 
 # VS Code settings
 .vscode/

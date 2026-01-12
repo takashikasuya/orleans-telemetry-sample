@@ -32,6 +32,8 @@ public sealed record StorageOverview(
 
 public sealed record IngestSummary(string[] EnabledConnectors, string[] EnabledSinks, int BatchSize, int ChannelCapacity);
 
+public sealed record GraphNodeDetail(string NodeId, string DisplayName, GraphNodeType NodeType);
+
 public sealed record GraphStatisticsSummary(
     int SiteCount,
     int BuildingCount,
@@ -39,7 +41,8 @@ public sealed record GraphStatisticsSummary(
     int AreaCount,
     int EquipmentCount,
     int PointCount,
-    string TenantId);
+    string TenantId,
+    IReadOnlyDictionary<GraphNodeType, IReadOnlyList<GraphNodeDetail>> NodeSamples);
 
 public sealed record GraphNodeHierarchy(
     IReadOnlyList<GraphNodeSnapshot> Nodes,

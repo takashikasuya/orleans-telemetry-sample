@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Orleans;
 
 namespace Grains.Abstractions;
@@ -71,4 +72,10 @@ public interface IGraphIndexGrain : IGrainWithStringKey
     Task AddNodeAsync(GraphNodeDefinition definition);
     Task RemoveNodeAsync(string nodeId, GraphNodeType nodeType);
     Task<IReadOnlyList<string>> GetByTypeAsync(GraphNodeType nodeType);
+}
+
+public interface IGraphTenantRegistryGrain : IGrainWithIntegerKey
+{
+    Task RegisterTenantAsync(string tenantId);
+    Task<IReadOnlyList<string>> GetTenantIdsAsync();
 }

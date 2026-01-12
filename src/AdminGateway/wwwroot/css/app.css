@@ -60,6 +60,14 @@ body {
     min-width: 180px;
 }
 
+.graph-tenant-selector {
+    margin-bottom: 0.75rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 .graph-input {
     margin-top: 0.25rem;
     padding: 0.35rem 0.5rem;
@@ -260,4 +268,115 @@ main {
     margin-left: 1.5rem;
     background: rgba(34, 211, 238, 0.1);
     border-left-color: #22d3ee;
+}
+
+.tree-node.area {
+    margin-left: 3rem;
+    background: rgba(163, 230, 53, 0.08);
+    border-left-color: #a3e635;
+}
+
+.graph-stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 0.6rem;
+}
+
+.graph-stats-table th,
+.graph-stats-table td {
+    padding: 0.75rem 0.85rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.graph-stats-table th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.85rem;
+    background: rgba(15, 23, 42, 0.9);
+}
+
+.graph-stats-table ul {
+    margin: 0.25rem 0;
+    padding-left: 1.25rem;
+    font-size: 0.8rem;
+}
+
+.graph-network-wrapper {
+    margin-top: 1rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.graph-network-canvas {
+    flex: 1;
+    min-width: 320px;
+    padding: 0.75rem;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.75rem;
+    overflow: auto;
+}
+
+.graph-network-canvas svg {
+    display: block;
+}
+
+.graph-node {
+    fill: #a5b4fc;
+    stroke: rgba(99, 102, 241, 0.9);
+    stroke-width: 2;
+    cursor: pointer;
+}
+
+.graph-node.active {
+    stroke: #22d3ee;
+    stroke-width: 3;
+}
+
+.graph-node-label {
+    fill: #e2e8f0;
+    font-size: 0.75rem;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+.graph-edge {
+    stroke: rgba(148, 163, 184, 0.6);
+    stroke-width: 1.2;
+}
+
+.graph-edge-label {
+    fill: #94a3b8;
+    font-size: 0.65rem;
+    text-anchor: middle;
+}
+
+.graph-node-details {
+    flex: 0 0 260px;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 0.6rem;
+    font-size: 0.85rem;
+}
+
+.graph-node-details h3 {
+    margin-top: 0;
+    margin-bottom: 0.4rem;
+}
+
+.graph-node-details ul {
+    margin: 0;
+    padding-left: 1.2rem;
+}
+
+.tree-node.area {
+    margin-left: 3rem;
+    background: rgba(163, 230, 53, 0.08);
+    border-left-color: #a3e635;
 }

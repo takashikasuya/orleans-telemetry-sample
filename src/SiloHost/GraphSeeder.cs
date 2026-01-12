@@ -32,6 +32,7 @@ internal sealed class GraphSeeder
         {
             var seed = await _integration.ExtractGraphSeedDataAsync(path);
             var index = _grainFactory.GetGrain<IGraphIndexGrain>(tenantId);
+            var registry = _grainFactory.GetGrain<IGraphTenantRegistryGrain>(0);
 
             foreach (var node in seed.Nodes)
             {
@@ -56,6 +57,7 @@ internal sealed class GraphSeeder
             }
 
             var completed = DateTimeOffset.UtcNow;
+            await registry.RegisterTenantAsync(tenantId);
             _logger.LogInformation("Graph seed completed. Path={Path} Tenant={Tenant} Nodes={NodeCount} Edges={EdgeCount}",
                 path,
                 tenantId,

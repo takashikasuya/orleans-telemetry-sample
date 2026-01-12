@@ -163,6 +163,31 @@ internal sealed class AdminMetricsService
         }
     }
 
+    public async Task<string[]> GetGraphTenantsAsync()
+    {
+        try
+        {
+            var registry = _client.GetGrain<IGraphTenantRegistryGrain>(0);
+            var tenantIds = await registry.GetTenantIdsAsync();
+            return tenantIds.ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve graph tenant list.");
+            return Array.Empty<string>();
+        }
+    }
+
+    private static readonly GraphNodeType[] StatsNodeTypes = new[]
+    {
+        GraphNodeType.Site,
+        GraphNodeType.Building,
+        GraphNodeType.Level,
+        GraphNodeType.Area,
+        GraphNodeType.Equipment,
+        GraphNodeType.Point
+    };
+
     public async Task<GraphStatisticsSummary> GetGraphStatisticsAsync(string tenantId = "default")
     {
         try
@@ -175,6 +200,17 @@ internal sealed class AdminMetricsService
             var areaIds = await index.GetByTypeAsync(GraphNodeType.Area);
             var equipmentIds = await index.GetByTypeAsync(GraphNodeType.Equipment);
             var pointIds = await index.GetByTypeAsync(GraphNodeType.Point);
+            var idsByType = new Dictionary<GraphNodeType, IReadOnlyList<string>>
+            {
+                [GraphNodeType.Site] = siteIds,
+                [GraphNodeType.Building] = buildingIds,
+                [GraphNodeType.Level] = levelIds,
+                [GraphNodeType.Area] = areaIds,
+                [GraphNodeType.Equipment] = equipmentIds,
+                [GraphNodeType.Point] = pointIds
+            };
+
+            var nodeSamples = await BuildNodeSamplesAsync(tenantId, idsByType);
 
             return new GraphStatisticsSummary(
                 siteIds.Count,
@@ -183,13 +219,49 @@ internal sealed class AdminMetricsService
                 areaIds.Count,
                 equipmentIds.Count,
                 pointIds.Count,
-                tenantId);
+                tenantId,
+                nodeSamples);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve graph statistics for tenant {TenantId}.", tenantId);
-            return new GraphStatisticsSummary(0, 0, 0, 0, 0, 0, tenantId);
+            return new GraphStatisticsSummary(0, 0, 0, 0, 0, 0, tenantId, new Dictionary<GraphNodeType, IReadOnlyList<GraphNodeDetail>>());
         }
+    }
+
+    private async Task<IReadOnlyDictionary<GraphNodeType, IReadOnlyList<GraphNodeDetail>>> BuildNodeSamplesAsync(
+        string tenantId,
+        IReadOnlyDictionary<GraphNodeType, IReadOnlyList<string>> idsByType)
+    {
+        var samples = new Dictionary<GraphNodeType, IReadOnlyList<GraphNodeDetail>>();
+        foreach (var (nodeType, nodeIds) in idsByType)
+        {
+            var details = new List<GraphNodeDetail>();
+            foreach (var nodeId in nodeIds.Take(3))
+            {
+                try
+                {
+                    var key = GraphNodeKey.Create(tenantId, nodeId);
+                    var grain = _client.GetGrain<IGraphNodeGrain>(key);
+                    var snapshot = await grain.GetAsync();
+                    if (snapshot?.Node?.NodeId is not { } resolved)
+                    {
+                        continue;
+                    }
+
+                    var displayName = string.IsNullOrWhiteSpace(snapshot.Node.DisplayName) ? resolved : snapshot.Node.DisplayName;
+                    details.Add(new GraphNodeDetail(resolved, displayName, snapshot.Node.NodeType));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Unable to fetch node sample {NodeId}", nodeId);
+                }
+            }
+
+            samples[nodeType] = details;
+        }
+
+        return samples;
     }
 
     public async Task<GraphNodeHierarchy> GetGraphHierarchyAsync(string tenantId = "default", int maxDepth = 3)
@@ -199,17 +271,48 @@ internal sealed class AdminMetricsService
             var index = _client.GetGrain<IGraphIndexGrain>(tenantId);
             var buildingIds = await index.GetByTypeAsync(GraphNodeType.Building);
 
-            var nodes = new List<GraphNodeSnapshot>();
+            var nodes = new Dictionary<string, GraphNodeSnapshot>(StringComparer.OrdinalIgnoreCase);
+            var queue = new Queue<(string NodeId, int Depth)>();
+            const int maxNodes = 250;
 
             foreach (var buildingId in buildingIds.Take(10)) // Limit to first 10 buildings
             {
-                var key = GraphNodeKey.Create(tenantId, buildingId);
-                var grain = _client.GetGrain<IGraphNodeGrain>(key);
-                var snapshot = await grain.GetAsync();
-                nodes.Add(snapshot);
+                queue.Enqueue((buildingId, 0));
             }
 
-            return new GraphNodeHierarchy(nodes, tenantId);
+            while (queue.Count > 0 && nodes.Count < maxNodes)
+            {
+                var (nodeId, depth) = queue.Dequeue();
+                if (nodes.ContainsKey(nodeId))
+                {
+                    continue;
+                }
+
+                var key = GraphNodeKey.Create(tenantId, nodeId);
+                var grain = _client.GetGrain<IGraphNodeGrain>(key);
+                var snapshot = await grain.GetAsync();
+                if (snapshot?.Node?.NodeId is not { } resolvedId || string.IsNullOrWhiteSpace(resolvedId))
+                {
+                    continue;
+                }
+
+                nodes[resolvedId] = snapshot;
+
+                if (depth >= maxDepth)
+                {
+                    continue;
+                }
+
+                foreach (var edge in snapshot.OutgoingEdges)
+                {
+                    if (!string.IsNullOrWhiteSpace(edge.TargetNodeId) && !nodes.ContainsKey(edge.TargetNodeId))
+                    {
+                        queue.Enqueue((edge.TargetNodeId, depth + 1));
+                    }
+                }
+            }
+
+            return new GraphNodeHierarchy(nodes.Values.ToList(), tenantId);
         }
         catch (Exception ex)
         {

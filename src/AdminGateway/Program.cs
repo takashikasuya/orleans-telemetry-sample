@@ -77,6 +77,12 @@ app.MapGet("/admin/graph/import/status", async (AdminMetricsService metrics) =>
     return Results.Ok(status);
 }).RequireAuthorization();
 
+app.MapGet("/admin/graph/tenants", async (AdminMetricsService metrics) =>
+{
+    var tenants = await metrics.GetGraphTenantsAsync();
+    return Results.Ok(tenants);
+}).RequireAuthorization();
+
 app.MapPost("/admin/graph/import", async (GraphSeedRequest request, AdminMetricsService metrics) =>
 {
     var status = await metrics.TriggerGraphSeedAsync(request);
