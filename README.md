@@ -297,6 +297,11 @@ All REST endpoints require a JWT token with:
 - **Audience**: configured via `OIDC_AUDIENCE`
 - **Claim**: `tenant` (optional; falls back to `t1`)
 
+### Registering clients for API and admin console
+
+1. **API Gateway** – create an OAuth2 client in your identity provider that can mint access tokens with an `aud` value matching `OIDC_AUDIENCE` (default `default`). Configure the provider’s issuer URL into `OIDC_AUTHORITY` and wire `OIDC_AUDIENCE` into the API service (`src/ApiGateway/Program.cs` reads those values directly). The API expects a `tenant` claim in the token (any string is acceptable); include that claim when issuing tokens so that the REST endpoints can route requests to the right tenant.
+2. **Admin Console** – the Blazor Server UI in `src/AdminGateway` uses the same middleware, so by default it accepts the same tokens you issue for the API. If you want the console to validate a separate audience you can issue tokens for `ADMIN_AUDIENCE` (the app falls back to `OIDC_AUDIENCE` when `ADMIN_AUDIENCE` is unset). In production, register either the same client or a dedicated client that has access to the admin audience, set `OIDC_AUTHORITY`/`OIDC_AUDIENCE` (and optionally `ADMIN_AUDIENCE`), and ensure the token carries the `tenant` claim. Docker Compose already issues a `test-client:test-secret` credential that works for both services; use the curl snippet below to fetch it and reuse the token against `http://localhost:8080` (API) and `http://localhost:8082` (admin).
+
 ### Mock OIDC for Development
 
 Docker Compose includes a mock OIDC server:
