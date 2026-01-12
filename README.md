@@ -551,6 +551,16 @@ dotnet test src/Telemetry.Ingest.Tests
 dotnet test src/Telemetry.Storage.Tests
 ```
 
+### Memory Load Test
+
+Spin up the Orleans cluster (for example `dotnet run --project src/SiloHost` or via `./scripts/start-system.sh`) and execute the new memory load tester to continuously add graph nodes while polling `IManagementGrain` runtime statistics. The tool writes Markdown/JSON summaries under `reports/` (override via `TELEMETRY_MEMORY_REPORT_DIR`) so you can compare stages by memory usage, CPU, and grain activations.
+
+```bash
+dotnet run --project src/Telemetry.Orleans.MemoryLoadTest -- --config src/Telemetry.Orleans.MemoryLoadTest/appsettings.memoryloadtest.sample.json
+```
+
+The sample configuration ramps from 100 to 1,200 nodes and records per-stage snapshots every 5 seconds; adjust stage definitions or `NodeType`, `TargetNodeCount`, and batching fields in `appsettings.memoryloadtest.json` as needed.
+
 ### Build
 
 ```bash
