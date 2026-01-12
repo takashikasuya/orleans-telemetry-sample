@@ -1,4 +1,4 @@
-@prefix brick: <https://brickschema.org/schema/Brick#> .
+﻿@prefix brick: <https://brickschema.org/schema/Brick#> .
 @prefix dcterms: <http://purl.org/dc/terms/> .
 @prefix linkml: <https://w3id.org/linkml/> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -2626,5 +2626,3 @@ sbco:QuantityEnum a owl:Class ;
         <https://www.sbco.or.jp/ont/QuantityEnum#Wet_Bulb_Temperature>,
         <https://www.sbco.or.jp/ont/QuantityEnum#Wind_Direction> ;
     sbco:description_ja "ポイントで測定・監視可能な物理量" .
-
-
