@@ -89,6 +89,21 @@ app.MapGet("/admin/ingest", (AdminMetricsService metrics) =>
     return Results.Ok(result);
 }).RequireAuthorization();
 
+app.MapGet("/admin/graph/statistics", async (AdminMetricsService metrics, string? tenantId) =>
+{
+    var tenant = tenantId ?? "default";
+    var result = await metrics.GetGraphStatisticsAsync(tenant);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/admin/graph/hierarchy", async (AdminMetricsService metrics, string? tenantId, int? maxDepth) =>
+{
+    var tenant = tenantId ?? "default";
+    var depth = maxDepth ?? 3;
+    var result = await metrics.GetGraphHierarchyAsync(tenant, depth);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
 app.MapRazorPages();
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");

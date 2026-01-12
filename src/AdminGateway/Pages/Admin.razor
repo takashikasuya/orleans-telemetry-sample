@@ -177,6 +177,73 @@ else
         </div>
     </section>
     <section>
+        <h2>Graph Statistics</h2>
+        @if (_graphStats is not null)
+        {
+            <div class="tier-grid">
+                <article>
+                    <h3>Site</h3>
+                    <p class="stat-value">@_graphStats.SiteCount</p>
+                </article>
+                <article>
+                    <h3>Building</h3>
+                    <p class="stat-value">@_graphStats.BuildingCount</p>
+                </article>
+                <article>
+                    <h3>Level</h3>
+                    <p class="stat-value">@_graphStats.LevelCount</p>
+                </article>
+                <article>
+                    <h3>Area</h3>
+                    <p class="stat-value">@_graphStats.AreaCount</p>
+                </article>
+                <article>
+                    <h3>Equipment</h3>
+                    <p class="stat-value">@_graphStats.EquipmentCount</p>
+                </article>
+                <article>
+                    <h3>Point</h3>
+                    <p class="stat-value">@_graphStats.PointCount</p>
+                </article>
+            </div>
+        }
+        else
+        {
+            <p class="status muted">Graph statistics unavailable.</p>
+        }
+    </section>
+
+    <section>
+        <h2>Graph Hierarchy</h2>
+        <button class="refresh-button" @onclick="LoadGraphHierarchyAsync">階層を読み込む</button>
+        @if (_graphHierarchy is not null && _graphHierarchy.Nodes.Count > 0)
+        {
+            <div class="graph-tree">
+                @foreach (var building in _graphHierarchy.Nodes.Where(n => n.Node.NodeType == GraphNodeType.Building))
+                {
+                    <div class="tree-node building">
+                        <strong>🏢 @building.Node.DisplayName</strong>
+                        @foreach (var levelEdge in building.OutgoingEdges.Where(e => e.Predicate == "hasLevel"))
+                        {
+                            <div class="tree-node level">
+                                📍 Level: @levelEdge.TargetNodeId
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else if (_loadingHierarchy)
+        {
+            <p class="status">階層データを読み込み中...</p>
+        }
+        else
+        {
+            <p class="status muted">階層データがありません。</p>
+        }
+    </section>
+
+    <section>
         <h2>Graph RDF Import</h2>
         <div class="graph-import-grid">
             <div class="graph-import">
@@ -233,6 +300,9 @@ else
     private GraphSeedStatus? _graphStatus;
     private bool _isImporting;
     private string? _graphFeedback;
+    private GraphStatisticsSummary? _graphStats;
+    private GraphNodeHierarchy? _graphHierarchy;
+    private bool _loadingHierarchy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -250,6 +320,7 @@ else
             _storage = await Metrics.GetStorageOverviewAsync(CancellationToken.None);
             _ingest = Metrics.GetIngestSummary();
             _graphStatus = await Metrics.GetLastGraphSeedStatusAsync();
+            _graphStats = await Metrics.GetGraphStatisticsAsync();
         }
         catch (Exception ex)
         {
@@ -258,6 +329,24 @@ else
         finally
         {
             _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadGraphHierarchyAsync()
+    {
+        _loadingHierarchy = true;
+        try
+        {
+            _graphHierarchy = await Metrics.GetGraphHierarchyAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"階層読み込みに失敗: {ex.Message}";
+        }
+        finally
+        {
+            _loadingHierarchy = false;
             StateHasChanged();
         }
     }

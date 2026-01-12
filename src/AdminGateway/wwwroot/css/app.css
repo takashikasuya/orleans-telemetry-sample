@@ -230,3 +230,34 @@ main {
     max-width: 1200px;
     margin: 0 auto;
 }
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #818cf8;
+    margin: 0.5rem 0;
+}
+
+.graph-tree {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 0.6rem;
+}
+
+.tree-node {
+    padding: 0.5rem 1rem;
+    margin: 0.3rem 0;
+    border-left: 2px solid rgba(129, 140, 248, 0.5);
+}
+
+.tree-node.building {
+    background: rgba(99, 102, 241, 0.2);
+    border-left-color: #6366f1;
+}
+
+.tree-node.level {
+    margin-left: 1.5rem;
+    background: rgba(34, 211, 238, 0.1);
+    border-left-color: #22d3ee;
+}

@@ -29,6 +29,10 @@ builder.Services.AddSingleton<ITelemetryStorageQuery, ParquetTelemetryStorageQue
 builder.Services.Configure<TelemetryExportOptions>(builder.Configuration.GetSection("TelemetryExport"));
 builder.Services.AddSingleton<TelemetryExportService>();
 builder.Services.AddHostedService<TelemetryExportCleanupService>();
+builder.Services.Configure<RegistryExportOptions>(builder.Configuration.GetSection("RegistryExport"));
+builder.Services.AddSingleton<RegistryExportService>();
+builder.Services.AddSingleton<GraphRegistryService>();
+builder.Services.AddHostedService<RegistryExportCleanupService>();
 
 // Configure gRPC
 builder.Services.AddGrpc();
@@ -163,6 +167,80 @@ app.MapGet("/api/graph/traverse/{nodeId}", async (
     var cappedDepth = Math.Min(Math.Max(requestedDepth, 0), 5);
     var result = await traversal.TraverseAsync(client, tenant, nodeId, cappedDepth, predicate);
     return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/registry/devices", async (
+    int? limit,
+    GraphRegistryService registry,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var result = await registry.GetNodesAsync(tenant, GraphNodeType.Equipment, limit, http.RequestAborted);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/registry/spaces", async (
+    int? limit,
+    GraphRegistryService registry,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var result = await registry.GetNodesAsync(tenant, GraphNodeType.Area, limit, http.RequestAborted);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/registry/points", async (
+    int? limit,
+    GraphRegistryService registry,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var result = await registry.GetNodesAsync(tenant, GraphNodeType.Point, limit, http.RequestAborted);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/registry/buildings", async (
+    int? limit,
+    GraphRegistryService registry,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var result = await registry.GetNodesAsync(tenant, GraphNodeType.Building, limit, http.RequestAborted);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/registry/sites", async (
+    int? limit,
+    GraphRegistryService registry,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var result = await registry.GetNodesAsync(tenant, GraphNodeType.Site, limit, http.RequestAborted);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/registry/exports/{exportId}", async (
+    string exportId,
+    RegistryExportService registryExports,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var result = await registryExports.TryOpenExportAsync(exportId, tenant, DateTimeOffset.UtcNow, http.RequestAborted);
+    if (result.Status == RegistryExportOpenStatus.NotFound)
+    {
+        return Results.NotFound();
+    }
+
+    if (result.Status == RegistryExportOpenStatus.Expired)
+    {
+        return Results.StatusCode(StatusCodes.Status410Gone);
+    }
+
+    var metadata = result.Metadata;
+    return Results.File(
+        result.Stream!,
+        metadata?.ContentType ?? "application/x-ndjson",
+        $"registry_{exportId}.jsonl");
 }).RequireAuthorization();
 
 app.MapGet("/api/telemetry/{deviceId}", async (

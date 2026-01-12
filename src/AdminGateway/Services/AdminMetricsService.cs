@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using AdminGateway.Models;
 using Grains.Abstractions;
 using Microsoft.Extensions.Logging;
@@ -159,6 +160,61 @@ internal sealed class AdminMetricsService
                 0,
                 0,
                 ex.Message);
+        }
+    }
+
+    public async Task<GraphStatisticsSummary> GetGraphStatisticsAsync(string tenantId = "default")
+    {
+        try
+        {
+            var index = _client.GetGrain<IGraphIndexGrain>(tenantId);
+
+            var siteIds = await index.GetByTypeAsync(GraphNodeType.Site);
+            var buildingIds = await index.GetByTypeAsync(GraphNodeType.Building);
+            var levelIds = await index.GetByTypeAsync(GraphNodeType.Level);
+            var areaIds = await index.GetByTypeAsync(GraphNodeType.Area);
+            var equipmentIds = await index.GetByTypeAsync(GraphNodeType.Equipment);
+            var pointIds = await index.GetByTypeAsync(GraphNodeType.Point);
+
+            return new GraphStatisticsSummary(
+                siteIds.Count,
+                buildingIds.Count,
+                levelIds.Count,
+                areaIds.Count,
+                equipmentIds.Count,
+                pointIds.Count,
+                tenantId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve graph statistics for tenant {TenantId}.", tenantId);
+            return new GraphStatisticsSummary(0, 0, 0, 0, 0, 0, tenantId);
+        }
+    }
+
+    public async Task<GraphNodeHierarchy> GetGraphHierarchyAsync(string tenantId = "default", int maxDepth = 3)
+    {
+        try
+        {
+            var index = _client.GetGrain<IGraphIndexGrain>(tenantId);
+            var buildingIds = await index.GetByTypeAsync(GraphNodeType.Building);
+
+            var nodes = new List<GraphNodeSnapshot>();
+
+            foreach (var buildingId in buildingIds.Take(10)) // Limit to first 10 buildings
+            {
+                var key = GraphNodeKey.Create(tenantId, buildingId);
+                var grain = _client.GetGrain<IGraphNodeGrain>(key);
+                var snapshot = await grain.GetAsync();
+                nodes.Add(snapshot);
+            }
+
+            return new GraphNodeHierarchy(nodes, tenantId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve graph hierarchy for tenant {TenantId}.", tenantId);
+            return new GraphNodeHierarchy(new List<GraphNodeSnapshot>(), tenantId);
         }
     }
 }

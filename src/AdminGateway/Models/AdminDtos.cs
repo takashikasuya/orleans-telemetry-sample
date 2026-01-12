@@ -1,4 +1,5 @@
 using System;
+using Grains.Abstractions;
 
 namespace AdminGateway.Models;
 
@@ -30,3 +31,16 @@ public sealed record StorageOverview(
     StorageTierSummary Index);
 
 public sealed record IngestSummary(string[] EnabledConnectors, string[] EnabledSinks, int BatchSize, int ChannelCapacity);
+
+public sealed record GraphStatisticsSummary(
+    int SiteCount,
+    int BuildingCount,
+    int LevelCount,
+    int AreaCount,
+    int EquipmentCount,
+    int PointCount,
+    string TenantId);
+
+public sealed record GraphNodeHierarchy(
+    IReadOnlyList<GraphNodeSnapshot> Nodes,
+    string TenantId);
