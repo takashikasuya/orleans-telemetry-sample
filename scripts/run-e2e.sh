@@ -248,8 +248,16 @@ if point_updated:
         lag_ms = None
 
 seed_event = None
-if isinstance(telemetry, list) and telemetry:
-    seed_event = telemetry[0]
+telemetry_items = telemetry
+if isinstance(telemetry, dict):
+    mode = telemetry.get("mode")
+    if mode == "inline":
+        telemetry_items = telemetry.get("items", [])
+    else:
+        telemetry_items = []
+
+if isinstance(telemetry_items, list) and telemetry_items:
+    seed_event = telemetry_items[0]
 
 report = {
     "runId": run_id,

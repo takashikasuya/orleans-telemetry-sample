@@ -417,17 +417,69 @@ public sealed class TelemetryE2ETests
             if (response.IsSuccessStatusCode)
             {
                 var payload = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
-                if (payload.ValueKind == JsonValueKind.Array)
+                var list = await ReadTelemetryResultsAsync(client, payload);
+                if (list.Count > 0)
                 {
-                    var list = payload.EnumerateArray().ToList();
-                    if (list.Count > 0)
-                    {
-                        return list;
-                    }
+                    return list;
                 }
             }
 
             await Task.Delay(200);
+        }
+
+        return new List<JsonElement>();
+    }
+
+    private static async Task<List<JsonElement>> ReadTelemetryResultsAsync(HttpClient client, JsonElement payload)
+    {
+        if (payload.ValueKind == JsonValueKind.Array)
+        {
+            return payload.EnumerateArray().ToList();
+        }
+
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return new List<JsonElement>();
+        }
+
+        var mode = GetPropertyCaseInsensitive(payload, "mode").GetString();
+        if (string.Equals(mode, "inline", StringComparison.OrdinalIgnoreCase))
+        {
+            var items = GetPropertyCaseInsensitive(payload, "items");
+            if (items.ValueKind == JsonValueKind.Array)
+            {
+                return items.EnumerateArray().ToList();
+            }
+        }
+
+        if (string.Equals(mode, "url", StringComparison.OrdinalIgnoreCase))
+        {
+            var url = GetPropertyCaseInsensitive(payload, "url").GetString();
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                using var response = await client.GetAsync(url);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return new List<JsonElement>();
+                }
+
+                await using var stream = await response.Content.ReadAsStreamAsync();
+                using var reader = new StreamReader(stream);
+                var results = new List<JsonElement>();
+                while (!reader.EndOfStream)
+                {
+                    var line = await reader.ReadLineAsync();
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    using var doc = JsonDocument.Parse(line);
+                    results.Add(doc.RootElement.Clone());
+                }
+
+                return results;
+            }
         }
 
         return new List<JsonElement>();

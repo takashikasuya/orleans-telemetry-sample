@@ -1,9 +1,11 @@
 using System.Net;
 using ApiGateway.Infrastructure;
 using ApiGateway.Services;
+using ApiGateway.Telemetry;
 using Grains.Abstractions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 using Orleans;
 using Telemetry.Storage;
 
@@ -24,6 +26,9 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<GraphTraversal>();
 builder.Services.Configure<TelemetryStorageOptions>(builder.Configuration.GetSection("TelemetryStorage"));
 builder.Services.AddSingleton<ITelemetryStorageQuery, ParquetTelemetryStorageQuery>();
+builder.Services.Configure<TelemetryExportOptions>(builder.Configuration.GetSection("TelemetryExport"));
+builder.Services.AddSingleton<TelemetryExportService>();
+builder.Services.AddHostedService<TelemetryExportCleanupService>();
 
 // Configure gRPC
 builder.Services.AddGrpc();
@@ -142,6 +147,8 @@ app.MapGet("/api/telemetry/{deviceId}", async (
     string? pointId,
     int? limit,
     ITelemetryStorageQuery query,
+    TelemetryExportService exports,
+    IOptions<TelemetryExportOptions> exportOptions,
     HttpContext http) =>
 {
     var tenant = TenantResolver.ResolveTenant(http);
@@ -149,7 +156,42 @@ app.MapGet("/api/telemetry/{deviceId}", async (
     var rangeStart = from ?? rangeEnd.AddMinutes(-15);
     var request = new TelemetryQueryRequest(tenant, deviceId, rangeStart, rangeEnd, pointId, limit);
     var results = await query.QueryAsync(request, http.RequestAborted);
-    return Results.Ok(results);
+    if (results.Count == 0)
+    {
+        return Results.Ok(TelemetryQueryResponse.Inline(results));
+    }
+
+    var maxInline = Math.Max(1, exportOptions.Value.MaxInlineRecords);
+    if (results.Count <= maxInline)
+    {
+        return Results.Ok(TelemetryQueryResponse.Inline(results));
+    }
+
+    var export = await exports.CreateExportAsync(request, results, http.RequestAborted);
+    return Results.Ok(TelemetryQueryResponse.UrlResult(export.Url, export.ExpiresAt, export.Count));
+}).RequireAuthorization();
+
+app.MapGet("/api/telemetry/exports/{exportId}", async (
+    string exportId,
+    TelemetryExportService exports,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var result = await exports.TryOpenExportAsync(exportId, tenant, DateTimeOffset.UtcNow, http.RequestAborted);
+    if (result.Status == TelemetryExportOpenStatus.NotFound)
+    {
+        return Results.NotFound();
+    }
+
+    if (result.Status == TelemetryExportOpenStatus.Expired)
+    {
+        return Results.StatusCode(StatusCodes.Status410Gone);
+    }
+
+    return Results.File(
+        result.Stream!,
+        result.Metadata!.ContentType,
+        $"telemetry_{result.Metadata.ExportId}.jsonl");
 }).RequireAuthorization();
 
 // gRPC endpoints

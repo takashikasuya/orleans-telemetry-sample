@@ -178,20 +178,26 @@ curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/telemetry/device-1?from=2024-01-01T00:00:00Z&to=2024-01-01T23:59:59Z&pointId=p1&limit=100"
 ```
 
+If the result set is large, the API returns `mode: "url"` with a temporary download link.
+
 Response:
 ```json
-[
-  {
-    "tenantId": "t1",
-    "deviceId": "device-1",
-    "pointId": "p1",
-    "occurredAt": "2024-01-01T12:34:56Z",
-    "sequence": 123,
-    "valueJson": "42.5",
-    "payloadJson": null,
-    "tags": null
-  }
-]
+{
+  "mode": "inline",
+  "count": 1,
+  "items": [
+    {
+      "tenantId": "t1",
+      "deviceId": "device-1",
+      "pointId": "p1",
+      "occurredAt": "2024-01-01T12:34:56Z",
+      "sequence": 123,
+      "valueJson": "42.5",
+      "payloadJson": null,
+      "tags": null
+    }
+  ]
+}
 ```
 
 #### Storage Layout
