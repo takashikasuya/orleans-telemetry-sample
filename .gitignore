@@ -3,6 +3,7 @@ bin/
 obj/
 out/
 reports/
+storage/
 *.user
 *.suo
 *.userosscache
