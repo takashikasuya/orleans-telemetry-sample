@@ -41,6 +41,7 @@ internal static class Program
             services.AddLoggingTelemetryEventSink();
             services.Configure<TelemetryStorageOptions>(storageSection);
             services.AddTelemetryStorage();
+            services.AddSingleton<GraphSeeder>();
             services.AddHostedService<GraphSeedService>();
         });
         builder.UseOrleans((context, siloBuilder) =>

@@ -1,24 +1,19 @@
-using DataModel.Analyzer.Integration;
 using Grains.Abstractions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Orleans;
 
 namespace SiloHost;
 
 internal sealed class GraphSeedService : BackgroundService
 {
-    private readonly OrleansIntegrationService _integration;
-    private readonly IGrainFactory _grainFactory;
+    private readonly GraphSeeder _seeder;
     private readonly ILogger<GraphSeedService> _logger;
 
     public GraphSeedService(
-        OrleansIntegrationService integration,
-        IGrainFactory grainFactory,
+        GraphSeeder seeder,
         ILogger<GraphSeedService> logger)
     {
-        _integration = integration;
-        _grainFactory = grainFactory;
+        _seeder = seeder;
         _logger = logger;
     }
 
@@ -34,29 +29,13 @@ internal sealed class GraphSeedService : BackgroundService
         var tenant = Environment.GetEnvironmentVariable("TENANT_ID") ?? "default";
         _logger.LogInformation("Seeding graph from RDF: {Path} (tenant: {Tenant})", seedPath, tenant);
 
-        var seed = await _integration.ExtractGraphSeedDataAsync(seedPath);
-        var index = _grainFactory.GetGrain<IGraphIndexGrain>(tenant);
-
-        foreach (var node in seed.Nodes)
+        var result = await _seeder.SeedAsync(seedPath, tenant, stoppingToken);
+        if (!result.Success)
         {
-            var key = GraphNodeKey.Create(tenant, node.NodeId);
-            var grain = _grainFactory.GetGrain<IGraphNodeGrain>(key);
-            await grain.UpsertAsync(node);
-            await index.AddNodeAsync(node);
+            _logger.LogError("Graph seeding reported failure: {Message}", result.Message);
+            return;
         }
 
-        foreach (var edge in seed.Edges)
-        {
-            var sourceKey = GraphNodeKey.Create(tenant, edge.SourceNodeId);
-            var targetKey = GraphNodeKey.Create(tenant, edge.TargetNodeId);
-            var source = _grainFactory.GetGrain<IGraphNodeGrain>(sourceKey);
-            var target = _grainFactory.GetGrain<IGraphNodeGrain>(targetKey);
-            var outgoing = new GraphEdge { Predicate = edge.Predicate, TargetNodeId = edge.TargetNodeId };
-            var incoming = new GraphEdge { Predicate = edge.Predicate, TargetNodeId = edge.SourceNodeId };
-            await source.AddOutgoingEdgeAsync(outgoing);
-            await target.AddIncomingEdgeAsync(incoming);
-        }
-
-        _logger.LogInformation("Graph seed completed. Nodes={NodeCount}, Edges={EdgeCount}", seed.Nodes.Count, seed.Edges.Count);
+        _logger.LogInformation("Graph seed completed. Nodes={NodeCount}, Edges={EdgeCount}", result.NodeCount, result.EdgeCount);
     }
 }

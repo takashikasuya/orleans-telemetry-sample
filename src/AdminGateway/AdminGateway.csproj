@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Grains.Abstractions/Grains.Abstractions.csproj" />
+    <ProjectReference Include="../Telemetry.Storage/Telemetry.Storage.csproj" />
+    <ProjectReference Include="../Telemetry.Ingest/Telemetry.Ingest.csproj" />
+    <PackageReference Include="Microsoft.Orleans.Client" Version="9.2.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.1" />
+  </ItemGroup>
+</Project>

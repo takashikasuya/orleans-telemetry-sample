@@ -1,0 +1,331 @@
+@page "/"
+@inject AdminMetricsService Metrics
+
+<section class="admin-header">
+    <div>
+        <p class="eyebrow">Orleans Telemetry - 管理コンソール</p>
+        <h1>Cluster Overview</h1>
+    </div>
+    <button class="refresh-button" @onclick="RefreshAsync">データを更新</button>
+</section>
+
+@if (_loading)
+{
+    <p class="status">ダッシュボードを読み込み中...</p>
+}
+else if (_error is not null)
+{
+    <p class="status error">@_error</p>
+}
+else
+{
+    <section class="overview">
+        <article>
+            <h2>Ingest</h2>
+            <p>バッチサイズ: @_ingest?.BatchSize</p>
+            <p>チャネル容量: @_ingest?.ChannelCapacity</p>
+            <div class="tag-row">
+                <strong>Connectors</strong>
+                @if (_ingest?.EnabledConnectors.Length > 0)
+                {
+                    @foreach (var connector in _ingest.EnabledConnectors)
+                    {
+                        <span class="tag">@connector</span>
+                    }
+                }
+                else
+                {
+                    <span class="tag muted">未構成</span>
+                }
+            </div>
+            <div class="tag-row">
+                <strong>Event sinks</strong>
+                @if (_ingest?.EnabledSinks.Length > 0)
+                {
+                    @foreach (var sink in _ingest.EnabledSinks)
+                    {
+                        <span class="tag">@sink</span>
+                    }
+                }
+                else
+                {
+                    <span class="tag muted">未構成</span>
+                }
+            </div>
+        </article>
+        <article>
+            <h2>Storage</h2>
+            @if (_storage is not null)
+            {
+                <p>Stage: @_storage.Stage.FileCount files</p>
+                <p>Parquet: @_storage.Parquet.FileCount files</p>
+                <p>インデックス: @_storage.Index.FileCount files</p>
+            }
+            else
+            {
+                <p>Storage stats unavailable.</p>
+            }
+        </article>
+        <article>
+            <h2>Clients</h2>
+            <p>Silodis: @_silos.Length</p>
+            <p>合計クライアント: @(_silos.Sum(s => s.ClientCount))</p>
+        </article>
+    </section>
+
+    <section>
+        <h2>Activation Explorer (@_grains.Length types)</h2>
+        @if (_grains.Length == 0)
+        {
+            <p class="status muted">グレインデータがまだありません。</p>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Grain Type</th>
+                            <th>Activations</th>
+                            <th>Silod</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var grain in _grains)
+                        {
+                            <tr>
+                                <td>@grain.GrainType</td>
+                                <td class="numeric">@grain.ActivationCount</td>
+                                <td>@string.Join(", ", grain.Silos)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section>
+        <h2>Client Connections</h2>
+        @if (_silos.Length == 0)
+        {
+            <p class="status muted">シロ統計が取得できません。</p>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Silo</th>
+                            <th>Status</th>
+                            <th>Clients</th>
+                            <th>Activations</th>
+                            <th>CPU (%)</th>
+                            <th>Memory (used / max)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var silo in _silos)
+                        {
+                            <tr>
+                                <td>@silo.SiloAddress</td>
+                                <td>@silo.Status</td>
+                                <td class="numeric">@silo.ClientCount</td>
+                                <td class="numeric">@silo.ActivationCount</td>
+                                <td>@FormatPercent(silo.CpuUsagePercentage)</td>
+                                <td>@FormatMemoryUsage(silo.MemoryUsageBytes, silo.MaximumAvailableMemoryBytes)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section>
+        <h2>Storage Buckets</h2>
+        <div class="tier-grid">
+            @if (_storage is not null)
+            {
+                @foreach (var tier in new[] { _storage.Stage, _storage.Parquet, _storage.Index })
+                {
+                    <article>
+                        <h3>@tier.Tier</h3>
+                        <p>@FormatBytes(tier.TotalBytes) · @tier.FileCount files</p>
+                        <p class="muted">ルート: @tier.RootPath</p>
+                        <ul>
+                            @if (tier.Tenants.Count == 0)
+                            {
+                                <li class="muted">アクティブなテナントがありません。</li>
+                            }
+                            else
+                            {
+                                @foreach (var tenant in tier.Tenants)
+                                {
+                                    <li>@tenant.TenantId · @tenant.FileCount files · @FormatBytes(tenant.TotalBytes)</li>
+                                }
+                            }
+                        </ul>
+                    </article>
+                }
+            }
+            else
+            {
+                <p class="status muted">Storage stats failed to load.</p>
+            }
+        </div>
+    </section>
+    <section>
+        <h2>Graph RDF Import</h2>
+        <div class="graph-import-grid">
+            <div class="graph-import">
+                <label>
+                    RDF path
+                    <input class="graph-input" @bind="_graphPath" />
+                </label>
+                <label>
+                    Tenant
+                    <input class="graph-input" @bind="_graphTenant" />
+                </label>
+                <button class="refresh-button" @onclick="TriggerGraphSeedAsync" disabled="@_isImporting">
+                    @_isImporting ? "実行中..." : "インポートを実行"
+                </button>
+            </div>
+            <div class="graph-status-card">
+                <div class="graph-status-header">
+                    <span>Last execution</span>
+                    <span class="@GetGraphStatusBadgeClass(_graphStatus)">@GetGraphStatusLabel(_graphStatus)</span>
+                </div>
+                @if (_graphStatus is not null)
+                {
+                    <p class="graph-status-line">パス: @_graphStatus.Path</p>
+                    <p class="graph-status-line">テナント: @_graphStatus.TenantId</p>
+                    <p class="graph-status-line">@_graphStatus.StartedAt:u → @_graphStatus.CompletedAt:u</p>
+                    <p class="graph-status-line">ノード: @_graphStatus.NodeCount · エッジ: @_graphStatus.EdgeCount</p>
+                    @if (!string.IsNullOrWhiteSpace(_graphStatus.Message))
+                    {
+                        <p class="graph-status-line status muted">メッセージ: @_graphStatus.Message</p>
+                    }
+                }
+                else
+                {
+                    <p class="graph-status-line muted">Graph seed の実行履歴がありません。</p>
+                }
+            </div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_graphFeedback))
+        {
+            <p class="status">@_graphFeedback</p>
+        }
+    </section>
+}
+
+@code {
+    private GrainActivationSummary[] _grains = Array.Empty<GrainActivationSummary>();
+    private SiloSummary[] _silos = Array.Empty<SiloSummary>();
+    private StorageOverview? _storage;
+    private IngestSummary? _ingest;
+    private bool _loading = true;
+    private string? _error;
+    private string _graphPath = "/seed/seed.ttl";
+    private string _graphTenant = "default";
+    private GraphSeedStatus? _graphStatus;
+    private bool _isImporting;
+    private string? _graphFeedback;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _grains = await Metrics.GetGrainActivationsAsync();
+            _silos = await Metrics.GetSiloSummariesAsync();
+            _storage = await Metrics.GetStorageOverviewAsync(CancellationToken.None);
+            _ingest = Metrics.GetIngestSummary();
+            _graphStatus = await Metrics.GetLastGraphSeedStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"読み込みに失敗: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatBytes(long? bytes) => FormatBytes((double?)bytes);
+
+    private static string FormatBytes(double? bytes)
+    {
+        if (!bytes.HasValue)
+        {
+            return "-";
+        }
+
+        var value = bytes.Value;
+        var units = new[] { "B", "KB", "MB", "GB", "TB" };
+        var index = 0;
+        while (value >= 1024 && index < units.Length - 1)
+        {
+            value /= 1024;
+            index++;
+        }
+
+        return $"{value:F1} {units[index]}";
+    }
+
+    private static string FormatPercent(double? value)
+        => value.HasValue ? $"{value.Value:F1}%" : "-";
+
+    private static string FormatMemoryUsage(double? used, double? available)
+    {
+        if (!used.HasValue && !available.HasValue)
+        {
+            return "-";
+        }
+
+        var usedText = FormatBytes(used);
+        if (!available.HasValue)
+        {
+            return usedText;
+        }
+
+        return $"{usedText} / {FormatBytes(available)}";
+    }
+
+    private static string GetGraphStatusLabel(GraphSeedStatus? status)
+        => status is null ? "未実行" : status.Success ? "成功" : "失敗";
+
+    private static string GetGraphStatusBadgeClass(GraphSeedStatus? status)
+        => status is null ? "status-badge muted" : status.Success ? "status-badge success" : "status-badge failure";
+
+    private async Task TriggerGraphSeedAsync()
+    {
+        _isImporting = true;
+        _graphFeedback = null;
+        try
+        {
+            var request = new GraphSeedRequest(_graphPath, _graphTenant);
+            var result = await Metrics.TriggerGraphSeedAsync(request);
+            _graphStatus = result;
+            _graphFeedback = result.Success ? "インポートが完了しました。" : $"失敗: {result.Message ?? "未知のエラー"}";
+        }
+        catch (Exception ex)
+        {
+            _graphFeedback = $"インポートで例外: {ex.Message}";
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+}

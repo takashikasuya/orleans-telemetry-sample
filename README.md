@@ -15,6 +15,7 @@ docker compose up --build
 Once running:
 - REST Swagger: `http://localhost:8080/swagger`
 - Mock OIDC (for tokens): `http://localhost:8081/default`
+- Admin console (grain/client/storage health): `http://localhost:8082/`
 
 ### 2. Optional: Seed the Graph from RDF
 
@@ -328,9 +329,27 @@ The mock server does **not** validate signatures; for production, configure a re
 |-----------|-----------------------------------------------------------------------|
 | `silo`    | Orleans host with grains, ingest, storage, and graph logic.          |
 | `api`     | REST/gRPC gateway for querying latest state and history.             |
+| `admin`   | Admin console that surfaces grain activations, client counts, ingest, and storage health. |
 | `mq`      | RabbitMQ broker for telemetry messages (optional).                   |
 | `publisher` | Demo app that publishes random telemetry (optional).               |
 | `mock-oidc` | Mock OIDC issuer for local development.                            |
+
+## Admin Console
+
+`AdminGateway` is a dedicated Blazor Server app that runs on its own port (default `8082` in `docker compose`). It exposes the same JWT-protected surface as the REST API, plus four read-only admin endpoints:
+
+```
+GET /admin/grains                 → Grain activation counts + silo locations
+GET /admin/clients                → Active silo statuses and client counts
+GET /admin/storage                → Stage/parquet/index bucket statistics
+GET /admin/ingest                 → Configured ingest connectors/event sinks + batch/queue settings
+GET /admin/graph/import/status    → Last RDF import summary
+POST /admin/graph/import          → Trigger RDF seeding (body: `GraphSeedRequest`)
+```
+
+The Blazor UI (served from `/`) delegates to `AdminMetricsService` to render those summaries, and the endpoints can be called from other tools if automation is needed. Authentication relies on the same OIDC configuration (`OIDC_AUTHORITY` / `OIDC_AUDIENCE`) as the API gateway, so the admin console can be locked down with the same tokens.
+
+The “Graph RDF Import” card uses the same RDF parsing pipeline that seeds the graph at silo startup; it shows the last run’s node/edge counts and lets operators re-run the seed against any accessible RDF file/tenant without touching environment variables.
 
 ### Key Grain Types
 

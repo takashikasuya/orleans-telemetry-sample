@@ -1,0 +1,96 @@
+using System.Net;
+using AdminGateway.Models;
+using AdminGateway.Services;
+using Grains.Abstractions;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
+using Orleans;
+using Orleans.Configuration;
+using Telemetry.Ingest;
+using Telemetry.Storage;
+
+var builder = WebApplication.CreateBuilder(args);
+
+var authority = builder.Configuration["OIDC_AUTHORITY"] ?? "http://mock-oidc:8080/default";
+var audience = builder.Configuration["OIDC_AUDIENCE"] ?? builder.Configuration["ADMIN_AUDIENCE"] ?? "api";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.Authority = authority;
+        options.Audience = audience;
+        options.RequireHttpsMetadata = authority.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddRazorPages();
+builder.Services.AddServerSideBlazor();
+builder.Services.Configure<TelemetryStorageOptions>(builder.Configuration.GetSection("TelemetryStorage"));
+builder.Services.Configure<TelemetryIngestOptions>(builder.Configuration.GetSection("TelemetryIngest"));
+builder.Services.AddSingleton<TelemetryStorageScanner>();
+builder.Services.AddScoped<AdminMetricsService>();
+
+var orleansHost = builder.Configuration["Orleans:GatewayHost"] ?? "127.0.0.1";
+var orleansAddresses = Dns.GetHostAddresses(orleansHost);
+var orleansAddress = orleansAddresses.Length > 0 ? orleansAddresses[0] : IPAddress.Loopback;
+var orleansPort = int.TryParse(builder.Configuration["Orleans:GatewayPort"], out var parsedPort) ? parsedPort : 30000;
+
+builder.Host.UseOrleansClient(client =>
+{
+    client.UseStaticClustering(new IPEndPoint(orleansAddress, orleansPort));
+    client.Configure<ClusterOptions>(opts =>
+    {
+        opts.ClusterId = "telemetry-cluster";
+        opts.ServiceId = "telemetry-service";
+    });
+    client.AddMemoryStreams("DeviceUpdates");
+});
+
+var app = builder.Build();
+
+app.UseStaticFiles();
+app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapGet("/admin/grains", async (AdminMetricsService metrics) =>
+{
+    var result = await metrics.GetGrainActivationsAsync();
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/admin/clients", async (AdminMetricsService metrics) =>
+{
+    var result = await metrics.GetSiloSummariesAsync();
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/admin/storage", async (AdminMetricsService metrics, CancellationToken ct) =>
+{
+    var result = await metrics.GetStorageOverviewAsync(ct);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/admin/graph/import/status", async (AdminMetricsService metrics) =>
+{
+    var status = await metrics.GetLastGraphSeedStatusAsync();
+    return Results.Ok(status);
+}).RequireAuthorization();
+
+app.MapPost("/admin/graph/import", async (GraphSeedRequest request, AdminMetricsService metrics) =>
+{
+    var status = await metrics.TriggerGraphSeedAsync(request);
+    return Results.Ok(status);
+}).RequireAuthorization();
+
+app.MapGet("/admin/ingest", (AdminMetricsService metrics) =>
+{
+    var result = metrics.GetIngestSummary();
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapRazorPages();
+app.MapBlazorHub();
+app.MapFallbackToPage("/_Host");
+
+app.Run();

@@ -1,0 +1,32 @@
+using System;
+
+namespace AdminGateway.Models;
+
+public sealed record GrainActivationSummary(string GrainType, int ActivationCount, string[] Silos);
+
+public sealed record SiloSummary(
+    string SiloAddress,
+    string Status,
+    long ClientCount,
+    int ActivationCount,
+    DateTime LastUpdated,
+    double? CpuUsagePercentage,
+    double? MemoryUsageBytes,
+    double? MaximumAvailableMemoryBytes);
+
+public sealed record StorageTenantSummary(string TenantId, long FileCount, long TotalBytes, DateTime? LatestModified);
+
+public sealed record StorageTierSummary(
+    string Tier,
+    string RootPath,
+    long FileCount,
+    long TotalBytes,
+    DateTime? LatestFile,
+    IReadOnlyList<StorageTenantSummary> Tenants);
+
+public sealed record StorageOverview(
+    StorageTierSummary Stage,
+    StorageTierSummary Parquet,
+    StorageTierSummary Index);
+
+public sealed record IngestSummary(string[] EnabledConnectors, string[] EnabledSinks, int BatchSize, int ChannelCapacity);
