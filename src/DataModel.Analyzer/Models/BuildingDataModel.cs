@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 
 namespace DataModel.Analyzer.Models;
@@ -11,7 +10,7 @@ public abstract class RdfResource
     public string Uri { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public Dictionary<string, string> Identifiers { get; set; } = new();
-    public Dictionary<string, object> CustomProperties { get; set; } = new();
+    public Dictionary<string, string> CustomProperties { get; set; } = new();
     public Dictionary<string, bool> CustomTags { get; set; } = new();
 }
 
@@ -76,12 +75,8 @@ public class PostalAddress : RdfResource
 /// <summary>
 /// エージェント情報
 /// </summary>
-public class Agent
+public class Agent : RdfResource
 {
-    public Dictionary<string, Dictionary<string, string>> CustomProperties { get; set; } = new();
-    public Dictionary<string, bool> CustomTags { get; set; } = new();
-    public Dictionary<string, string> Identifiers { get; set; } = new();
-    public string? Name { get; set; }
     public List<Organization> MemberOf { get; set; } = new();
 }
 
@@ -236,7 +231,14 @@ public class Equipment : Asset
     public string GatewayId { get; set; } = string.Empty;
     public string? Supplier { get; set; }
     public string? Owner { get; set; }
-    public List<Point> Points { get; set; } = new();
+    /// <summary>
+    /// `Asset.HasPoint` と同期させるため、2つの名前を同一リストとして扱う。
+    /// </summary>
+    public List<Point> Points
+    {
+        get => HasPoint;
+        set => HasPoint = value ?? new();
+    }
     public string? OperationalStageCount { get; set; }
     public List<string> Feeds { get; set; } = new();
     public List<string> IsFedBy { get; set; } = new();

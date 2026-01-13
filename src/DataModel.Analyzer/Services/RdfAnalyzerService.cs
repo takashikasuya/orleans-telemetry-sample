@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using DataModel.Analyzer.Models;
 using Microsoft.Extensions.Logging;
@@ -364,7 +365,7 @@ public class RdfAnalyzerService
             var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
             if (hasPartUris.Count > 0)
             {
-                site.CustomProperties["hasPartUris"] = hasPartUris;
+                StoreStringList(site.CustomProperties, "hasPartUris", hasPartUris);
             }
 
             sites.Add(site);
@@ -389,7 +390,7 @@ public class RdfAnalyzerService
             var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
             if (hasPartUris.Count > 0)
             {
-                building.CustomProperties["hasPartUris"] = hasPartUris;
+                StoreStringList(building.CustomProperties, "hasPartUris", hasPartUris);
             }
 
             buildings.Add(building);
@@ -424,7 +425,7 @@ public class RdfAnalyzerService
             var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
             if (hasPartUris.Count > 0)
             {
-                level.CustomProperties["hasPartUris"] = hasPartUris;
+                StoreStringList(level.CustomProperties, "hasPartUris", hasPartUris);
             }
 
             levels.Add(level);
@@ -448,7 +449,7 @@ public class RdfAnalyzerService
             var equipmentUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}isLocationOf", $"{SbcoNamespace}isLocationOf" });
             if (equipmentUris.Count > 0)
             {
-                area.CustomProperties["equipmentUris"] = equipmentUris;
+                StoreStringList(area.CustomProperties, "equipmentUris", equipmentUris);
             }
 
             areas.Add(area);
@@ -474,7 +475,7 @@ public class RdfAnalyzerService
             var pointUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPoint", $"{SbcoNamespace}hasPoint" });
             if (pointUris.Count > 0)
             {
-                equipment.CustomProperties["pointUris"] = pointUris;
+                StoreStringList(equipment.CustomProperties, "pointUris", pointUris);
             }
 
             var locatedInUris = GetObjectUris(graph, subject, new[] { $"{SbcoNamespace}locatedIn", $"{RecNamespace}locatedIn" });
@@ -795,7 +796,7 @@ public class RdfAnalyzerService
 
                     if (nested.Count > 0)
                     {
-                        resource.CustomProperties[outerKey] = nested;
+                        resource.CustomProperties[outerKey] = JsonSerializer.Serialize(nested);
                         continue;
                     }
                 }
@@ -830,6 +831,52 @@ public class RdfAnalyzerService
                 }
             }
         }
+    }
+
+    private static void StoreStringList(IDictionary<string, string> properties, string key, IEnumerable<string> values)
+    {
+        var filtered = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct()
+            .ToList();
+
+        if (filtered.Count == 0)
+        {
+            return;
+        }
+
+        properties[key] = JsonSerializer.Serialize(filtered);
+    }
+
+    private static bool TryGetStringList(IReadOnlyDictionary<string, string> properties, string key, out List<string> values)
+    {
+        values = new List<string>();
+
+        if (!properties.TryGetValue(key, out var rawValue) || string.IsNullOrWhiteSpace(rawValue))
+        {
+            return false;
+        }
+
+        try
+        {
+            var deserialized = JsonSerializer.Deserialize<List<string>>(rawValue);
+            if (deserialized != null)
+            {
+                var filtered = deserialized.Where(v => !string.IsNullOrWhiteSpace(v)).ToList();
+                if (filtered.Count > 0)
+                {
+                    values = filtered;
+                    return true;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // fall back to single string value
+        }
+
+        values = new List<string> { rawValue };
+        return true;
     }
 
     private static IEnumerable<INode> GetObjectNodes(IGraph graph, INode subject, IEnumerable<string> predicateUris)
@@ -870,7 +917,7 @@ public class RdfAnalyzerService
 
         foreach (var site in model.Sites)
         {
-            if (site.CustomProperties.TryGetValue("hasPartUris", out var bu) && bu is List<string> buildingUris)
+            if (TryGetStringList(site.CustomProperties, "hasPartUris", out var buildingUris))
             {
                 foreach (var bUri in buildingUris)
                 {
@@ -885,7 +932,7 @@ public class RdfAnalyzerService
 
         foreach (var building in model.Buildings)
         {
-            if (building.CustomProperties.TryGetValue("hasPartUris", out var lu) && lu is List<string> levelUris)
+            if (TryGetStringList(building.CustomProperties, "hasPartUris", out var levelUris))
             {
                 foreach (var lUri in levelUris)
                 {
@@ -900,7 +947,7 @@ public class RdfAnalyzerService
 
         foreach (var level in model.Levels)
         {
-            if (level.CustomProperties.TryGetValue("hasPartUris", out var au) && au is List<string> areaUris)
+            if (TryGetStringList(level.CustomProperties, "hasPartUris", out var areaUris))
             {
                 foreach (var aUri in areaUris)
                 {
@@ -915,7 +962,7 @@ public class RdfAnalyzerService
 
         foreach (var area in model.Areas)
         {
-            if (area.CustomProperties.TryGetValue("equipmentUris", out var eu) && eu is List<string> equipmentUris)
+            if (TryGetStringList(area.CustomProperties, "equipmentUris", out var equipmentUris))
             {
                 foreach (var eUri in equipmentUris)
                 {
@@ -942,7 +989,7 @@ public class RdfAnalyzerService
 
         foreach (var equipment in model.Equipment)
         {
-            if (equipment.CustomProperties.TryGetValue("pointUris", out var pu) && pu is List<string> pointUris)
+            if (TryGetStringList(equipment.CustomProperties, "pointUris", out var pointUris))
             {
                 foreach (var pUri in pointUris)
                 {
