@@ -1,6 +1,7 @@
 namespace Publisher;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,6 +11,7 @@ using DataModel.Analyzer.Services;
 using Grains.Abstractions;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 
 internal static class Program
 {
@@ -58,8 +60,16 @@ internal static class Program
         using var conn = factory.CreateConnection();
         using var channel = conn.CreateModel();
         channel.QueueDeclare(queue: "telemetry", durable: false, exclusive: false, autoDelete: false);
+        using var controlChannel = conn.CreateModel();
+        var controlQueue = Environment.GetEnvironmentVariable("CONTROL_QUEUE") ?? "telemetry-control";
+        controlChannel.QueueDeclare(queue: controlQueue, durable: false, exclusive: false, autoDelete: false);
 
         var sequences = new Dictionary<string, long>();
+        var controlOverrides = new ConcurrentDictionary<(string DeviceId, string PointId), object?>();
+        var pointRegistry = BuildPointRegistry(rdfDevices);
+        var controlConsumer = new AsyncEventingBasicConsumer(controlChannel);
+        controlConsumer.Received += (_, args) => ProcessControlMessage(args, controlChannel, controlOverrides, pointRegistry, logger);
+        controlChannel.BasicConsume(controlQueue, autoAck: false, consumer: controlConsumer);
 
         var useBurst = burstEnabled && burstIntervalMs > 0;
         var baseInterval = TimeSpan.FromMilliseconds(Math.Max(1, baseIntervalMs));
@@ -83,6 +93,7 @@ internal static class Program
                 {
                     var seq = NextSequence(sequences, device.DeviceId);
                     var msg = rdfGenerator!.CreateTelemetry(tenant, device, seq);
+                    ApplyControlOverrides(msg, controlOverrides, pointRegistry, logger);
                     PublishMessage(channel, msg);
                     await Task.Delay(inBurst ? burstInterval : baseInterval);
                 }
@@ -204,4 +215,166 @@ internal static class Program
         var value = Environment.GetEnvironmentVariable(key);
         return bool.TryParse(value, out var parsed) && parsed;
     }
+
+    private static IReadOnlyDictionary<(string DeviceId, string PointId), RdfTelemetryGenerator.RdfPointDefinition> BuildPointRegistry(IEnumerable<RdfTelemetryGenerator.RdfDeviceDefinition> devices)
+    {
+        var registry = new Dictionary<(string DeviceId, string PointId), RdfTelemetryGenerator.RdfPointDefinition>();
+        foreach (var device in devices)
+        {
+            foreach (var point in device.Points)
+            {
+                registry[(device.DeviceId, point.PointId)] = point;
+            }
+        }
+
+        return registry;
+    }
+
+    private static void ApplyControlOverrides(TelemetryMsg msg, ConcurrentDictionary<(string DeviceId, string PointId), object?> overrides, IReadOnlyDictionary<(string DeviceId, string PointId), RdfTelemetryGenerator.RdfPointDefinition> registry, ILogger logger)
+    {
+        foreach (var kvp in overrides)
+        {
+            if (kvp.Key.DeviceId != msg.DeviceId)
+            {
+                continue;
+            }
+
+            if (!registry.TryGetValue(kvp.Key, out var point) || !point.Writable)
+            {
+                continue;
+            }
+
+            if (kvp.Value is null)
+            {
+                logger.LogDebug("Skipping null control override for {Device}/{Point}", msg.DeviceId, point.PointId);
+                continue;
+            }
+
+            msg.Properties[point.PointId] = kvp.Value;
+            logger.LogDebug("Applied control override for {Device}/{Point}: {Value}", msg.DeviceId, point.PointId, kvp.Value);
+        }
+    }
+
+    private static Task ProcessControlMessage(BasicDeliverEventArgs args, IModel channel, ConcurrentDictionary<(string DeviceId, string PointId), object?> overrides, IReadOnlyDictionary<(string DeviceId, string PointId), RdfTelemetryGenerator.RdfPointDefinition> registry, ILogger logger)
+    {
+        try
+        {
+            var command = TryParseControlCommand(args.Body, out var error);
+            if (command is null)
+            {
+                logger.LogWarning("Ignoring invalid control command: {Reason}", error ?? "unknown");
+                return Task.CompletedTask;
+            }
+
+            var key = (command.DeviceId, command.PointId);
+            if (!registry.TryGetValue(key, out var point))
+            {
+                logger.LogWarning("Control command received for unknown point {Device}/{Point}", command.DeviceId, command.PointId);
+                return Task.CompletedTask;
+            }
+
+            if (!point.Writable)
+            {
+                logger.LogWarning("CONTROL command ignored because {Device}/{Point} is not writable.", command.DeviceId, command.PointId);
+                return Task.CompletedTask;
+            }
+
+            if (command.Clear)
+            {
+                overrides.TryRemove(key, out _);
+                logger.LogInformation("Cleared control override for {Device}/{Point}.", command.DeviceId, command.PointId);
+                return Task.CompletedTask;
+            }
+
+            if (command.Value is null)
+            {
+                logger.LogWarning("Control command for {Device}/{Point} did not provide a value.", command.DeviceId, command.PointId);
+                return Task.CompletedTask;
+            }
+
+            overrides[key] = command.Value;
+            logger.LogInformation("Registered control override for {Device}/{Point} -> {Value}", command.DeviceId, command.PointId, command.Value);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to process control command.");
+        }
+        finally
+        {
+            channel.BasicAck(args.DeliveryTag, false);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static ControlCommand? TryParseControlCommand(ReadOnlyMemory<byte> body, out string? error)
+    {
+        error = null;
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+
+            if (!TryGetPropertyCaseInsensitive(root, "deviceId", out var deviceElement) || deviceElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(deviceElement.GetString()))
+            {
+                error = "deviceId is required.";
+                return null;
+            }
+
+            if (!TryGetPropertyCaseInsensitive(root, "pointId", out var pointElement) || pointElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(pointElement.GetString()))
+            {
+                error = "pointId is required.";
+                return null;
+            }
+
+            var clear = TryGetPropertyCaseInsensitive(root, "clear", out var clearElement) && clearElement.ValueKind == JsonValueKind.True;
+            object? value = null;
+            if (TryGetPropertyCaseInsensitive(root, "value", out var valueElement))
+            {
+                value = ExtractControlValue(valueElement);
+            }
+
+            return new ControlCommand(deviceElement.GetString()!, pointElement.GetString()!, value, clear);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return null;
+        }
+    }
+
+    private static bool TryGetPropertyCaseInsensitive(JsonElement element, string key, out JsonElement value)
+    {
+        if (element.TryGetProperty(key, out value))
+        {
+            return true;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static object? ExtractControlValue(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number => element.TryGetInt64(out var integer) ? integer : element.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            _ => element.GetRawText()
+        };
+    }
+
+    private sealed record ControlCommand(string DeviceId, string PointId, object? Value, bool Clear);
 }

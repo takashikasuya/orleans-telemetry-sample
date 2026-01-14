@@ -109,6 +109,18 @@ PointId をベースにした逆引きが難しい場合は、コネクタ自身
 > 例: `appsettings.json` では `BatchSize=100`、`ChannelCapacity=10000`、`Enabled` と `EventSinks:Enabled` を設定しています。【F:src/SiloHost/appsettings.json†L1-L20】
 > 既定値は `TelemetryIngestOptions` に定義されています。【F:src/Telemetry.Ingest/TelemetryIngestOptions.cs†L1-L17】
 
+## Publisher 制御コマンド
+
+- Publisher は `CONTROL_QUEUE`（既定: `telemetry-control`）を監視し、RabbitMQ 経由で JSON 制御コマンドを受け取ります。
+- ペイロード例:
+
+```json
+{ "deviceId": "ahu-01", "pointId": "supply-air-temp", "value": 22.3 }
+```
+
+- `clear: true` と送るとオーバーライドを解除できます（`value` は無視されます）。
+- RDF で `writable=true` とされたポイントにのみコマンドが適用され、値はクリアされるまで維持されます。
+
 ## コネクタ拡張方法
 
 1. **`ITelemetryIngestConnector` 実装**

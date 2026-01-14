@@ -552,6 +552,37 @@ Once this plan is implemented, the following enhancements are candidates for fut
 
 ## ExecPlan
 
+The following execution plan focuses on delivering the Next Steps outlined above, starting with the highest-impact simulator improvements and building toward observability enhancements.
+
+1. **Point Value Simulation Prototype**: Update the publisher's telemetry generator to produce deterministic time-series data (sinusoidal, ramp, or noise-modulated) for RDF point definitions; capture requirements for range-preserving randomness and document how point metadata drives the waveform.
+2. **Control Flow Hook**: Design and implement a simple control channel (e.g., a message queue or HTTP endpoint) that can send setpoint adjustments from APIs or test harnesses back to the publisher; wire the publisher to listen for these commands and apply them to writable points.
+3. **Multi-RDF Management**: Extend configuration/loader logic to accept multiple `RDF_SEED_PATH` entries (or a directory) and reconcile their equipment/point definitions; provide conflict resolution rules and update documentation accordingly.
+4. **Metrics & Observability Additions**: Instrument the publisher and relevant Orleans services with OpenTelemetry traces/metrics so that the new RDF-driven flows can be monitored; ensure metrics cover ingestion rate, payload errors, and control command latency.
+
+## Progress
+
+- [x] Point Value Simulation Prototype
+- [x] Control Flow Hook
+- [ ] Multi-RDF Management
+- [ ] Metrics & Observability Additions
+
+## Observations
+
+- `dotnet test src/Publisher.Tests` initially failed because MSBuild could not create temp files under the default sandboxed directories; rerunning the command with escalated permissions (`sandbox_permissions=require_escalated`) succeeded.
+- Publisher now listens on `telemetry-control` (configurable via `CONTROL_QUEUE`) and applies JSON overrides for writable RDF points while keeping the `_pointMetadata` payload intact.
+
+## Decisions
+
+- ExecPlan focuses on incremental work that can be validated via existing tests and instrumentation; no alternative approaches have been adopted yet.
+- Chose deterministic sine-wave-driven value generation with stable per-point seeds so ranges stay consistent and booleans follow predictable sequence offsets.
+- Control commands reuse the existing RabbitMQ stack (`telemetry-control` queue) rather than adding an HTTP endpoint, keeping the publisher lightweight and ensuring FIFO handling.
+
+## Retrospective
+
+- Awaiting implementation to record learnings and verification outcomes.
+
+## ExecPlan
+
 ### Purpose
 Capture the concrete work required to complete the "Next Steps" improvements by adding targeted tests and verification coverage tied to the current RDF-driven publisher behavior.
 
@@ -599,6 +630,7 @@ Capture the concrete work required to complete the "Next Steps" improvements by 
 - The new generator builds device/point definitions from the analyzer model and keeps metadata inside `_pointMetadata` while presenting primitive point values.
 - Added unit tests that cover device/point extraction, metadata exposure, and value generation behavior so future changes can be verified quickly.
 - The integration test `RdfPublisherTelemetry_IsVisibleThroughApi` injects normalized RDF telemetry via the Orleans router and confirms the API still exposes the expected point value while preserving the `_pointMetadata` payload.
+- The README records the specific `dotnet test` commands used for the generator and E2E checks so verification steps remain discoverable.
 
 ## Decisions
 

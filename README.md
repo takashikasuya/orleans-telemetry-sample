@@ -91,6 +91,22 @@ dotnet run --project src/Publisher
 - **Graph Seeding**
   - `RDF_SEED_PATH`: path to RDF file for graph initialization
   - `TENANT_ID`: tenant identifier (default: `default`)
+- **Publisher Control**
+  - `CONTROL_QUEUE`: RabbitMQ queue name listened to by the publisher for control commands (default: `telemetry-control`).
+  - Send a JSON payload such as:
+
+    ```json
+    { "deviceId": "ahu-01", "pointId": "supply-air-temp", "value": 22.3 }
+    ```
+
+    Use `rabbitmqadmin` or another RabbitMQ client to publish to the queue:
+
+    ```bash
+    docker exec mq rabbitmqadmin publish routing_key=telemetry-control payload='{"deviceId":"ahu-01","pointId":"supply-air-temp","value":22.3}'
+    ```
+
+  - Set `clear: true` to remove an override (`value` is ignored when `clear` is set).
+  - Only writable points (as defined in the RDF metadata) honor commands, and overrides stay active until cleared or replaced.
 
 ## Core Features
 
@@ -551,6 +567,12 @@ dotnet test
 dotnet test src/DataModel.Analyzer.Tests
 dotnet test src/Telemetry.Ingest.Tests
 dotnet test src/Telemetry.Storage.Tests
+dotnet test src/Publisher.Tests
+dotnet test src/Telemetry.E2E.Tests --filter RdfPublisherTelemetry_IsVisibleThroughApi
+```
+
+The publisher test suite covers RDF-aware telemetry generation, while the targeted E2E check seeds the Orleans graph, routes RDF-based telemetry through the router, and ensures `_pointMetadata` survives all the way to the API response.
+```
 ```
 
 ### Memory Load Test

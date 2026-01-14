@@ -51,13 +51,13 @@ internal sealed class RdfTelemetryGenerator
 
         foreach (var point in device.Points)
         {
-            var value = GenerateValue(point);
+            var value = GenerateValue(point, sequence);
             properties[point.PointId] = value;
             metadata[point.PointId] = new PointMetadata(
                 PointType: point.PointType,
                 Unit: point.Unit,
-                MinValue: point.MinPresValue,
-                MaxValue: point.MaxPresValue,
+                MinValue: point.MinPresValue ?? point.Simulation.MinValue,
+                MaxValue: point.MaxPresValue ?? point.Simulation.MaxValue,
                 Writable: point.Writable);
         }
 
@@ -76,19 +76,19 @@ internal sealed class RdfTelemetryGenerator
             SpaceId: device.SpaceId);
     }
 
-    private object GenerateValue(RdfPointDefinition point)
+    private object GenerateValue(RdfPointDefinition point, long sequence)
     {
         if (IsBoolean(point.Source))
         {
-            return _random.Next(2) == 0;
+            var offset = point.Simulation.BooleanOffset;
+            return ((sequence + offset) & 1) == 0;
         }
 
-        var (min, max) = ResolveRange(point);
-        var raw = min + _random.NextDouble() * (max - min);
+        var raw = point.Simulation.Evaluate(sequence);
         return Math.Round(raw, 3);
     }
 
-    private static (double Min, double Max) ResolveRange(RdfPointDefinition point)
+    private static (double Min, double Max) ResolveRange(Point point)
     {
         var min = point.MinPresValue ?? (point.MaxPresValue.HasValue ? point.MaxPresValue.Value - 10 : 0);
         var max = point.MaxPresValue ?? (point.MinPresValue.HasValue ? point.MinPresValue.Value + 10 : 100);
@@ -160,7 +160,8 @@ internal sealed class RdfTelemetryGenerator
             }
 
             usedPointIds.Add(uniquePointId);
-            pointDefinitions.Add(new RdfPointDefinition(point, uniquePointId));
+            var simulation = BuildPointSimulation(point, uniquePointId);
+            pointDefinitions.Add(new RdfPointDefinition(point, uniquePointId, simulation));
         }
 
         if (pointDefinitions.Count == 0)
@@ -254,14 +255,75 @@ internal sealed class RdfTelemetryGenerator
         return string.IsNullOrWhiteSpace(normalized) ? Guid.NewGuid().ToString("N") : normalized;
     }
 
+    private static PointSimulation BuildPointSimulation(Point point, string pointId)
+    {
+        var (min, max) = ResolveRange(point);
+        var rng = CreateDeterministicRandom(pointId);
+        var frequency = 0.01 + rng.NextDouble() * 0.04;
+        var amplitude = Math.Max((max - min) / 2, 0d);
+        var phase = rng.NextDouble();
+        var adjustedAmplitude = amplitude > 0 ? amplitude * 0.8 : 0;
+        var booleanOffset = rng.Next(0, 4);
+        return new PointSimulation(
+            BaseValue: (min + max) / 2,
+            Amplitude: adjustedAmplitude,
+            Frequency: adjustedAmplitude > 0 ? frequency : 0,
+            Phase: phase,
+            MinValue: min,
+            MaxValue: max,
+            BooleanOffset: booleanOffset);
+    }
+
+    private static Random CreateDeterministicRandom(string seedValue)
+    {
+        var hash = ComputeStableHash(seedValue);
+        if (hash == int.MinValue)
+        {
+            hash = int.MaxValue;
+        }
+
+        var seed = Math.Abs(hash);
+        return new Random(seed);
+    }
+
+    private static int ComputeStableHash(string value)
+    {
+        unchecked
+        {
+            const int multiplier = 31;
+            var hash = 7;
+            foreach (var ch in value)
+            {
+                hash = (hash * multiplier) + ch;
+            }
+
+            return hash;
+        }
+    }
+
+    internal sealed record PointSimulation(double BaseValue, double Amplitude, double Frequency, double Phase, double MinValue, double MaxValue, int BooleanOffset)
+    {
+        public double Evaluate(long sequence)
+        {
+            if (Amplitude <= 0 || Frequency <= 0)
+            {
+                return BaseValue;
+            }
+
+            var angle = 2 * Math.PI * (Frequency * sequence + Phase);
+            var raw = BaseValue + Amplitude * Math.Sin(angle);
+            return Math.Clamp(raw, MinValue, MaxValue);
+        }
+    }
+
     internal sealed record RdfDeviceDefinition(string DeviceId, string BuildingName, string SpaceId, IReadOnlyList<RdfPointDefinition> Points);
 
-    internal sealed record RdfPointDefinition(Point Source, string PointId)
+    internal sealed record RdfPointDefinition(Point Source, string PointId, PointSimulation Simulation)
     {
         public string PointType => Source.PointType ?? string.Empty;
         public string? Unit => Source.Unit;
-        public double? MinPresValue => Source.MinPresValue;
-        public double? MaxPresValue => Source.MaxPresValue;
+        public double? MinPresValue => Source.MinPresValue ?? Simulation.MinValue;
+        public double? MaxPresValue => Source.MaxPresValue ?? Simulation.MaxValue;
         public bool Writable => Source.Writable;
     }
 
