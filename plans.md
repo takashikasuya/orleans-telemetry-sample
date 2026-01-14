@@ -281,3 +281,330 @@ cd /home/takashi/projects/dotnet/orleans-telemetry-sample/scripts
 ## Retrospective
 
 *To be updated after completion.*
+
+---
+
+# plans.md: ApiGateway Test Coverage Expansion
+
+## Purpose
+
+Expand the test coverage of `ApiGateway` to achieve comprehensive validation of:
+1. **All major REST endpoints** (currently only partial coverage)
+2. **Error paths and boundary conditions** (404/410 responses, missing attributes, query limits)
+3. **Authentication and authorization** (JWT validation, tenant isolation, 401/403 responses)
+4. **gRPC DeviceService** (currently untested)
+
+Current state: E2E tests cover basic telemetry flow but do not systematically exercise all API paths or error handling branches.
+
+---
+
+## Current State Summary
+
+### Covered Endpoints (from E2E Tests)
+
+- `GET /api/nodes/{nodeId}` – Retrieves graph node metadata
+- `GET /api/nodes/{nodeId}/value` – Retrieves point value (happy path only)
+- `GET /api/devices/{deviceId}` – Retrieves device snapshot
+- `GET /api/telemetry/{deviceId}` – Queries telemetry with limit/pagination
+- `GET /api/registry/exports/{exportId}` – Downloads registry export (basic case)
+- `GET /api/telemetry/exports/{exportId}` – Downloads telemetry export (basic case)
+
+### Uncovered/Partially Covered Endpoints
+
+| Endpoint | Issue | Impact |
+|----------|-------|--------|
+| `GET /api/graph/traverse/{nodeId}` | No test coverage | Graph traversal logic untested |
+| `GET /api/registry/devices` | No error/boundary tests | limit, pagination behavior unknown |
+| `GET /api/registry/spaces` | No error/boundary tests | Returns Area nodes; limit not validated |
+| `GET /api/registry/points` | No error/boundary tests | Point enumeration untested |
+| `GET /api/registry/buildings` | No error/boundary tests | Building enumeration untested |
+| `GET /api/registry/sites` | No error/boundary tests | Site enumeration untested |
+| `GET /api/registry/exports/{exportId}` | Only 200 case | Missing 404/410 branches |
+| `GET /api/telemetry/exports/{exportId}` | Only 200 case | Missing 404/410 branches |
+| **gRPC DeviceService** | No test | Bidirectional streaming untested |
+
+### Uncovered Error Paths
+
+| Scenario | Current Status | Gap |
+|----------|----------------|-----|
+| `/api/nodes/{nodeId}` with missing PointId | Code has 404 branch | Test missing |
+| `/api/nodes/{nodeId}` with missing DeviceId | Code has 404 branch | Test missing |
+| `/api/nodes/{nodeId}/value` with invalid nodeId | 404 expected | Test missing |
+| `/api/registry/exports/{exportId}` – NotFound (404) | Code handles | Test missing |
+| `/api/registry/exports/{exportId}` – Expired (410) | Code handles | Test missing |
+| `/api/telemetry/exports/{exportId}` – NotFound (404) | Code handles | Test missing |
+| `/api/telemetry/exports/{exportId}` – Expired (410) | Code handles | Test missing |
+| Telemetry query with limit=0 | Boundary untested | Edge case unknown |
+| Telemetry query with very large limit | MaxInlineRecords threshold | Behavior unclear |
+| Unauthorized request (missing auth) | Middleware should reject | Not explicitly tested |
+| Wrong tenant in token | TenantResolver.ResolveTenant | Isolation not validated |
+
+### Authentication/Authorization Gaps
+
+- **Current approach**: `TestAuthHandler` mocks authentication; real JWT validation untested
+- **Missing validation**:
+  - JWT signature verification
+  - Token expiration handling
+  - Tenant claim extraction and validation
+  - Cross-tenant data isolation (ensure tenant-a cannot access tenant-b data)
+  - Missing/invalid Authorization header (401)
+  - Insufficient permissions scenarios (403)
+
+### Test Infrastructure
+
+**Unit Tests** (`src/ApiGateway.Tests/`):
+- `GraphRegistryServiceTests.cs` – Tests export creation and limit logic
+- No tests for error paths, auth, or other endpoints
+
+**E2E Tests** (`src/Telemetry.E2E.Tests/`):
+- `TelemetryE2ETests.cs` – Full pipeline from RDF seed to telemetry query
+- `ApiGatewayFactory.cs` – In-process API host with `TestAuthHandler`
+- `TestAuthHandler.cs` – Mock JWT validation (does not exercise real logic)
+
+---
+
+## Target Behavior
+
+1. **Complete endpoint coverage**: Every route in `Program.cs` has at least one passing test
+2. **Error handling**: 404, 410, 400, 401, 403 responses are explicitly tested
+3. **Boundary conditions**: Query limits, pagination, empty results validated
+4. **Tenant isolation**: Token tenant claim is correctly resolved and enforced
+5. **gRPC support**: DeviceService contract validation (connection, message exchange, error cases)
+6. **No regressions**: All existing tests pass; backward compatibility maintained
+
+---
+
+## Success Criteria
+
+1. **New test files/classes created**:
+   - `ApiGateway.Tests/GraphTraversalTests.cs` – `/api/graph/traverse` endpoint
+   - `ApiGateway.Tests/RegistryEndpointsTests.cs` – `/api/registry/*` endpoints with limits, pagination, errors
+   - `ApiGateway.Tests/TelemetryExportTests.cs` – `/api/telemetry/exports/{exportId}` 404/410 branches
+   - `ApiGateway.Tests/RegistryExportTests.cs` – `/api/registry/exports/{exportId}` 404/410 branches
+   - `ApiGateway.Tests/AuthenticationTests.cs` – Auth/authz, tenant isolation, 401/403 scenarios
+   - `ApiGateway.Tests/GrpcDeviceServiceTests.cs` – gRPC DeviceService contract, streaming, errors
+
+2. **Test counts**:
+   - Total: ≥20 new tests covering error paths, boundaries, and gRPC
+   - Each endpoint should have ≥1 happy path + ≥1 error case
+
+3. **Build & Test Pass**:
+   - `dotnet build` succeeds
+   - `dotnet test src/ApiGateway.Tests/` passes all new tests
+   - No regressions in existing tests
+
+4. **Coverage metrics** (aspirational):
+   - All routes in `Program.cs` (lines 110–280) have at least one test
+   - All error branches (`Results.NotFound()`, `Results.StatusCode()`) have at least one test
+
+---
+
+## Constraints (from AGENTS.md)
+
+1. **Local testing only**: Tests use xUnit + FluentAssertions; no external services
+2. **Mock gRPC**: For gRPC tests, use `Moq` to mock `IClusterClient` grain calls or in-process testing
+3. **No breaking changes**: Preserve existing API contracts; only add tests
+4. **Incremental approach**: Tests can be implemented in multiple PRs; this plan defines the roadmap
+
+---
+
+## Test Plan Breakdown
+
+### 1. Graph Traversal Tests (`GraphTraversalTests.cs`)
+
+**Endpoint**: `GET /api/graph/traverse/{nodeId}?depth=N&predicate=P`
+
+**Test Cases**:
+- Happy path: Traverse with depth 1, 2, 3 (should respect depth cap of 5)
+- Empty result: Valid nodeId with no outgoing edges
+- Invalid nodeId: 404 response
+- Out-of-range depth: depth > 5 capped to 5; depth < 0 treated as 0
+- Invalid predicate: Filtered edge type (e.g., "isPartOf") limits results
+- Null predicate: All edges returned
+- Tenant isolation: Different tenants see different graphs
+
+**Mocking Strategy**:
+- Mock `IClusterClient.GetGrain<IGraphNodeGrain>()` to return node snapshots with populated `OutgoingEdges`
+- Use `GraphTraversal` service directly; test traversal logic in isolation
+
+---
+
+### 2. Registry Endpoints Tests (`RegistryEndpointsTests.cs`)
+
+**Endpoints**: `/api/registry/devices`, `/api/registry/spaces`, `/api/registry/points`, `/api/registry/buildings`, `/api/registry/sites`
+
+**Test Cases per Endpoint**:
+- **Happy path**: Returns paginated list of nodes (inline mode when count ≤ maxInlineRecords)
+- **With limit**: `?limit=5` returns top 5 nodes (inline)
+- **Exceeds limit**: Node count > maxInlineRecords → export mode with URL
+- **Empty result**: No nodes of given type → empty inline response
+- **Negative limit**: Treated as 0 or error (boundary)
+- **Very large limit**: Behavior when limit > total count
+- **Tenant isolation**: Different tenants see only their own nodes
+
+**Mocking Strategy**:
+- Mock `IGraphIndexGrain.GetByTypeAsync()` to return node IDs
+- Mock `IGraphNodeGrain.GetAsync()` for snapshots
+- Use `RegistryExportService` to validate export creation
+
+---
+
+### 3. Telemetry Export Tests (`TelemetryExportTests.cs`)
+
+**Endpoint**: `GET /api/telemetry/exports/{exportId}`
+
+**Test Cases**:
+- **Happy path (200)**: Export ready → returns file stream with correct content-type
+- **NotFound (404)**: Non-existent exportId
+- **Expired (410)**: Export TTL exceeded
+- **Wrong tenant**: Export created by tenant-a; tenant-b tries to access → 404 or isolation check
+- **Malformed exportId**: Invalid format (security check)
+
+**Mocking Strategy**:
+- Mock `TelemetryExportService.TryOpenExportAsync()` to return different statuses
+- Create temporary export files or use in-memory streams
+
+---
+
+### 4. Registry Export Tests (`RegistryExportTests.cs`)
+
+**Endpoint**: `GET /api/registry/exports/{exportId}`
+
+**Test Cases**:
+- **Happy path (200)**: Export ready → returns file stream
+- **NotFound (404)**: Non-existent exportId
+- **Expired (410)**: Export TTL exceeded
+- **Wrong tenant**: Isolation validation
+- **Concurrent access**: Multiple requests to same exportId
+
+**Mocking Strategy**:
+- Similar to telemetry export tests
+- Mock `RegistryExportService.TryOpenExportAsync()`
+
+---
+
+### 5. Authentication & Authorization Tests (`AuthenticationTests.cs`)
+
+**Scenarios**:
+- **No Authorization header**: 401 Unauthorized
+- **Invalid JWT token**: 401 Unauthorized
+- **Expired token**: 401 Unauthorized (if validation implemented)
+- **Missing tenant claim**: Tenant resolver should handle gracefully
+- **Tenant isolation**: Token with `tenant=t1` cannot access data from `tenant=t2`
+  - Create nodes for t1 and t2
+  - Request as t1 should only see t1 nodes
+  - Request as t2 should only see t2 nodes
+- **Valid token, authorized**: Happy path with proper tenant claim
+- **Custom predicate validation**: If additional claims required (future)
+
+**Mocking Strategy**:
+- Use real JWT validation (not just `TestAuthHandler`)
+- Create signed tokens with different tenant claims
+- Or: Extend `TestAuthHandler` to support failing cases (token expiration, missing claim, etc.)
+
+**Note**: If real JWT setup is complex, initially test tenant isolation with `TestAuthHandler` setting different `TenantId` values; add real JWT tests later.
+
+---
+
+### 6. gRPC DeviceService Tests (`GrpcDeviceServiceTests.cs`)
+
+**Service**: `DeviceService` (implements `Device.DeviceServiceBase`)
+
+**Test Cases**:
+- **GetDevice (unary)**: Valid deviceId → returns device snapshot
+- **GetDevice (error)**: Invalid deviceId → gRPC error (NOT_FOUND)
+- **SubscribeToDeviceUpdates (server-side streaming)**: Subscribe to device; receive updates when device state changes
+- **Channel lifecycle**: Connect, receive messages, disconnect gracefully
+- **Tenant isolation**: gRPC calls respect tenant context
+- **Authentication**: gRPC metadata includes valid auth token
+
+**Mocking Strategy**:
+- Use `Grpc.Testing.GrpcTestFixture` or in-process gRPC testing
+- Mock `IClusterClient` to return device snapshots
+- For streaming, use Orleans memory streams if available, or mock stream subscriptions
+
+**Alternative (Simpler)**:
+- Test `DeviceService` methods directly without gRPC transport
+- Verify that `GetAsync()` calls are made correctly
+- Defer full gRPC transport testing to E2E (Docker Compose)
+
+---
+
+## Implementation Steps (Planning Only, Not Executed)
+
+1. **Create test files** in `src/ApiGateway.Tests/`:
+   - `GraphTraversalTests.cs`
+   - `RegistryEndpointsTests.cs`
+   - `TelemetryExportTests.cs`
+   - `RegistryExportTests.cs`
+   - `AuthenticationTests.cs`
+   - `GrpcDeviceServiceTests.cs`
+
+2. **Implement test cases** according to breakdown above:
+   - Use `xUnit` for test structure
+   - Use `FluentAssertions` for assertions
+   - Use `Moq` for mocking `IClusterClient`, services, etc.
+   - Leverage `ApiGatewayFactory` and `TestAuthHandler` from E2E tests
+
+3. **Verify builds and tests pass**:
+   - `dotnet build src/ApiGateway.Tests/ApiGateway.Tests.csproj`
+   - `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj`
+
+4. **Document test organization** in a new section of README or `docs/` if needed
+
+5. **Future**: Integrate new tests into CI pipeline (if applicable)
+
+---
+
+## Progress
+
+- [x] Create `GraphTraversalTests.cs` with ≥5 test cases
+- [ ] Create `RegistryEndpointsTests.cs` with ≥10 test cases (2 per endpoint)
+- [x] Create `TelemetryExportTests.cs` with ≥5 test cases
+- [ ] Create `RegistryExportTests.cs` with ≥5 test cases
+- [ ] Create `AuthenticationTests.cs` with ≥5 test cases
+- [ ] Create `GrpcDeviceServiceTests.cs` with ≥3 test cases
+- [x] Run `dotnet test` to verify all new tests pass
+- [x] Verify no regressions in existing tests
+
+Registry endpoint coverage: added `RegistryEndpointsTests.cs` that exercises each registry node type plus limit/export behaviors, leaving room for more cases to reach the planned test count.
+
+---
+
+## Observations
+
+- `GraphTraversal` performs breadth-first traversal, honoring the requested depth and optional predicate filter. The new tests verify depth bounds, predicate filtering, zero-depth behavior, cycle handling, and that deeply nested nodes are included when the depth allows.
+- `GraphRegistryTestHelper` consolidates the cluster/registry mocks. `RegistryEndpointsTests.cs` now ensures each registry endpoint’s node type is handled, along with limit boundaries and export branching.
+- `TelemetryExportEndpoint` wraps `/api/telemetry/exports/{exportId}` logic, and `TelemetryExportEndpointTests.cs` covers 404/410/200 response branches with a real export file flow.
+- Authentication coverage now uses `ApiGatewayTestFactory` with `TestAuthHandler` and an `Orleans__DisableClient` toggle so the in-process server exercises 401 responses and tenant-based grain resolution without connecting to an Orleans silo.
+
+---
+
+## Decisions
+
+**Scope Definition**:
+- Focus on unit/integration tests in `ApiGateway.Tests/`; defer full gRPC transport testing to E2E if needed
+- Use mocked dependencies to avoid starting a full Orleans silo in unit tests
+- Test tenant isolation at the API layer (request context); Orleans grain isolation tested separately
+
+- **Test Infrastructure**:
+- Leverage existing `TestAuthHandler` and `ApiGatewayFactory` for consistency
+- Create helper methods for common setup (e.g., mock cluster, create test requests)
+- Introduce `ApiGatewayTestFactory` and `TestAuthHandler` within `ApiGateway.Tests` so authentication behavior can be exercised without hitting RabbitMQ/Orleans dependencies.
+- Use `Orleans__DisableClient` environment variable (and config overrides) to skip `UseOrleansClient` during HTTP-based tests.
+- Introduce `GraphRegistryTestHelper` so GraphRegistryService and registry endpoint tests share cluster/export wiring without duplication
+- Add `TelemetryExportEndpoint` to isolate HTTP result creation so the new endpoint tests can call it directly without wiring the entire Program.
+
+**Design Notes**:
+- Start coverage by exercising `GraphTraversal` directly so tests remain deterministic and do not require Orleans/HTTP plumbing before covering the higher-level endpoints.
+
+**Priority**:
+- High: Graph traversal, registry endpoints, export error paths (404/410)
+- Medium: Authentication/authorization (tenant isolation)
+- Low: Full gRPC streaming (defer to E2E)
+
+---
+
+## Retrospective
+
+*To be filled after implementation.*

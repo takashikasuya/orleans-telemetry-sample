@@ -5,6 +5,7 @@ using ApiGateway.Telemetry;
 using Grains.Abstractions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Orleans;
 using Telemetry.Storage;
@@ -67,21 +68,25 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // Configure Orleans client
-var orleansHost = builder.Configuration["Orleans:GatewayHost"] ?? "127.0.0.1";
-var orleansPort = int.TryParse(builder.Configuration["Orleans:GatewayPort"], out var parsedPort) ? parsedPort : 30000;
-var orleansAddresses = Dns.GetHostAddresses(orleansHost);
-var orleansAddress = orleansAddresses.Length > 0 ? orleansAddresses[0] : IPAddress.Loopback;
-
-builder.Host.UseOrleansClient(client =>
+var disableOrleansClient = builder.Configuration.GetValue<bool>("Orleans:DisableClient", false);
+if (!disableOrleansClient)
 {
-    client.UseStaticClustering(new IPEndPoint(orleansAddress, orleansPort));
-    client.Configure<Orleans.Configuration.ClusterOptions>(opts =>
+    var orleansHost = builder.Configuration["Orleans:GatewayHost"] ?? "127.0.0.1";
+    var orleansPort = int.TryParse(builder.Configuration["Orleans:GatewayPort"], out var parsedPort) ? parsedPort : 30000;
+    var orleansAddresses = Dns.GetHostAddresses(orleansHost);
+    var orleansAddress = orleansAddresses.Length > 0 ? orleansAddresses[0] : IPAddress.Loopback;
+
+    builder.Host.UseOrleansClient(client =>
     {
-        opts.ClusterId = "telemetry-cluster";
-        opts.ServiceId = "telemetry-service";
+        client.UseStaticClustering(new IPEndPoint(orleansAddress, orleansPort));
+        client.Configure<Orleans.Configuration.ClusterOptions>(opts =>
+        {
+            opts.ClusterId = "telemetry-cluster";
+            opts.ServiceId = "telemetry-service";
+        });
+        client.AddMemoryStreams("DeviceUpdates");
     });
-    client.AddMemoryStreams("DeviceUpdates");
-});
+}
 
 var app = builder.Build();
 
@@ -279,22 +284,7 @@ app.MapGet("/api/telemetry/exports/{exportId}", async (
     TelemetryExportService exports,
     HttpContext http) =>
 {
-    var tenant = TenantResolver.ResolveTenant(http);
-    var result = await exports.TryOpenExportAsync(exportId, tenant, DateTimeOffset.UtcNow, http.RequestAborted);
-    if (result.Status == TelemetryExportOpenStatus.NotFound)
-    {
-        return Results.NotFound();
-    }
-
-    if (result.Status == TelemetryExportOpenStatus.Expired)
-    {
-        return Results.StatusCode(StatusCodes.Status410Gone);
-    }
-
-    return Results.File(
-        result.Stream!,
-        result.Metadata!.ContentType,
-        $"telemetry_{result.Metadata.ExportId}.jsonl");
+    return await TelemetryExportEndpoint.HandleOpenExportAsync(exportId, exports, http, DateTimeOffset.UtcNow);
 }).RequireAuthorization();
 
 // gRPC endpoints
