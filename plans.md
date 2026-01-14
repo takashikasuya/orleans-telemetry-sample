@@ -17,17 +17,20 @@ Document how the recent changes under `src/DataModel.Analyzer/Models/BuildingDat
 5. **Verify end-to-end behavior** – after touching code/tests, run `dotnet build`, run the relevant `dotnet test` suite, and exercise `docker compose up --build` to ensure the analyzer, exporter, and Orleans host initialize without errors. Validate the Swagger endpoint at `http://localhost:8080/swagger` and one Graph/point query (per `docs/telemetry-routing-binding.md`) to confirm the newer model still drives the ingestion/graph layers.
 
 ## Progress
-- [ ] Baseline the updated data model versus schema/docs.
-- [ ] Audit `RdfAnalyzerService` extraction hierarchies.
-- [ ] Review export/integration logic and graph seeding.
-- [ ] Update failing tests and documentation.
+- [x] Baseline the updated data model versus schema/docs.
+- [x] Audit `RdfAnalyzerService` extraction hierarchies.
+- [x] Review export/integration logic and graph seeding.
+- [x] Update failing tests and documentation.
 - [ ] Run build/test/compose verifications.
 
 ## Observations
-- TBD after running inspections and tests.
+- Analyzer already computed location/point hierarchies via `CustomProperties`, but `Equipment.Feeds` and `IsFedBy` were empty so graph seeding never emitted those edges; the new extractor now reads `brick:feeds` and `sbco/rec:isFedBy`.
+- The Turtle/N-Triples/JSON-LD fixtures in `RdfAnalyzerServiceTests` now include feed relationships and assert the lists so SAX and SHACL can be exercised across formats.
+- `README.md`’s Graph model section now mentions the feed edge types so documentation reflects what Orleans integration and the graph seeding layer expect.
 
 ## Decisions
 - Treat `src/DataModel.Analyzer/Schema` and `src/DataModel.Analyzer/Models` as the definitive structure when resolving discrepancies rather than external docs.
+- Derive `Equipment.Feeds` from `brick:feeds` and `IsFedBy` from the `sbco`/`rec` predicates so OrleansIntegration can always emit the expected edges; filter blank strings and run through `Distinct()` to avoid crosstalk.
 
 ## Retrospective
-- TODO: capture what we learned and how the verification turned out once the plan executes.
+- `dotnet build`/`dotnet test` currently fail before emitting errors because MSBuild cannot create temporary directories (`System.UnauthorizedAccessException: Access to the path is denied`). The sandbox forbids creating new `/tmp` entries, so the verification commands need to run in an environment where MSBuild can allocate its temp cache.

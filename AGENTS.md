@@ -88,12 +88,12 @@ Refer to these for structural context before modifying code.
 1. **Automated Tests**
    - Run all unit tests with the default dotnet test.
    - Document any new tests required for new functionality.
-2. **Integration Verification**
+2. **Integration Verification (Local Only)**
    - Confirm that Docker Compose stack starts without errors.
    - Validate REST endpoints via Swagger client.
    - Validate telemetry ingestion by injecting sample telemetry and confirming device grain state updates (as observable through API).
 
-Agents must document verification steps in plans.md (see below).
+Agents must clearly document which verification steps were executed by the agent and which require local execution.
 
 ---
 
@@ -123,9 +123,15 @@ Agents must treat plans.md as the primary source of truth for task direction and
 
 ---
 
+## Allowed External Access
+
+Agents **may** access the following external resources for standard development tasks:
+- **NuGet package registry** (`nuget.org`) for restoring and updating .NET dependencies via `dotnet restore`, `dotnet build`, or `dotnet add package`.
+- **Docker image registries** (Docker Hub, `mcr.microsoft.com`, etc.) for pulling base images and dependencies required by `docker compose` or `Dockerfile`.
+
 ## Do Not
 
-- Access external networks (services, APIs) without explicit instruction.
+- Access other external networks (web services, APIs, third-party data sources) without explicit instruction.
 - Make environment or platform configuration changes unless required to achieve clear success conditions.
 - Modify CI workflows without explicit permission.
 

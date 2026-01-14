@@ -478,6 +478,24 @@ public class RdfAnalyzerService
                 StoreStringList(equipment.CustomProperties, "pointUris", pointUris);
             }
 
+            var feedUris = GetObjectUris(graph, subject, new[] { $"{BrickNamespace}feeds" })
+                .Where(uri => !string.IsNullOrWhiteSpace(uri))
+                .Distinct()
+                .ToList();
+            if (feedUris.Count > 0)
+            {
+                equipment.Feeds.AddRange(feedUris);
+            }
+
+            var fedByUris = GetObjectUris(graph, subject, new[] { $"{SbcoNamespace}isFedBy", $"{RecNamespace}isFedBy" })
+                .Where(uri => !string.IsNullOrWhiteSpace(uri))
+                .Distinct()
+                .ToList();
+            if (fedByUris.Count > 0)
+            {
+                equipment.IsFedBy.AddRange(fedByUris);
+            }
+
             var locatedInUris = GetObjectUris(graph, subject, new[] { $"{SbcoNamespace}locatedIn", $"{RecNamespace}locatedIn" });
             if (locatedInUris.Count > 0)
             {

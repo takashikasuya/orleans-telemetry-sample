@@ -244,8 +244,10 @@ storage/
 Query building topology using RDF-based graph model:
 
 - **Nodes**: spaces, devices, points, any custom entity
-- **Edges**: relationships (hasArea, contains, measures, etc.)
+- **Edges**: relationships (hasArea, contains, feeds/isFedBy, measures, etc.)
 - **Values**: bind telemetry or custom data to any node
+
+Edges such as `brick:feeds` and `sbco:isFedBy`/`rec:isFedBy` come directly from the RDF seed so equipment links land as graph edges.
 
 #### API Endpoints
 

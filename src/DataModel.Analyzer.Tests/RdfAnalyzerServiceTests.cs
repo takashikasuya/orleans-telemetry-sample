@@ -21,6 +21,7 @@ public class RdfAnalyzerServiceTests
     {
         var ttl = @"@prefix sbco: <https://www.sbco.or.jp/ont/> .
 @prefix rec: <https://w3id.org/rec/> .
+@prefix brick: <https://brickschema.org/schema/Brick#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 <http://example.org/#site1> a sbco:Site ;
@@ -57,6 +58,8 @@ _:buildingId1 a sbco:KeyStringMapEntry ;
   sbco:name ""Device 1"" ;
   sbco:id ""EQP_1"" ;
   sbco:assetTag ""AT-1"" ;
+  brick:feeds <http://example.org/#eq-feed> ;
+  sbco:isFedBy <http://example.org/#eq-fedby> ;
   sbco:hasPoint <http://example.org/#p1> .
 
 <http://example.org/#p1> a sbco:Point ;
@@ -114,6 +117,8 @@ _:buildingId1 a sbco:KeyStringMapEntry ;
 <http://example.org/#eq1> <https://www.sbco.or.jp/ont/id> ""EQP_1"" .
 <http://example.org/#eq1> <https://www.sbco.or.jp/ont/assetTag> ""AT-1"" .
 <http://example.org/#eq1> <https://www.sbco.or.jp/ont/hasPoint> <http://example.org/#p1> .
+<http://example.org/#eq1> <https://brickschema.org/schema/Brick#feeds> <http://example.org/#eq-feed> .
+<http://example.org/#eq1> <https://www.sbco.or.jp/ont/isFedBy> <http://example.org/#eq-fedby> .
 <http://example.org/#p1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://www.sbco.or.jp/ont/Point> .
 <http://example.org/#p1> <https://www.sbco.or.jp/ont/name> ""Point 1"" .
 <http://example.org/#p1> <https://www.sbco.or.jp/ont/id> ""PNT_1"" .
@@ -177,7 +182,8 @@ _:siteId1 <https://www.sbco.or.jp/ont/value> ""SITE-001"" .
   "@context": {
     "sbco": "https://www.sbco.or.jp/ont/",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "rec": "https://w3id.org/rec/"
+    "rec": "https://w3id.org/rec/",
+    "brick": "https://brickschema.org/schema/Brick#"
   },
   "@graph": [
     {
@@ -222,6 +228,8 @@ _:siteId1 <https://www.sbco.or.jp/ont/value> ""SITE-001"" .
       "sbco:name": "Device 1",
       "sbco:id": "EQP_1",
       "sbco:assetTag": "AT-1",
+      "brick:feeds": { "@id": "http://example.org/#eq-feed" },
+      "sbco:isFedBy": { "@id": "http://example.org/#eq-fedby" },
       "sbco:hasPoint": { "@id": "http://example.org/#p1" }
     },
     {
@@ -334,6 +342,8 @@ _:siteId1 <https://www.sbco.or.jp/ont/value> ""SITE-001"" .
         var equipment = area.Equipment[0];
         equipment.Name.Should().Be("Device 1");
         equipment.AssetTag.Should().Be("AT-1");
+        equipment.Feeds.Should().ContainSingle().Which.Should().Be("http://example.org/#eq-feed");
+        equipment.IsFedBy.Should().ContainSingle().Which.Should().Be("http://example.org/#eq-fedby");
         equipment.Points.Should().ContainSingle();
 
         var point = equipment.Points[0];
