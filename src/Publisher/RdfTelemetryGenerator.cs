@@ -9,7 +9,7 @@ namespace Publisher;
 
 internal sealed class RdfTelemetryGenerator
 {
-    private const string MetadataKey = "_pointMetadata";
+    internal const string MetadataKey = "_pointMetadata";
     private static readonly string[] BooleanKeywords =
     {
         "binary",

@@ -1,8 +1,12 @@
+using System.Collections;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Text.Json;
 using DataModel.Analyzer.Extensions;
+using DataModel.Analyzer.Services;
 using FluentAssertions;
 using Grains.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -13,6 +17,7 @@ using Telemetry.Ingest.Kafka;
 using Telemetry.Ingest.RabbitMq;
 using Telemetry.Ingest.Simulator;
 using Telemetry.Storage;
+using Publisher;
 using Xunit;
 
 namespace Telemetry.E2E.Tests;
@@ -181,6 +186,137 @@ public sealed class TelemetryE2ETests
             Environment.SetEnvironmentVariable("RDF_SEED_PATH", null);
             Environment.SetEnvironmentVariable("TENANT_ID", null);
         }
+    }
+
+    [Fact]
+    public async Task RdfPublisherTelemetry_IsVisibleThroughApi()
+    {
+        var options = LoadOptions();
+        IHost? siloHost = null;
+        ApiGatewayFactory? apiFactory = null;
+
+        try
+        {
+            var tenantId = "t1";
+            var rdfPath = Path.Combine(AppContext.BaseDirectory, "seed.ttl");
+            Environment.SetEnvironmentVariable("RDF_SEED_PATH", rdfPath);
+            Environment.SetEnvironmentVariable("TENANT_ID", tenantId);
+
+            var tempRoot = CreateTempDirectory();
+            var stageRoot = Path.Combine(tempRoot, "stage");
+            var parquetRoot = Path.Combine(tempRoot, "parquet");
+            var indexRoot = Path.Combine(tempRoot, "index");
+            Directory.CreateDirectory(stageRoot);
+            Directory.CreateDirectory(parquetRoot);
+            Directory.CreateDirectory(indexRoot);
+
+            var simulatorConfig = new TelemetryE2ESimulatorConfig
+            {
+                TenantId = tenantId,
+                BuildingName = "building",
+                SpaceId = "space",
+                DeviceIdPrefix = "device",
+                DeviceCount = 1,
+                PointsPerDevice = 1,
+                IntervalMilliseconds = 500
+            };
+
+            var siloConfig = BuildSiloConfig(stageRoot, parquetRoot, indexRoot, simulatorConfig);
+            siloHost = CreateSiloHost(siloConfig);
+            await siloHost.StartAsync();
+
+            var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot);
+            apiFactory = new ApiGatewayFactory(apiConfig);
+            using var client = apiFactory.CreateClient();
+
+            var analyzer = new RdfAnalyzerService(NullLogger<RdfAnalyzerService>.Instance);
+            var model = await analyzer.AnalyzeRdfFileAsync(rdfPath);
+            var generator = new RdfTelemetryGenerator(model);
+            var device = generator.Devices.First();
+            var telemetry = generator.CreateTelemetry(tenantId, device, 1);
+
+            var router = siloHost.Services.GetRequiredService<IGrainFactory>().GetGrain<ITelemetryRouterGrain>(Guid.Empty);
+            foreach (var property in telemetry.Properties)
+            {
+                var value = property.Key == RdfTelemetryGenerator.MetadataKey
+                    ? NormalizeMetadata(property.Value)
+                    : property.Value;
+
+                var pointMsg = new TelemetryPointMsg
+                {
+                    TenantId = telemetry.TenantId,
+                    BuildingName = telemetry.BuildingName,
+                    SpaceId = telemetry.SpaceId,
+                    DeviceId = telemetry.DeviceId,
+                    PointId = property.Key,
+                    Sequence = telemetry.Sequence,
+                    Timestamp = telemetry.Timestamp,
+                    Value = value
+                };
+
+                await router.RouteAsync(pointMsg);
+            }
+
+            var timeout = TimeSpan.FromSeconds(options.WaitTimeoutSeconds);
+            var snapshot = await WaitForDeviceSnapshotAsync(client, device.DeviceId, telemetry.Sequence, timeout);
+
+            using var propsDoc = JsonDocument.Parse(snapshot.PropertiesJson);
+            propsDoc.RootElement.TryGetProperty(device.Points.First().PointId, out _).Should().BeTrue();
+
+            telemetry.Properties.Should().ContainKey(RdfTelemetryGenerator.MetadataKey);
+            var metadata = telemetry.Properties[RdfTelemetryGenerator.MetadataKey] as IDictionary;
+            metadata.Should().NotBeNull();
+            metadata!.Contains(device.Points.First().PointId).Should().BeTrue();
+            var metadataEntry = metadata[device.Points.First().PointId];
+            var pointTypeProperty = metadataEntry?.GetType().GetProperty("PointType");
+            pointTypeProperty?.GetValue(metadataEntry)?.Should().Be(device.Points.First().PointType);
+        }
+        finally
+        {
+            if (apiFactory is not null)
+            {
+                apiFactory.Dispose();
+            }
+
+            if (siloHost is not null)
+            {
+                await siloHost.StopAsync();
+                siloHost.Dispose();
+            }
+
+            Environment.SetEnvironmentVariable("RDF_SEED_PATH", null);
+            Environment.SetEnvironmentVariable("TENANT_ID", null);
+        }
+    }
+
+    private static object NormalizeMetadata(object value)
+    {
+        if (value is not IDictionary metadata)
+        {
+            return value;
+        }
+
+        var result = new Dictionary<string, object>();
+        foreach (DictionaryEntry entry in metadata)
+        {
+            var key = entry.Key?.ToString() ?? string.Empty;
+            var entryValue = entry.Value;
+            if (entryValue is null)
+            {
+                result[key] = null!;
+                continue;
+            }
+
+            var valueDict = new Dictionary<string, object?>();
+            foreach (var property in entryValue.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                valueDict[property.Name] = property.GetValue(entryValue);
+            }
+
+            result[key] = valueDict;
+        }
+
+        return result;
     }
 
     private static TelemetryE2EReportOptions LoadOptions()

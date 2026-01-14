@@ -550,6 +550,31 @@ Once this plan is implemented, the following enhancements are candidates for fut
 - **Multi-RDF Support**: Load multiple RDF files or incremental RDF updates.
 - **Metrics and Observability**: Add OpenTelemetry instrumentation to publisher and Orleans pipeline.
 
+## ExecPlan
+
+### Purpose
+Capture the concrete work required to complete the "Next Steps" improvements by adding targeted tests and verification coverage tied to the current RDF-driven publisher behavior.
+
+### Tasks
+1. **Unit tests** – Add `RdfTelemetryGeneratorTests` (or extend the appropriate publisher test project) to validate device/point extraction, metadata enrichment, and value generation boundaries from `BuildingDataModel`.
+2. **Integration/E2E tests** – Expand `Telemetry.E2E.Tests` (and any helper scripts) to run the publisher with `RDF_SEED_PATH`, exercise the Orleans/RabbitMQ stack, and assert that published telemetry and metadata appear through the API.
+3. **Verification artifacts** – Document how to run the new tests (dotnet commands, Docker Compose flows) and capture any required shell helpers/scripts.
+
+### Verification
+- `dotnet test src/Publisher.Tests` (or whichever test project hosts the generator tests) must pass.
+- `dotnet test src/Telemetry.E2E.Tests --filter RdfPublisher` (or similar) should succeed after seeding the RDF and running the publisher.
+- Provide notes on any manual Docker Compose steps used for API validation.
+
+### Progress
+- [x] Task 1 – Implement unit tests covering `RdfTelemetryGenerator`.
+- [x] Task 2 – Extend integration/E2E tests to run the RDF-driven publisher and validate API visibility.
+- [ ] Task 3 – Document verification commands and any helper scripts.
+
+### Decisions
+- Tests should reuse existing RDF seeds (`src/Telemetry.E2E.Tests/seed.ttl`) where possible to keep configuration aligned with the publisher’s runtime expectations.
+- If Docker Compose is required for the E2E flow, keep volume mounts consistent with the `RDF_SEED_PATH` conventions already documented.
+- The publisher assembly exposes an `InternalsVisibleTo("Publisher.Tests")` attribute so the new generator tests can exercise device/point definitions without expanding the public API surface.
+
 ## Success Criteria
 
 - Publisher can load `RDF_SEED_PATH`, parse the RDF via `RdfAnalyzerService`, and report the device/point counts at startup.
@@ -572,12 +597,16 @@ Once this plan is implemented, the following enhancements are candidates for fut
 
 - Publisher now logs RDF load outcomes and drops back to the legacy random generator whenever the seed file is absent or invalid.
 - The new generator builds device/point definitions from the analyzer model and keeps metadata inside `_pointMetadata` while presenting primitive point values.
+- Added unit tests that cover device/point extraction, metadata exposure, and value generation behavior so future changes can be verified quickly.
+- The integration test `RdfPublisherTelemetry_IsVisibleThroughApi` injects normalized RDF telemetry via the Orleans router and confirms the API still exposes the expected point value while preserving the `_pointMetadata` payload.
 
 ## Decisions
 
 - Metadata will be communicated via a reserved `_pointMetadata` dictionary entry so existing consumers still see primitive point values while metadata stays accessible.
 - Device IDs without an explicit `DeviceId` will fallback to a sanitized form of the equipment URI/name so telemetry remains deterministic.
 - Boolean points are detected heuristically via keyword matching (`Binary`, `Boolean`, `Switch`, etc.) while all other points default to constrained numeric values derived from `MinPresValue`/`MaxPresValue`.
+- Added an `InternalsVisibleTo("Publisher.Tests")` assembly attribute so generator internals can be exercised by the new unit tests without enlarging the public API.
+- Normalizing `_pointMetadata` entries to lightweight dictionaries before routing telemetry prevents Orleans serializer errors while keeping metadata accessible downstream.
 
 ## Retrospective
 
