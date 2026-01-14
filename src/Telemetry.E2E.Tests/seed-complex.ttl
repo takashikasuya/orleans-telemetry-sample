@@ -1,0 +1,375 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rec: <http://www.w3.org/ns/lode/> .
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix sbco: <https://www.sbco.or.jp/ont/> .
+
+# ============================================
+# SITE
+# ============================================
+<urn:site-tokyo> a sbco:Site ;
+    sbco:id "site-tokyo" ;
+    sbco:name "Tokyo Technology Center" ;
+    rec:description "Main office and R&D facility in Tokyo" ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "site_code" ;
+            sbco:value "SITE-001" ]
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "location" ;
+            sbco:value "Tokyo, Japan" ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "is_primary" ;
+            sbco:value true ]
+    ) .
+
+# ============================================
+# BUILDING 1: Main Office
+# ============================================
+<urn:building-main> a sbco:Building ;
+    sbco:id "building-main" ;
+    sbco:name "Main Office Building" ;
+    rec:description "Primary office building with 5 floors" ;
+    rec:isPartOf <urn:site-tokyo> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "building_code" ;
+            sbco:value "BLD-001" ]
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "address" ;
+            sbco:value "1-2-3 Chiyoda, Tokyo" ]
+    ) ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "construction" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "year" ;
+                    sbco:value "2015" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "material" ;
+                    sbco:value "steel_concrete" ]
+            ) ]
+    ) .
+
+# ============================================
+# BUILDING 2: Lab Building
+# ============================================
+<urn:building-lab> a sbco:Building ;
+    sbco:id "building-lab" ;
+    sbco:name "Research Lab Building" ;
+    rec:description "Dedicated research and development facility" ;
+    rec:isPartOf <urn:site-tokyo> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "building_code" ;
+            sbco:value "BLD-002" ]
+    ) .
+
+# ============================================
+# LEVEL 1.1: Main Building - Floor 1
+# ============================================
+<urn:level-main-1> a sbco:Level ;
+    sbco:id "level-main-1" ;
+    sbco:name "Ground Floor" ;
+    rec:description "Lobby and public spaces" ;
+    rec:isPartOf <urn:building-main> ;
+    rec:levelNumber 1 ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "floor_code" ;
+            sbco:value "F01" ]
+    ) .
+
+# ============================================
+# LEVEL 1.2: Main Building - Floor 2
+# ============================================
+<urn:level-main-2> a sbco:Level ;
+    sbco:id "level-main-2" ;
+    sbco:name "Second Floor" ;
+    rec:description "Executive offices and meeting rooms" ;
+    rec:isPartOf <urn:building-main> ;
+    rec:levelNumber 2 ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "floor_code" ;
+            sbco:value "F02" ]
+    ) .
+
+# ============================================
+# LEVEL 2.1: Lab Building - Floor 1
+# ============================================
+<urn:level-lab-1> a sbco:Level ;
+    sbco:id "level-lab-1" ;
+    sbco:name "Lab Floor 1" ;
+    rec:description "Experimental laboratories" ;
+    rec:isPartOf <urn:building-lab> ;
+    rec:levelNumber 1 ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "floor_code" ;
+            sbco:value "L01" ]
+    ) .
+
+# ============================================
+# AREA 1.1.1: Main F1 - Lobby
+# ============================================
+<urn:area-main-f1-lobby> a sbco:Area ;
+    sbco:id "area-main-f1-lobby" ;
+    sbco:name "Main Lobby" ;
+    rec:description "Reception and main entrance lobby" ;
+    rec:isPartOf <urn:level-main-1> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "area_code" ;
+            sbco:value "A101" ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "public_access" ;
+            sbco:value true ]
+    ) .
+
+# ============================================
+# AREA 1.2.1: Main F2 - Server Room
+# ============================================
+<urn:area-main-f2-server> a sbco:Area ;
+    sbco:id "area-main-f2-server" ;
+    sbco:name "Server Room" ;
+    rec:description "Data center and IT infrastructure" ;
+    rec:isPartOf <urn:level-main-2> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "area_code" ;
+            sbco:value "A201" ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "restricted_access" ;
+            sbco:value true ]
+    ) .
+
+# ============================================
+# AREA 2.1.1: Lab F1 - Experiment Room A
+# ============================================
+<urn:area-lab-f1-exp-a> a sbco:Area ;
+    sbco:id "area-lab-f1-exp-a" ;
+    sbco:name "Experiment Room A" ;
+    rec:description "Temperature and humidity controlled lab space" ;
+    rec:isPartOf <urn:level-lab-1> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "area_code" ;
+            sbco:value "LA01" ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "climate_controlled" ;
+            sbco:value true ]
+    ) .
+
+# ============================================
+# EQUIPMENT: HVAC System (Main F1 Lobby)
+# ============================================
+<urn:equipment-hvac-f1> a sbco:Equipment ;
+    sbco:id "equipment-hvac-f1" ;
+    sbco:name "HVAC Unit F1" ;
+    rec:description "Air handling unit for Floor 1" ;
+    rec:isPartOf <urn:area-main-f1-lobby> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "equipment_code" ;
+            sbco:value "AHU-F1-001" ]
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "model" ;
+            sbco:value "Carrier AquaEdge 19DV" ]
+    ) ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "specs" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "capacity_kw" ;
+                    sbco:value "50" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "manufacturer" ;
+                    sbco:value "Carrier" ]
+            ) ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "monitored" ;
+            sbco:value true ]
+    ) .
+
+# ============================================
+# EQUIPMENT: Server Rack (Main F2 Server Room)
+# ============================================
+<urn:equipment-server-rack> a sbco:Equipment ;
+    sbco:id "equipment-server-rack" ;
+    sbco:name "Server Rack A" ;
+    rec:description "Primary server rack in data center" ;
+    rec:isPartOf <urn:area-main-f2-server> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "equipment_code" ;
+            sbco:value "SRV-F2-001" ]
+    ) .
+
+# ============================================
+# EQUIPMENT: Lab Incubator (Lab F1)
+# ============================================
+<urn:equipment-incubator> a sbco:Equipment ;
+    sbco:id "equipment-incubator" ;
+    sbco:name "Temperature Incubator" ;
+    rec:description "Precision temperature control chamber for experiments" ;
+    rec:isPartOf <urn:area-lab-f1-exp-a> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "equipment_code" ;
+            sbco:value "LAB-INC-001" ]
+    ) ;
+    brick:feeds <urn:equipment-chiller> ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "critical" ;
+            sbco:value true ]
+    ) .
+
+# ============================================
+# EQUIPMENT: Chiller (Lab F1)
+# ============================================
+<urn:equipment-chiller> a sbco:Equipment ;
+    sbco:id "equipment-chiller" ;
+    sbco:name "Lab Chiller Unit" ;
+    rec:description "Cooling unit supporting incubator" ;
+    rec:isPartOf <urn:area-lab-f1-exp-a> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "equipment_code" ;
+            sbco:value "LAB-CHIL-001" ]
+    ) .
+
+# ============================================
+# POINTS: HVAC Temperature Sensor
+# ============================================
+<urn:point-hvac-temp> a sbco:PointExt ;
+    sbco:id "point-hvac-temp" ;
+    sbco:name "HVAC Supply Temperature" ;
+    rec:description "Discharge air temperature from HVAC unit" ;
+    sbco:pointType "Temperature" ;
+    sbco:unit "celsius" ;
+    sbco:aggregate <https://www.sbco.or.jp/ont/AggregateEnum#average> ;
+    brick:isPointOf <urn:equipment-hvac-f1> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "point_code" ;
+            sbco:value "TEMP-F1-001" ]
+    ) ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "sensor_info" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "sensor_type" ;
+                    sbco:value "PT100_RTD" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "accuracy" ;
+                    sbco:value "±0.5°C" ]
+            ) ]
+    ) ;
+    sbco:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "is_writable" ;
+            sbco:value false ]
+    ) .
+
+# ============================================
+# POINTS: HVAC Humidity Sensor
+# ============================================
+<urn:point-hvac-humidity> a sbco:PointExt ;
+    sbco:id "point-hvac-humidity" ;
+    sbco:name "HVAC Supply Humidity" ;
+    rec:description "Relative humidity of discharge air" ;
+    sbco:pointType "RelativeHumidity" ;
+    sbco:unit "percent" ;
+    brick:isPointOf <urn:equipment-hvac-f1> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "point_code" ;
+            sbco:value "HUM-F1-001" ]
+    ) .
+
+# ============================================
+# POINTS: Server Rack Power Draw
+# ============================================
+<urn:point-server-power> a sbco:PointExt ;
+    sbco:id "point-server-power" ;
+    sbco:name "Server Rack Power Consumption" ;
+    rec:description "Real-time power draw from server rack" ;
+    sbco:pointType "Power" ;
+    sbco:unit "percent" ;
+    brick:isPointOf <urn:equipment-server-rack> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "point_code" ;
+            sbco:value "PWR-F2-001" ]
+    ) ;
+    sbco:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "alarm_enabled" ;
+            sbco:value true ]
+    ) .
+
+# ============================================
+# POINTS: Incubator Temperature
+# ============================================
+<urn:point-incubator-temp> a sbco:PointExt ;
+    sbco:id "point-incubator-temp" ;
+    sbco:name "Incubator Chamber Temperature" ;
+    rec:description "Internal temperature of incubation chamber" ;
+    sbco:pointType "Temperature" ;
+    sbco:unit "celsius" ;
+    sbco:aggregate <https://www.sbco.or.jp/ont/AggregateEnum#average> ;
+    brick:isPointOf <urn:equipment-incubator> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "point_code" ;
+            sbco:value "TEMP-LAB-001" ]
+    ) ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "setpoint" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "target_celsius" ;
+                    sbco:value "37" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "tolerance" ;
+                    sbco:value "±0.1" ]
+            ) ]
+    ) ;
+    sbco:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "is_writable" ;
+            sbco:value false ]
+    ) .
+
+# ============================================
+# POINTS: Chiller Discharge Temperature
+# ============================================
+<urn:point-chiller-discharge> a sbco:PointExt ;
+    sbco:id "point-chiller-discharge" ;
+    sbco:name "Chiller Discharge Temperature" ;
+    rec:description "Cooling water discharge temperature" ;
+    sbco:pointType "Temperature" ;
+    sbco:unit "celsius" ;
+    brick:isPointOf <urn:equipment-chiller> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "point_code" ;
+            sbco:value "TEMP-CHIL-001" ]
+    ) .

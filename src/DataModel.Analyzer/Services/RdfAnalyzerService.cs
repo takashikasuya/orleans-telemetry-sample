@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using DataModel.Analyzer.Models;
 using Microsoft.Extensions.Logging;
@@ -33,6 +34,18 @@ public class RdfAnalyzerService
     private const string RdfTypeUri = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
     private const string ShaclFileName = "building_model.shacl.ttl";
     private const string SchemaDirectoryName = "Schema";
+    private static readonly string[] DocumentationPredicates = { $"{SbcoNamespace}documentation", $"{RecNamespace}documentation" };
+    private static readonly string[] AddressPredicates = { $"{SbcoNamespace}address", $"{RecNamespace}address" };
+    private static readonly string[] CustomPropertiesPredicates = { $"{SbcoNamespace}customProperties", $"{RecNamespace}customProperties" };
+    private static readonly string[] CustomTagsPredicates = { $"{SbcoNamespace}customTags", $"{RecNamespace}customTags" };
+    private static readonly string[] DescriptionPredicates = { $"{SbcoNamespace}description", $"{RecNamespace}description" };
+    private static readonly string[] FormatPredicates = { $"{SbcoNamespace}format", $"{RecNamespace}format" };
+    private static readonly string[] LanguagePredicates = { $"{SbcoNamespace}language", $"{RecNamespace}language" };
+    private static readonly string[] VersionPredicates = { $"{SbcoNamespace}version", $"{RecNamespace}version" };
+    private static readonly string[] UrlPredicates = { $"{SbcoNamespace}url", $"{RecNamespace}url" };
+    private static readonly string[] ChecksumPredicates = { $"{SbcoNamespace}checksum", $"{RecNamespace}checksum" };
+    private static readonly string[] SizePredicates = { $"{SbcoNamespace}size", $"{RecNamespace}size" };
+    private static readonly string[] PartOfPredicates = { $"{RecNamespace}isPartOf", $"{SbcoNamespace}isPartOf" };
 
     public RdfAnalyzerService(ILogger<RdfAnalyzerService> logger)
         : this(logger, Microsoft.Extensions.Options.Options.Create(new RdfAnalyzerOptions()))
@@ -347,11 +360,13 @@ public class RdfAnalyzerService
             var site = new Site { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, site);
+            site.Documentation.AddRange(ExtractDocuments(graph, subject));
+            site.Address.AddRange(ExtractPostalAddresses(graph, subject));
 
             var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
             if (hasPartUris.Count > 0)
             {
-                site.CustomProperties["hasPartUris"] = hasPartUris;
+                StoreStringList(site.CustomProperties, "hasPartUris", hasPartUris);
             }
 
             sites.Add(site);
@@ -370,11 +385,18 @@ public class RdfAnalyzerService
             var building = new Building { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, building);
+            building.Documentation.AddRange(ExtractDocuments(graph, subject));
+            building.Address.AddRange(ExtractPostalAddresses(graph, subject));
 
             var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
             if (hasPartUris.Count > 0)
             {
-                building.CustomProperties["hasPartUris"] = hasPartUris;
+                StoreStringList(building.CustomProperties, "hasPartUris", hasPartUris);
+            }
+            var partOfUris = GetParentUris(graph, subject);
+            if (partOfUris.Count > 0)
+            {
+                StoreStringList(building.CustomProperties, "isPartOfUris", partOfUris);
             }
 
             buildings.Add(building);
@@ -393,6 +415,8 @@ public class RdfAnalyzerService
             var level = new Level { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, level);
+            level.Documentation.AddRange(ExtractDocuments(graph, subject));
+            level.Address.AddRange(ExtractPostalAddresses(graph, subject));
 
             var levelNumberValue = GetFirstLiteralValue(
                 graph,
@@ -407,7 +431,12 @@ public class RdfAnalyzerService
             var hasPartUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPart", $"{SbcoNamespace}hasPart" });
             if (hasPartUris.Count > 0)
             {
-                level.CustomProperties["hasPartUris"] = hasPartUris;
+                StoreStringList(level.CustomProperties, "hasPartUris", hasPartUris);
+            }
+            var partOfUris = GetParentUris(graph, subject);
+            if (partOfUris.Count > 0)
+            {
+                StoreStringList(level.CustomProperties, "isPartOfUris", partOfUris);
             }
 
             levels.Add(level);
@@ -419,18 +448,30 @@ public class RdfAnalyzerService
     private List<Area> ExtractAreas(IGraph graph)
     {
         var areas = new List<Area>();
-        var subjects = GetSubjectsOfType(graph, new[] { $"{SbcoNamespace}Space", $"{RecNamespace}Space", $"{RecNamespace}Area" });
+        var subjects = GetSubjectsOfType(graph, new[]
+        {
+            $"{SbcoNamespace}Space",
+            $"{SbcoNamespace}Area",
+            $"{RecNamespace}Space",
+            $"{RecNamespace}Area"
+        });
 
         foreach (var subject in subjects)
         {
             var area = new Area { Uri = subject.ToString() };
 
             ExtractCommonProperties(graph, subject, area);
+            area.Documentation.AddRange(ExtractDocuments(graph, subject));
 
             var equipmentUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}isLocationOf", $"{SbcoNamespace}isLocationOf" });
             if (equipmentUris.Count > 0)
             {
-                area.CustomProperties["equipmentUris"] = equipmentUris;
+                StoreStringList(area.CustomProperties, "equipmentUris", equipmentUris);
+            }
+            var partOfUris = GetParentUris(graph, subject);
+            if (partOfUris.Count > 0)
+            {
+                StoreStringList(area.CustomProperties, "isPartOfUris", partOfUris);
             }
 
             areas.Add(area);
@@ -451,17 +492,41 @@ public class RdfAnalyzerService
             ExtractCommonProperties(graph, subject, equipment);
             ExtractAssetProperties(graph, subject, equipment);
             ExtractGutpEquipmentProperties(graph, subject, equipment);
+            equipment.Documentation.AddRange(ExtractDocuments(graph, subject));
 
             var pointUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPoint", $"{SbcoNamespace}hasPoint" });
             if (pointUris.Count > 0)
             {
-                equipment.CustomProperties["pointUris"] = pointUris;
+                StoreStringList(equipment.CustomProperties, "pointUris", pointUris);
+            }
+
+            var feedUris = GetObjectUris(graph, subject, new[] { $"{BrickNamespace}feeds" })
+                .Where(uri => !string.IsNullOrWhiteSpace(uri))
+                .Distinct()
+                .ToList();
+            if (feedUris.Count > 0)
+            {
+                equipment.Feeds.AddRange(feedUris);
+            }
+
+            var fedByUris = GetObjectUris(graph, subject, new[] { $"{SbcoNamespace}isFedBy", $"{RecNamespace}isFedBy" })
+                .Where(uri => !string.IsNullOrWhiteSpace(uri))
+                .Distinct()
+                .ToList();
+            if (fedByUris.Count > 0)
+            {
+                equipment.IsFedBy.AddRange(fedByUris);
             }
 
             var locatedInUris = GetObjectUris(graph, subject, new[] { $"{SbcoNamespace}locatedIn", $"{RecNamespace}locatedIn" });
             if (locatedInUris.Count > 0)
             {
                 equipment.AreaUri = locatedInUris[0];
+            }
+            var partOfUris = GetParentUris(graph, subject);
+            if (partOfUris.Count > 0)
+            {
+                StoreStringList(equipment.CustomProperties, "isPartOfUris", partOfUris);
             }
 
             equipmentList.Add(equipment);
@@ -488,6 +553,11 @@ public class RdfAnalyzerService
                 point.EquipmentUri = isPointOfUris[0];
             }
 
+            var partOfUris = GetParentUris(graph, subject);
+            if (partOfUris.Count > 0)
+            {
+                StoreStringList(point.CustomProperties, "isPartOfUris", partOfUris);
+            }
             points.Add(point);
         }
 
@@ -526,6 +596,11 @@ public class RdfAnalyzerService
         }
 
         return uris;
+    }
+
+    private static List<string> GetParentUris(IGraph graph, INode subject)
+    {
+        return GetObjectUris(graph, subject, PartOfPredicates);
     }
 
     private static string? GetFirstLiteralValue(IGraph graph, INode subject, IEnumerable<string> predicateUris)
@@ -625,6 +700,8 @@ public class RdfAnalyzerService
         }
 
         ExtractIdentifiers(graph, subject, resource);
+        ExtractCustomProperties(graph, subject, resource);
+        ExtractCustomTags(graph, subject, resource);
     }
 
     private void ExtractGutpEquipmentProperties(IGraph graph, INode subject, Equipment equipment)
@@ -699,6 +776,192 @@ public class RdfAnalyzerService
         }
     }
 
+    private List<Document> ExtractDocuments(IGraph graph, INode subject)
+    {
+        return GetObjectNodes(graph, subject, DocumentationPredicates)
+            .Select(node => BuildDocument(graph, node))
+            .ToList();
+    }
+
+    private List<PostalAddress> ExtractPostalAddresses(IGraph graph, INode subject)
+    {
+        return GetObjectNodes(graph, subject, AddressPredicates)
+            .Select(node => BuildPostalAddress(graph, node))
+            .ToList();
+    }
+
+    private Document BuildDocument(IGraph graph, INode node)
+    {
+        var document = new Document
+        {
+            Uri = node.ToString()
+        };
+        ExtractCommonProperties(graph, node, document);
+
+        document.Description = GetFirstLiteralValue(graph, node, DescriptionPredicates);
+        document.Format = GetFirstLiteralValue(graph, node, FormatPredicates);
+        document.Language = GetFirstLiteralValue(graph, node, LanguagePredicates);
+        document.Version = GetFirstLiteralValue(graph, node, VersionPredicates);
+        document.Url = GetFirstLiteralValue(graph, node, UrlPredicates);
+        document.Checksum = GetFirstLiteralValue(graph, node, ChecksumPredicates);
+        document.Size = GetFirstIntegerValue(graph, node, SizePredicates);
+
+        return document;
+    }
+
+    private PostalAddress BuildPostalAddress(IGraph graph, INode node)
+    {
+        var address = new PostalAddress
+        {
+            Uri = node.ToString()
+        };
+        ExtractCommonProperties(graph, node, address);
+        return address;
+    }
+
+    private void ExtractCustomProperties(IGraph graph, INode subject, RdfResource resource)
+    {
+        foreach (var predicateUri in CustomPropertiesPredicates)
+        {
+            var predicateNode = graph.CreateUriNode(UriFactory.Create(predicateUri));
+            foreach (var triple in graph.GetTriplesWithSubjectPredicate(subject, predicateNode))
+            {
+                var entryNode = triple.Object;
+                var outerKey = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}key" });
+                if (string.IsNullOrWhiteSpace(outerKey))
+                {
+                    continue;
+                }
+
+                var nestedEntries = GetObjectNodes(graph, entryNode, new[] { $"{SbcoNamespace}entries" }).ToList();
+                if (nestedEntries.Count > 0)
+                {
+                    var nested = new Dictionary<string, string>();
+                    foreach (var nestedEntry in nestedEntries)
+                    {
+                        var nestedKey = GetFirstLiteralValue(graph, nestedEntry, new[] { $"{SbcoNamespace}key" });
+                        var nestedValue = GetFirstLiteralValue(graph, nestedEntry, new[] { $"{SbcoNamespace}value" });
+                        if (string.IsNullOrWhiteSpace(nestedKey) || nestedValue is null)
+                        {
+                            continue;
+                        }
+
+                        nested[nestedKey] = nestedValue;
+                    }
+
+                    if (nested.Count > 0)
+                    {
+                        resource.CustomProperties[outerKey] = JsonSerializer.Serialize(nested);
+                        continue;
+                    }
+                }
+
+                var literalValue = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}value" });
+                if (!string.IsNullOrWhiteSpace(literalValue))
+                {
+                    resource.CustomProperties[outerKey] = literalValue;
+                }
+            }
+        }
+    }
+
+    private void ExtractCustomTags(IGraph graph, INode subject, RdfResource resource)
+    {
+        foreach (var predicateUri in CustomTagsPredicates)
+        {
+            var predicateNode = graph.CreateUriNode(UriFactory.Create(predicateUri));
+            foreach (var triple in graph.GetTriplesWithSubjectPredicate(subject, predicateNode))
+            {
+                var entryNode = triple.Object;
+                var key = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}key" });
+                var flagValue = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}flag" });
+                if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(flagValue))
+                {
+                    continue;
+                }
+
+                if (bool.TryParse(flagValue, out var flag))
+                {
+                    resource.CustomTags[key] = flag;
+                }
+            }
+        }
+    }
+
+    private static void StoreStringList(IDictionary<string, string> properties, string key, IEnumerable<string> values)
+    {
+        var filtered = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct()
+            .ToList();
+
+        if (filtered.Count == 0)
+        {
+            return;
+        }
+
+        properties[key] = JsonSerializer.Serialize(filtered);
+    }
+
+    private static bool TryGetStringList(IReadOnlyDictionary<string, string> properties, string key, out List<string> values)
+    {
+        values = new List<string>();
+
+        if (!properties.TryGetValue(key, out var rawValue) || string.IsNullOrWhiteSpace(rawValue))
+        {
+            return false;
+        }
+
+        try
+        {
+            var deserialized = JsonSerializer.Deserialize<List<string>>(rawValue);
+            if (deserialized != null)
+            {
+                var filtered = deserialized.Where(v => !string.IsNullOrWhiteSpace(v)).ToList();
+                if (filtered.Count > 0)
+                {
+                    values = filtered;
+                    return true;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // fall back to single string value
+        }
+
+        values = new List<string> { rawValue };
+        return true;
+    }
+
+    private static IEnumerable<INode> GetObjectNodes(IGraph graph, INode subject, IEnumerable<string> predicateUris)
+    {
+        var seen = new HashSet<string>();
+        foreach (var predicateUri in predicateUris)
+        {
+            var predicateNode = graph.CreateUriNode(UriFactory.Create(predicateUri));
+            foreach (var triple in graph.GetTriplesWithSubjectPredicate(subject, predicateNode))
+            {
+                var key = triple.Object.ToString();
+                if (seen.Add(key))
+                {
+                    yield return triple.Object;
+                }
+            }
+        }
+    }
+
+    private static long? GetFirstIntegerValue(IGraph graph, INode subject, IEnumerable<string> predicateUris)
+    {
+        var value = GetFirstLiteralValue(graph, subject, predicateUris);
+        if (!string.IsNullOrWhiteSpace(value) && long.TryParse(value, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
     private void BuildHierarchy(BuildingDataModel model)
     {
         var siteByUri = model.Sites.ToDictionary(s => s.Uri, s => s);
@@ -709,7 +972,7 @@ public class RdfAnalyzerService
 
         foreach (var site in model.Sites)
         {
-            if (site.CustomProperties.TryGetValue("hasPartUris", out var bu) && bu is List<string> buildingUris)
+            if (TryGetStringList(site.CustomProperties, "hasPartUris", out var buildingUris))
             {
                 foreach (var bUri in buildingUris)
                 {
@@ -724,7 +987,32 @@ public class RdfAnalyzerService
 
         foreach (var building in model.Buildings)
         {
-            if (building.CustomProperties.TryGetValue("hasPartUris", out var lu) && lu is List<string> levelUris)
+            if (!string.IsNullOrWhiteSpace(building.SiteUri))
+            {
+                continue;
+            }
+
+            if (TryGetStringList(building.CustomProperties, "isPartOfUris", out var parentUris))
+            {
+                foreach (var parentUri in parentUris)
+                {
+                    if (siteByUri.TryGetValue(parentUri, out var site))
+                    {
+                        building.SiteUri = site.Uri;
+                        if (!site.Buildings.Contains(building))
+                        {
+                            site.Buildings.Add(building);
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        foreach (var building in model.Buildings)
+        {
+            if (TryGetStringList(building.CustomProperties, "hasPartUris", out var levelUris))
             {
                 foreach (var lUri in levelUris)
                 {
@@ -739,7 +1027,33 @@ public class RdfAnalyzerService
 
         foreach (var level in model.Levels)
         {
-            if (level.CustomProperties.TryGetValue("hasPartUris", out var au) && au is List<string> areaUris)
+            if (!string.IsNullOrWhiteSpace(level.BuildingUri))
+            {
+                continue;
+            }
+
+            if (TryGetStringList(level.CustomProperties, "isPartOfUris", out var parentUris))
+            {
+                foreach (var parentUri in parentUris)
+                {
+                    if (buildingByUri.TryGetValue(parentUri, out var building))
+                    {
+                        level.BuildingUri = building.Uri;
+                        if (!building.Levels.Contains(level))
+                        {
+                            building.Levels.Add(level);
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
+
+
+        foreach (var level in model.Levels)
+        {
+            if (TryGetStringList(level.CustomProperties, "hasPartUris", out var areaUris))
             {
                 foreach (var aUri in areaUris)
                 {
@@ -754,7 +1068,33 @@ public class RdfAnalyzerService
 
         foreach (var area in model.Areas)
         {
-            if (area.CustomProperties.TryGetValue("equipmentUris", out var eu) && eu is List<string> equipmentUris)
+            if (!string.IsNullOrWhiteSpace(area.LevelUri))
+            {
+                continue;
+            }
+
+            if (TryGetStringList(area.CustomProperties, "isPartOfUris", out var parentUris))
+            {
+                foreach (var parentUri in parentUris)
+                {
+                    if (levelByUri.TryGetValue(parentUri, out var level))
+                    {
+                        area.LevelUri = level.Uri;
+                        if (!level.Areas.Contains(area))
+                        {
+                            level.Areas.Add(area);
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
+
+
+        foreach (var area in model.Areas)
+        {
+            if (TryGetStringList(area.CustomProperties, "equipmentUris", out var equipmentUris))
             {
                 foreach (var eUri in equipmentUris)
                 {
@@ -763,6 +1103,35 @@ public class RdfAnalyzerService
                         e.AreaUri = area.Uri;
                         area.Equipment.Add(e);
                         e.LocatedIn.Add(area);
+                    }
+                }
+            }
+        }
+
+        foreach (var equipment in model.Equipment)
+        {
+            if (!string.IsNullOrWhiteSpace(equipment.AreaUri))
+            {
+                continue;
+            }
+
+            if (TryGetStringList(equipment.CustomProperties, "isPartOfUris", out var parentUris))
+            {
+                foreach (var parentUri in parentUris)
+                {
+                    if (areaByUri.TryGetValue(parentUri, out var area))
+                    {
+                        equipment.AreaUri = area.Uri;
+                        if (!area.Equipment.Contains(equipment))
+                        {
+                            area.Equipment.Add(equipment);
+                        }
+                        if (!equipment.LocatedIn.Any(x => x.Uri == area.Uri))
+                        {
+                            equipment.LocatedIn.Add(area);
+                        }
+
+                        break;
                     }
                 }
             }
@@ -781,7 +1150,7 @@ public class RdfAnalyzerService
 
         foreach (var equipment in model.Equipment)
         {
-            if (equipment.CustomProperties.TryGetValue("pointUris", out var pu) && pu is List<string> pointUris)
+            if (TryGetStringList(equipment.CustomProperties, "pointUris", out var pointUris))
             {
                 foreach (var pUri in pointUris)
                 {
@@ -790,6 +1159,31 @@ public class RdfAnalyzerService
                     {
                         p.EquipmentUri = equipment.Uri;
                         equipment.Points.Add(p);
+                    }
+                }
+            }
+        }
+
+        foreach (var point in model.Points)
+        {
+            if (!string.IsNullOrWhiteSpace(point.EquipmentUri))
+            {
+                continue;
+            }
+
+            if (TryGetStringList(point.CustomProperties, "isPartOfUris", out var parentUris))
+            {
+                foreach (var parentUri in parentUris)
+                {
+                    if (equipmentByUri.TryGetValue(parentUri, out var equipment))
+                    {
+                        point.EquipmentUri = equipment.Uri;
+                        if (!equipment.Points.Contains(point))
+                        {
+                            equipment.Points.Add(point);
+                        }
+
+                        break;
                     }
                 }
             }

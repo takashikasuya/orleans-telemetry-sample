@@ -20,4 +20,8 @@
   <ItemGroup>
     <ProjectReference Include="..\DataModel.Analyzer\DataModel.Analyzer.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\DataModel.Analyzer\Schema\*.ttl" Link="Schema\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

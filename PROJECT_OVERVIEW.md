@@ -18,6 +18,7 @@
   - クエリ API でテナント・デバイス・時間範囲によるテレメトリ検索が可能です。
 - `src/Publisher`
   - RabbitMQ にデモ用テレメトリを送信するコンソールアプリです。
+  - RDF で定義された writable なポイントに対して `telemetry-control` キュー経由で JSON 制御コマンドを受け付け、値を上書きできます。
 - `src/DataModel.Analyzer`
   - RDF 解析と BuildingDataModel の構築、Orleans 連携用データ生成を担当します。
 - `src/Grains.Abstractions`

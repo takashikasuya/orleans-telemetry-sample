@@ -143,8 +143,15 @@ internal static class Program
 
     private static async Task<(IHost Host, IClusterClient Client)> BuildAndConnectClientAsync(OrleansClientOptions options)
     {
+        Console.WriteLine($"Connecting to Orleans gateway at {options.GatewayHost}:{options.GatewayPort}");
+        
         var hostBuilder = Host.CreateDefaultBuilder()
-            .ConfigureLogging(logging => logging.ClearProviders())
+            .ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddConsole();
+                logging.SetMinimumLevel(LogLevel.Information);
+            })
             .UseOrleansClient(clientBuilder =>
             {
                 clientBuilder.Configure<ClusterOptions>(cluster =>
@@ -153,19 +160,27 @@ internal static class Program
                     cluster.ServiceId = options.ServiceId;
                 });
 
-                if (string.IsNullOrWhiteSpace(options.GatewayHost) ||
-                    string.Equals(options.GatewayHost, "localhost", StringComparison.OrdinalIgnoreCase))
+                // Always use StaticClustering with explicit IP to ensure proper connection
+                // UseLocalhostClustering can fail when connecting to Docker-hosted silo
+                var gatewayAddress = string.IsNullOrWhiteSpace(options.GatewayHost) ||
+                    string.Equals(options.GatewayHost, "localhost", StringComparison.OrdinalIgnoreCase)
+                    ? IPAddress.Loopback
+                    : ResolveGatewayAddress(options.GatewayHost);
+                
+                clientBuilder.UseStaticClustering(new[]
                 {
-                    clientBuilder.UseLocalhostClustering(gatewayPort: options.GatewayPort);
-                }
-                else
+                    new IPEndPoint(gatewayAddress, options.GatewayPort)
+                });
+
+                // Configure connection options for better reliability
+                clientBuilder.Configure<ConnectionOptions>(opt =>
                 {
-                    var gatewayAddress = ResolveGatewayAddress(options.GatewayHost);
-                    clientBuilder.UseStaticClustering(new[]
-                    {
-                        new IPEndPoint(gatewayAddress, options.GatewayPort)
-                    });
-                }
+                    opt.OpenConnectionTimeout = TimeSpan.FromSeconds(10);
+                })
+                .Configure<GatewayOptions>(opt =>
+                {
+                    opt.GatewayListRefreshPeriod = TimeSpan.FromSeconds(30);
+                });
             });
 
         var host = hostBuilder.Build();

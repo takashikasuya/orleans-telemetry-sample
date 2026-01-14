@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 
 namespace DataModel.Analyzer.Models;
@@ -11,7 +10,7 @@ public abstract class RdfResource
     public string Uri { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public Dictionary<string, string> Identifiers { get; set; } = new();
-    public Dictionary<string, object> CustomProperties { get; set; } = new();
+    public Dictionary<string, string> CustomProperties { get; set; } = new();
     public Dictionary<string, bool> CustomTags { get; set; } = new();
 }
 
@@ -55,9 +54,15 @@ public class Document : RdfResource
 {
     public string? DocumentTopic { get; set; }
     public string? Url { get; set; }
+    public string? Description { get; set; }
+    public string? Format { get; set; }
+    public string? Language { get; set; }
+    public string? Version { get; set; }
+    public long? Size { get; set; }
+    public string? Checksum { get; set; }
 }
 
-public class PostalAddress
+public class PostalAddress : RdfResource
 {
     public string? AddressLine1 { get; set; }
     public string? AddressLine2 { get; set; }
@@ -70,12 +75,8 @@ public class PostalAddress
 /// <summary>
 /// エージェント情報
 /// </summary>
-public class Agent
+public class Agent : RdfResource
 {
-    public Dictionary<string, Dictionary<string, string>> CustomProperties { get; set; } = new();
-    public Dictionary<string, bool> CustomTags { get; set; } = new();
-    public Dictionary<string, string> Identifiers { get; set; } = new();
-    public string? Name { get; set; }
     public List<Organization> MemberOf { get; set; } = new();
 }
 
@@ -105,8 +106,8 @@ public class Site : RdfResource
     public Georeference? Georeference { get; set; }
     public ArchitectureArea? Area { get; set; }
     public ArchitectureCapacity? Capacity { get; set; }
-    public List<PostalAddress>? Address { get; set; }
-    public List<Document>? Documentation { get; set; }
+    public List<PostalAddress> Address { get; set; } = new();
+    public List<Document> Documentation { get; set; } = new();
 }
 
 /// <summary>
@@ -120,8 +121,8 @@ public class Building : RdfResource
     public Georeference? Georeference { get; set; }
     public ArchitectureArea? Area { get; set; }
     public ArchitectureCapacity? Capacity { get; set; }
-    public List<PostalAddress>? Address { get; set; }
-    public List<Document>? Documentation { get; set; }
+    public List<PostalAddress> Address { get; set; } = new();
+    public List<Document> Documentation { get; set; } = new();
 }
 
 /// <summary>
@@ -134,7 +135,8 @@ public class Level : RdfResource
     public List<Area> Areas { get; set; } = new();
     public Geometry? Geometry { get; set; }
     public Georeference? Georeference { get; set; }
-    public List<Document>? Documentation { get; set; }
+    public List<PostalAddress> Address { get; set; } = new();
+    public List<Document> Documentation { get; set; } = new();
 
     /// <summary>
     /// 名前から階数を推定（B1F など地下は負、12F/12階/１２階 などに対応）。
@@ -187,7 +189,7 @@ public class Area : RdfResource
     public List<Equipment> Equipment { get; set; } = new();
     public Geometry? Geometry { get; set; }
     public Georeference? Georeference { get; set; }
-    public List<Document>? Documentation { get; set; }
+    public List<Document> Documentation { get; set; } = new();
 }
 
 /// <summary>
@@ -229,7 +231,14 @@ public class Equipment : Asset
     public string GatewayId { get; set; } = string.Empty;
     public string? Supplier { get; set; }
     public string? Owner { get; set; }
-    public List<Point> Points { get; set; } = new();
+    /// <summary>
+    /// `Asset.HasPoint` と同期させるため、2つの名前を同一リストとして扱う。
+    /// </summary>
+    public List<Point> Points
+    {
+        get => HasPoint;
+        set => HasPoint = value ?? new();
+    }
     public string? OperationalStageCount { get; set; }
     public List<string> Feeds { get; set; } = new();
     public List<string> IsFedBy { get; set; } = new();

@@ -4,6 +4,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Grains.Abstractions/Grains.Abstractions.csproj" />
+    <ProjectReference Include="../DataModel.Analyzer/DataModel.Analyzer.csproj" />
     <PackageReference Include="RabbitMQ.Client" Version="6.4.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
   </ItemGroup>
 </Project>

@@ -79,6 +79,12 @@
 }
 ```
 
+### TelemetryPointMsg のメタデータ補完
+
+`PointGrainKey` やストレージの `TelemetryEventEnvelope` は `TenantId:BuildingName:SpaceId:DeviceId:PointId` という構成を前提として動いているため、コネクタが `PointId` しか持たない状態で `TelemetryPointMsg` を送り続けると、ルーティング（`TelemetryRouterGrain`）や API（`/api/nodes/{nodeId}/value` 等）が正しく対象を特定できません。【F:src/SiloHost/TelemetryRouterGrain.cs†L18-L90】【F:src/ApiGateway/Program.cs†L115-L155】
+このためコネクタ実装は受信直後に `PointId` をキーにして、RDF/Graph から `BuildingName`・`SpaceId`・`DeviceId`（と `TenantId`）を補完したうえで `TelemetryPointMsg` をチャネルに書き込んでください。Graph 側では `OrleansIntegrationService.AddPointBindingAttributes` が `GraphNodeDefinition.Attributes` に `PointId`/`DeviceId`/`SpaceId`/`BuildingName` を追加しており、`GraphNode` はポイント URI（`point:{PointId}` など）を NodeId として管理しているため、ApiGateway の `/api/nodes/{nodeId}` や内部の Graph Registry から逆引きできます。【F:src/DataModel.Analyzer/Integration/OrleansIntegrationService.cs†L318-L375】【F:docs/telemetry-routing-binding.md†L48-L115】【F:docs/rdf-loading-and-grains.md†L22-L77】
+PointId をベースにした逆引きが難しい場合は、コネクタ自身で RDF ソースや Graph シードをパースし、`PointId → (Building, Area, Device)` のマップを保持しておけば十分です。Graph から取得した属性をそのまま `TelemetryPointMsg` に流せばルータ/ストレージの整合性が保たれ、`SpaceId`/`DeviceId` が不要になるという前提は不要になります。
+
 ### コネクタによる変換の注意点
 
 - `TelemetryEventEnvelopeFactory` は `TelemetryPointMsg.Timestamp` を `OccurredAt` にマッピングし、`IngestedAt` はインジェスト時刻（UTC）で付与します。【F:src/Telemetry.Ingest/TelemetryEventEnvelopeFactory.cs†L1-L26】
@@ -102,6 +108,18 @@
 
 > 例: `appsettings.json` では `BatchSize=100`、`ChannelCapacity=10000`、`Enabled` と `EventSinks:Enabled` を設定しています。【F:src/SiloHost/appsettings.json†L1-L20】
 > 既定値は `TelemetryIngestOptions` に定義されています。【F:src/Telemetry.Ingest/TelemetryIngestOptions.cs†L1-L17】
+
+## Publisher 制御コマンド
+
+- Publisher は `CONTROL_QUEUE`（既定: `telemetry-control`）を監視し、RabbitMQ 経由で JSON 制御コマンドを受け取ります。
+- ペイロード例:
+
+```json
+{ "deviceId": "ahu-01", "pointId": "supply-air-temp", "value": 22.3 }
+```
+
+- `clear: true` と送るとオーバーライドを解除できます（`value` は無視されます）。
+- RDF で `writable=true` とされたポイントにのみコマンドが適用され、値はクリアされるまで維持されます。
 
 ## コネクタ拡張方法
 

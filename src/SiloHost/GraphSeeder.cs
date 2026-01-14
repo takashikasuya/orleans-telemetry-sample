@@ -31,6 +31,14 @@ internal sealed class GraphSeeder
         try
         {
             var seed = await _integration.ExtractGraphSeedDataAsync(path);
+            var nodeCounts = seed.Nodes.GroupBy(n => n.NodeType)
+                .ToDictionary(g => g.Key, g => g.Count());
+            _logger.LogInformation("Graph seed nodes by type: {NodeCounts}", nodeCounts);
+            if (!nodeCounts.TryGetValue(GraphNodeType.Area, out var areaCount))
+            {
+                areaCount = 0;
+            }
+            _logger.LogInformation("Graph seed Area count: {AreaCount}", areaCount);
             var index = _grainFactory.GetGrain<IGraphIndexGrain>(tenantId);
             var registry = _grainFactory.GetGrain<IGraphTenantRegistryGrain>(0);
 

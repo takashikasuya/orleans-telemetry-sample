@@ -1,3 +1,4 @@
+using System.Linq;
 using DataModel.Analyzer.Models;
 using DataModel.Analyzer.Services;
 using Grains.Abstractions;
@@ -400,7 +401,7 @@ public class OrleansIntegrationService
             {
                 continue;
             }
-            attributes[$"prop:{kv.Key}"] = kv.Value.ToString() ?? string.Empty;
+            attributes[$"prop:{kv.Key}"] = FormatAttributeValue(kv.Value);
         }
 
         extras?.Invoke(attributes);
@@ -413,6 +414,8 @@ public class OrleansIntegrationService
             Attributes = attributes
         };
     }
+
+    private static string FormatAttributeValue(string? value) => value ?? string.Empty;
 
     private string ResolveNodeId(RdfResource resource, string prefix, string fallbackId)
     {
