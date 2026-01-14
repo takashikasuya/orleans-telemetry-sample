@@ -78,5 +78,50 @@ public class RdfAnalyzerServiceShaclTests
         result.Validation!.Messages.Should().NotBeEmpty("検証失敗メッセージが生成される");
     }
 
+    [Fact]
+    public async Task AnalyzeRdfContent_WithComplexHierarchy_ParsesSuccessfully()
+    {
+        // seed-complex.ttl を読み込んでデータが正しく解析されることを検証
+        var testFilePath = Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..",
+            "Telemetry.E2E.Tests",
+            "seed-complex.ttl"
+        );
+        
+        testFilePath = Path.GetFullPath(testFilePath);
+        File.Exists(testFilePath).Should().BeTrue($"seed-complex.ttl ファイルが存在すること (path: {testFilePath})");
+
+        var ttlContent = await File.ReadAllTextAsync(testFilePath);
+        var service = CreateService();
+
+        var model = await service.AnalyzeRdfContentAsync(ttlContent, RdfSerializationFormat.Turtle, "seed-complex");
+
+        // サイト検証：Tokyo Technology Center が解析されること
+        model.Sites.Should().NotBeEmpty("少なくとも1つのサイトが解析されること");
+        model.Sites.Should().Contain(s => s.Name == "Tokyo Technology Center");
+
+        // 建物検証：Main Office Building と Research Lab Building が解析されること
+        model.Buildings.Should().NotBeEmpty("複数の建物が解析されること");
+        model.Buildings.Select(b => b.Name).Should().Contain("Main Office Building");
+        model.Buildings.Select(b => b.Name).Should().Contain("Research Lab Building");
+
+        // レベル検証：複数のレベルが解析されること
+        model.Levels.Should().NotBeEmpty("複数のレベルが解析されること");
+        model.Levels.Select(l => l.Name).Should().Contain("Ground Floor");
+        model.Levels.Select(l => l.Name).Should().Contain("Second Floor");
+        model.Levels.Select(l => l.Name).Should().Contain("Lab Floor 1");
+
+        // ポイント検証：複数のポイントが正しいユニットで解析されること
+        model.Points.Should().NotBeEmpty("複数のポイントが解析されること");
+        model.Points.Should().Satisfy(
+            p => p.Name == "HVAC Supply Temperature" && p.Unit == "celsius",
+            p => p.Name == "HVAC Supply Humidity" && p.Unit == "percent",
+            p => p.Name == "Server Rack Power Consumption",
+            p => p.Name == "Incubator Chamber Temperature",
+            p => p.Name == "Chiller Discharge Temperature"
+        );
+    }
+
     private static RdfAnalyzerService CreateService() => new(NullLogger<RdfAnalyzerService>.Instance);
 }

@@ -7,7 +7,7 @@ STORAGE_DIR="$ROOT/storage"
 COMPOSE="docker compose"
 STATE_FILE="$ROOT/scripts/.system-state"
 DOCKERFILE="$ROOT/Dockerfile.dotnet"
-SEED_FILE="$ROOT/src/Telemetry.E2E.Tests/seed.ttl"
+SEED_FILE="$ROOT/src/Telemetry.E2E.Tests/seed-complex.ttl"
 
 mkdir -p "$REPORT_DIR" "$STORAGE_DIR"
 

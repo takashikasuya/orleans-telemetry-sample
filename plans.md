@@ -1,645 +1,283 @@
-# plans.md: RDF-Driven Telemetry Simulation for Publisher
+# plans.md: Admin UI Graph Statistics & Hierarchy Issues
 
 ## Purpose
 
-Enable the `publisher` project to read RDF (Resource Description Framework) building data and simulate realistic telemetry from devices identified in the RDF graph. Currently, the `publisher` generates random telemetry for a fixed set of hardcoded devices. This enhancement allows:
+Resolve two critical issues in the Admin UI (`AdminGateway`):
 
-1. **Device Discovery from RDF**: Automatically identify all Equipment/Point entities in the building model and their properties.
-2. **RDF-Aligned Telemetry**: Generate point values that match RDF metadata (units, min/max ranges, data types).
-3. **Semantic Equivalence**: Ensure published telemetry messages reflect the structure, identifiers, and properties defined in RDF.
-4. **End-to-End Verification**: Verify via automated tests that RDF-sourced devices and points are correctly ingested through the Orleans pipeline and exposed via REST/gRPC APIs.
+1. **Graph Statistics – Area Recognition**: After seeding from `seed-complex.ttl`, the Graph Statistics view shows 0 for Area count despite multiple Area entities existing in the RDF.
+2. **Graph Hierarchy – Missing Relationships**: The Graph Hierarchy visualization does not display edge relationships between nodes, making the building topology invisible.
 
-This work bridges the gap between the data modeling layer (`DataModel.Analyzer`) and the telemetry generation layer (`publisher`), enabling data-driven simulation for local development and testing.
+These issues prevent the Admin Console from correctly displaying the full building hierarchy (Site → Building → Level → Area → Equipment → Point) and their parent-child relationships.
 
 ---
 
 ## Current State Summary
 
-### Publisher
-- **Current Behavior**: Publishes random telemetry to RabbitMQ for `--device-count` hardcoded devices (e.g., `dev-1`, `dev-2`).
-- **Message Format**: `TelemetryMsg` (class in `Grains.Abstractions`) containing:
-  - `DeviceId`, `TenantId`, `Sequence`, `Timestamp`
-  - `Properties` dictionary (extensible key-value pairs)
-  - Optional: `BuildingName`, `SpaceId`
-- **Configuration**: Via environment variables (`DEVICE_COUNT`, `PUBLISH_INTERVAL_MS`, `TENANT_ID`, etc.).
-- **Limitations**: No connection to RDF or building model; no type-aware value generation.
+### Observed Behavior
 
-### DataModel.Analyzer
-- **Capability**: Parses RDF (Turtle/RDF-XML) and builds a `BuildingDataModel` containing:
-  - Hierarchy: Site → Building → Level → Area → Equipment → Point
-  - Equipment has `DeviceId`, `DeviceType`, IP address, and asset metadata.
-  - Point has `PointType`, `Unit`, `Min/MaxPresValue`, `Interval`, `Scale`, etc.
-- **Export**: Generates JSON, summaries, and Orleans grain initialization contracts.
-- **Limitation**: Analyzer is currently only used by `SiloHost` (graph seeding) and tests; not integrated with `publisher`.
+- **Admin UI Graph Statistics**:
+  - URL: `http://localhost:8082/` → Graph Statistics section
+  - Shows table with counts: Site, Building, Level, Area, Equipment, Point
+  - After seeding `seed-complex.ttl`: Area count = 0 (expected ≥ 3)
+  - Other counts appear correct (Building = 2, Level = 3, Equipment = 3, Point = 5)
 
-### Orleans (Silo)
-- **Grain Types**: `IDeviceGrain`, `IPointGrain`, `IGraphNodeGrain`, `IGraphIndexGrain`.
-- **Ingestion Path**:
-  1. `TelemetryRouterGrain` receives `TelemetryMsg` from RabbitMQ.
-  2. Routes to `DeviceGrain` by device ID.
-  3. `DeviceGrain` updates `PointGrain` instances and publishes `DeviceUpdates` stream.
-  4. Storage sinks persist events to Parquet/JSON.
-- **Seeding**: `GraphSeedService` initializes graph grains from RDF via `RDF_SEED_PATH`.
+- **Admin UI Graph Hierarchy**:
+  - URL: `http://localhost:8082/` → Graph Hierarchy section
+  - Renders nodes but no visible edges/relationships between them
+  - Expected: Visual representation of parent-child links (e.g., Building → Level → Area → Equipment → Point)
 
-### API Gateway
-- **Endpoints**: REST API for device/point/graph queries; gRPC scaffolding (partial implementation).
-- **State Source**: Orleans grains (device snapshots, point values).
-- **Dependency**: Requires Orleans to be running; grains must be populated via seeding or telemetry ingestion.
+- **seed-complex.ttl Structure**:
+  - Contains 3 `sbco:Area` entities (area-main-f1-lobby, area-main-f2-server, area-lab-f1-exp-a)
+  - Each Area has `rec:isPartOf` relationship to a Level
+  - Properly formatted RDF in SBCO ontology
 
-### Test Ecosystem
-- **E2E Tests** (`Telemetry.E2E.Tests`): Docker Compose orchestration, seed.ttl ingestion, telemetry flow verification.
-- **Existing RDF Seed**: `src/Telemetry.E2E.Tests/seed.ttl` defines a minimal building structure.
+### Data Flow (Expected)
+
+1. **Admin API** (`AdminGateway`):
+   - `AdminMetricsService.GetGraphStatisticsAsync()` queries `IGraphIndexGrain` for nodes by type
+   - `AdminMetricsService.GetGraphHierarchyAsync()` retrieves all nodes and their edges
+   
+2. **Orleans Grains**:
+   - `IGraphIndexGrain`: Maintains an index of all nodes by `GraphNodeType`
+   - `IGraphNodeGrain`: Stores node snapshots including `OutgoingEdges`
+
+3. **RDF Seeding**:
+   - `GraphSeeder.SeedAsync()` processes RDF parsed by `RdfAnalyzerService`
+   - Registers all nodes in the index via `IGraphIndexGrain.AddNodeAsync()`
+
+4. **Admin UI Rendering**:
+   - Graph Statistics: Calls `GetGraphStatisticsAsync()` and renders a table
+   - Graph Hierarchy: Calls `GetGraphHierarchyAsync()` and renders nodes/edges (SVG or canvas-based)
+
+### Root Cause Hypotheses
+
+1. **RDF Parsing Failure**:
+   - `RdfAnalyzerService` may not be extracting Area entities from `seed-complex.ttl`
+   - Could be missing `sbco:Area` type handling or incorrect URI matching
+
+2. **Seeding Failure**:
+   - `GraphSeeder.SeedAsync()` may not be creating `GraphNodeDefinition` for Areas
+   - Filtering logic might exclude Area nodes
+   - Index registration might fail silently for Area nodes
+
+3. **Index Grain Issue**:
+   - `IGraphIndexGrain.GetByTypeAsync(GraphNodeType.Area)` returns empty list
+   - Nodes added but not properly indexed by type
+
+4. **Hierarchy Serialization**:
+   - `GraphNodeSnapshot.OutgoingEdges` not populated for any node type
+   - Edge data lost during Orleans serialization
+
+5. **Admin API Not Querying Correctly**:
+   - `AdminMetricsService` may not be calling the right grain methods
+   - Filtering or aggregation logic filters out Area nodes
 
 ---
 
 ## Target Behavior
 
-### Publisher with RDF Support
-1. **Start-up**:
-   - Read RDF file from `RDF_SEED_PATH` (same as SiloHost).
-   - Parse using `DataModel.Analyzer` to extract Equipment and Points.
-   - Identify all devices and their associated points.
+1. **Area Recognition**:
+   - After seeding `seed-complex.ttl`, Graph Statistics shows Area count = 3 (matching RDF)
+   - All Areas are queryable via API
+   - Area nodes appear in Graph Hierarchy visualization
 
-2. **Device/Point Resolution**:
-   - For each Equipment in the RDF, map to a `DeviceId` and point identifiers.
-   - Extract metadata: `PointType`, `Unit`, `Min/MaxPresValue`, `Scale`, `Interval`.
+2. **Edge Relationships**:
+   - Graph Hierarchy displays edges between nodes (e.g., Building ← isPartOf Relationship → Level)
+   - Parent-child relationships are visually evident
+   - Clicking on a node shows its connected edges and neighbors
 
-3. **Telemetry Generation**:
-   - Generate values based on RDF metadata (not pure random).
-   - Example: A temperature point with `Unit="Celsius"` and `Min/MaxPresValue=(10, 30)` generates values in that range.
-   - Publish `TelemetryMsg` with:
-     - Device and point identifiers from RDF.
-     - Building/space information derived from RDF hierarchy.
-     - Value matching point type and constraints.
-
-4. **Messaging**:
-   - Publish to RabbitMQ with **monotonic sequences per device**.
-   - Include RDF-derived metadata in the `Properties` dictionary (e.g., `{ "pointType": "Temperature", "unit": "Celsius" }`).
-
-5. **Configuration**:
-   - Environment variable: `RDF_SEED_PATH` (path to TTL file).
-   - Environment variable: `TENANT_ID` (must match SiloHost tenant for seeding).
-   - Optional: `PUBLISH_INTERVAL_MS` to control generation rate.
-
-### Integration Verification
-- **Via REST API**:
-  - Query a device seeded from RDF and verify its state matches published telemetry.
-  - Confirm point values are within expected ranges and have correct metadata.
-- **Via Orleans Grains**:
-  - Verify `DeviceGrain` snapshots reflect the latest published value.
-  - Confirm `PointGrain` stores point metadata from RDF.
+3. **Backward Compatibility**:
+   - Existing tests continue to pass
+   - Seeding via `seed.ttl` (minimal RDF) works unchanged
+   - Telemetry ingestion is unaffected
 
 ---
 
-## RDF File Storage Convention
+## Success Criteria
 
-### Location Strategy
+1. **Area Extraction**:
+   - RDF parsing test: Load `seed-complex.ttl`, extract 3 Area nodes
+   - Graph Statistics: Area count matches extracted count
+   - Admin API: `/admin/graph/statistics?tenantId=default` includes Area with count > 0
 
-RDF seed files must be stored in a location accessible to both the `publisher` and `Telemetry.E2E.Tests` projects. The recommended approach:
+2. **Hierarchy Visualization**:
+   - Graph Hierarchy renders with at least Site → Building → Level → Area → Equipment → Point edges
+   - `GetGraphHierarchyAsync()` returns nodes with populated `OutgoingEdges`
+   - UI properly renders edges (SVG, canvas, or DOM structure)
 
-**Primary Location**: `src/Telemetry.E2E.Tests/` (project root)
-
-**Rationale**:
-- `Telemetry.E2E.Tests` is the canonical E2E test project that already references RDF files (e.g., `seed.ttl`).
-- `publisher` can reference files from this location using relative or absolute paths.
-- Both SiloHost and publisher can load the same RDF file by setting `RDF_SEED_PATH` environment variable.
-
-**File Naming Convention**:
-- `seed.ttl` – Default minimal RDF used by E2E tests.
-- `seed-complex.ttl` – (optional) More complex RDF for extended testing.
-- `seed-rdf-publisher-test.ttl` – (new) Focused test RDF for publisher validation.
-
-### Usage Pattern
-
-```bash
-# Example 1: SiloHost loads RDF for graph seeding
-export RDF_SEED_PATH=/home/takashi/projects/dotnet/orleans-telemetry-sample/src/Telemetry.E2E.Tests/seed.ttl
-export TENANT_ID=t1
-dotnet run --project src/SiloHost
-
-# Example 2: Publisher loads the same RDF for device discovery
-export RDF_SEED_PATH=/home/takashi/projects/dotnet/orleans-telemetry-sample/src/Telemetry.E2E.Tests/seed.ttl
-export TENANT_ID=t1
-dotnet run --project src/Publisher
-```
-
-### Docker Compose Integration
-
-In `docker-compose.yml`, volume mounts should reference the RDF seed location:
-
-```yaml
-services:
-  silo:
-    environment:
-      RDF_SEED_PATH: /app/seed/seed.ttl
-    volumes:
-      - ./src/Telemetry.E2E.Tests/seed.ttl:/app/seed/seed.ttl:ro
-
-  publisher:
-    environment:
-      RDF_SEED_PATH: /app/seed/seed.ttl
-    volumes:
-      - ./src/Telemetry.E2E.Tests/seed.ttl:/app/seed/seed.ttl:ro
-```
-
-### Build/Test Considerations
-
-- When running unit tests (`dotnet test`), RDF files are referenced via `AppContext.BaseDirectory` or project-relative paths.
-- When running E2E tests, Docker Compose or helper scripts manage volume mounting.
-- No need to copy RDF files to output directory; they remain in source tree and are referenced by path.
+3. **No Regressions**:
+   - All existing tests pass: `dotnet test`
+   - Docker Compose stack starts without errors
+   - Telemetry ingestion still works
 
 ---
 
-## Design and Mapping Strategy
+## Constraints (from AGENTS.md)
 
-### Device Identification from RDF
-
-**Mapping Rule**: Each `Equipment` entity in the RDF model represents a publishable device.
-
-- **Primary Identifier**: `Equipment.DeviceId` (field in the data model).
-- **Secondary Identifier**: Equipment URI (from RDF; e.g., `sbco:AHU_01`).
-- **Fallback**: Generate a deterministic ID from Equipment name if `DeviceId` is empty.
-
-**Properties to Extract**:
-- `Equipment.Name` (display name).
-- `Equipment.DeviceType` (e.g., "HVAC", "Lighting").
-- `Equipment.IPAddress` (optional; for metadata).
-- `Area.Name` + `Level.EffectiveLevelNumber` + `Building.Name` → derive `SpaceId` for telemetry.
-
-### Point Identification and Telemetry Equivalence
-
-**Mapping Rule**: Each `Point` associated with an Equipment becomes a telemetry field in the published message.
-
-**Point Properties to Extract**:
-- `Point.PointId` (must be unique within the device; used as Property key in `TelemetryMsg.Properties`).
-- `Point.PointType` (e.g., "Temperature", "Humidity"; semantic meaning).
-- `Point.Unit` (e.g., "Celsius", "%RH").
-- `Point.Min/MaxPresValue` (acceptable value range).
-- `Point.Scale` (conversion factor, if applicable).
-- `Point.Interval` (sampling interval; not directly used for publication but informative).
-- `Point.Writable` (whether the point is settable; false for read-only sensor outputs).
-
-### Telemetry Equivalence
-
-**Definition**: A published telemetry message is semantically equivalent to RDF if:
-
-1. **Device-Level Equivalence**:
-   - `TelemetryMsg.DeviceId` matches the Equipment's `DeviceId`.
-   - `TelemetryMsg.BuildingName` and `TelemetryMsg.SpaceId` reflect the Equipment's location in the hierarchy.
-   - `TelemetryMsg.TenantId` matches the RDF tenant context.
-
-2. **Property-Level Equivalence**:
-   - For each Point in the Equipment, the `TelemetryMsg.Properties` dictionary includes:
-     - Key: `Point.PointId` (or a derived identifier).
-     - Value: A JSON object or primitive matching the point's `PointType`.
-   - Point metadata (unit, range, type) is included in the Properties or as a separate metadata structure.
-
-3. **Temporal Equivalence**:
-   - Sequence numbers are monotonic per device (required by Orleans ingestion logic).
-   - Timestamp is set to the current time when the message is created.
-
-4. **Data Type Safety**:
-   - Boolean points: publish `true` or `false`.
-   - Numeric points: publish within `Min/MaxPresValue` range.
-   - String points: publish a representative string (e.g., sensor state name).
-   - Enumerated points: publish one of the allowed values from RDF.
-
-### RDF-to-Telemetry Property Mapping
-
-**Data Structure**: Properties dictionary in `TelemetryMsg` contains point readings. Example:
-
-```json
-{
-  "properties": {
-    "PT_Temp_01": 22.5,
-    "PT_RH_01": 45.2,
-    "PT_CO2_01": 450,
-    "PT_Occupancy_01": true
-  }
-}
-```
-
-**Metadata Inclusion** (optional, in a separate field or property):
-- Point metadata can be stored in a reserved property (e.g., `_metadata`) or derived on the fly during API calls by joining with Orleans grain state.
-
-**Handling Complex RDF Types**:
-- **Quantities with Units**: Store value + unit in `Properties` or separate fields.
-  - Example: `"PT_Temp_01": { "value": 22.5, "unit": "Celsius" }`
-- **Time Series**: Publisher generates single-point snapshots; Orleans stores as streams/events.
-- **Ontology Alignment**: Use point URIs from RDF as property identifiers where available.
+1. **Local Verification Only**: Tests use `dotnet test`, `docker compose`, and local REST calls
+2. **No External Services**: All data remains within the local stack
+3. **Incremental Changes**: Preserve backward compatibility
+4. **Observable Behavior**: Use `dotnet build`, `dotnet test`, Swagger to verify
 
 ---
 
-## Implementation Plan
+## Steps
 
-### Phase 1: Data Model Integration (Publisher ↔ Analyzer)
+### Step 1: Diagnose RDF Parsing for Area
 
-#### Task 1.1: Extend Publisher to Load RDF
-- **Files**: `src/Publisher/Program.cs`
-- **Action**:
-  - Add dependency: `DataModel.Analyzer` project reference.
-  - Read `RDF_SEED_PATH` environment variable.
-  - Use `RdfAnalyzerService.ProcessRdfFileAsync()` to parse RDF and build `BuildingDataModel`.
-  - Log summary: device count, point count, tenant ID.
-- **Acceptance Criteria**:
-  - Publisher starts and successfully loads an RDF file when `RDF_SEED_PATH` is set.
-  - Console output reports number of devices and points discovered.
-  - No errors if `RDF_SEED_PATH` is unset (fallback to random mode or graceful skip).
+**Action**:
+- Inspect `RdfAnalyzerService.ProcessRdfFileAsync()` to verify Area extraction
+- Create or extend a unit test in `src/DataModel.Analyzer.Tests/` that loads `seed-complex.ttl`
+- Verify extracted Area count and compare against manual count in RDF
+- Expected outcome: At least 3 Area entities extracted
 
-#### Task 1.2: Create RDF-Aware Device/Point Generator Service
-- **Files**: `src/Publisher/RdfTelemetryGenerator.cs` (new)
-- **Action**:
-  - Design a service that accepts a `BuildingDataModel` and produces a list of `(DeviceId, List<Point>)` tuples.
-  - Implement methods:
-    - `GetDevicesFromModel(BuildingDataModel)`: Extract all Equipment with DeviceId.
-    - `GetPointsForDevice(Equipment)`: Return associated Points.
-    - `GenerateValueForPoint(Point)`: Create a random value within Point's constraints.
-  - Handle edge cases:
-    - Equipment with no DeviceId (generate from URI or name).
-    - Points with no Unit or range (use sensible defaults).
-- **Acceptance Criteria**:
-  - Service correctly extracts devices and points from a test RDF model.
-  - Generated values fall within `Min/MaxPresValue` ranges.
-  - Service is tested with unit tests (see Test Plan).
+**Files to investigate**:
+- `src/DataModel.Analyzer/RdfAnalyzerService.cs`
+- `src/DataModel.Analyzer/Models/BuildingDataModel.cs`
+- `src/Telemetry.E2E.Tests/seed-complex.ttl`
 
----
+### Step 2: Diagnose Graph Seeding
 
-### Phase 2: Telemetry Message Construction
+**Action**:
+- Add debug logging to `GraphSeeder.SeedAsync()` to track node counts by type
+- Run seeding with `seed-complex.ttl` and capture logs
+- Verify Area nodes are passed to `IGraphIndexGrain.AddNodeAsync()`
+- Expected outcome: Log shows Area nodes being added
 
-#### Task 2.1: Implement RDF-Aligned Message Building
-- **Files**: `src/Publisher/Program.cs` (main loop modification)
-- **Action**:
-  - Replace the hardcoded device loop with one iterating over `BuildingDataModel` devices.
-  - For each device, construct a `TelemetryMsg` with:
-    - `DeviceId` from Equipment.
-    - `BuildingName` from the hierarchy.
-    - `SpaceId` derived from Area/Level/Building names.
-    - `Properties` dictionary populated with point readings.
-  - Maintain sequence numbers per device (as currently done).
-- **Acceptance Criteria**:
-  - Publisher generates and publishes telemetry for all devices in the RDF model.
-  - Messages include building and space metadata.
-  - Sequence numbers remain monotonic.
+**Files to investigate**:
+- `src/SiloHost/Services/GraphSeeder.cs` or equivalent
+- `src/SiloHost/Grains/GraphIndexGrain.cs`
 
-#### Task 2.2: Point Metadata in Properties
-- **Files**: `src/Publisher/Program.cs`, `src/Grains.Abstractions/DeviceContracts.cs` (if needed)
-- **Action**:
-  - Decide whether point metadata (unit, type, range) is:
-    - Stored in `Properties` alongside values, or
-    - Derived from Orleans grains when querying.
-  - For simplicity, include metadata as a reserved property key (e.g., `"_pointMetadata": {...}`).
-- **Acceptance Criteria**:
-  - Metadata is accessible to API consumers (either in message or via grain query).
-  - Unit and type information aids downstream processing.
+### Step 3: Verify Index Grain Behavior
 
----
+**Action**:
+- Inspect `IGraphIndexGrain` implementation
+- Verify `GetByTypeAsync(GraphNodeType.Area)` returns all registered Area node IDs
+- Write a test to query the index post-seeding
+- Expected outcome: Index returns 3+ Area node IDs
 
-### Phase 3: Orleans Integration
+**Files to investigate**:
+- `src/SiloHost/Grains/GraphIndexGrain.cs`
+- `src/Grains.Abstractions/IGraphIndexGrain.cs`
 
-#### Task 3.1: Verify Grain Initialization from Published Telemetry
-- **Files**: `src/SiloHost/*` (review; no changes expected)
-- **Action**:
-  - Confirm that `TelemetryRouterGrain` correctly routes RDF-sourced devices to `DeviceGrain`.
-  - Verify that `DeviceGrain` and `PointGrain` store metadata derived from the telemetry (or from seeded graph grains).
-  - Test end-to-end: publish RDF-aligned telemetry → grain updates → API query returns correct state.
-- **Acceptance Criteria**:
-  - Orleans grains are created and updated for each device/point in the RDF model.
-  - No routing errors in silo logs.
+### Step 4: Diagnose Hierarchy Visualization
 
-#### Task 3.2: API Endpoint Verification
-- **Files**: `src/ApiGateway/Controllers/*`
-- **Action**:
-  - Verify that existing endpoints correctly expose device state.
-  - Ensure point metadata is returned (if stored in grain or graph).
-  - Test a full flow: Seed RDF → Publish RDF-aligned telemetry → Query API → Verify response.
-- **Acceptance Criteria**:
-  - REST API returns device state with all points.
-  - gRPC endpoint responds correctly (if implemented).
+**Action**:
+- Inspect `AdminMetricsService.GetGraphHierarchyAsync()` to confirm edges are loaded
+- Check `Admin.razor` graph rendering logic
+- Verify CSS/SVG rendering of edges
+- Expected outcome: Edges are populated and rendered visually
+
+**Files to investigate**:
+- `src/AdminGateway/Services/AdminMetricsService.cs`
+- `src/AdminGateway/Pages/Admin.razor`
+- `src/AdminGateway/wwwroot/app.css`
+
+### Step 5: Root Cause Fix
+
+**Action** (based on Steps 1–4 findings):
+- **If parsing fails**: Update `RdfAnalyzerService` to handle Area extraction
+- **If seeding fails**: Update `GraphSeeder` to map Area entities correctly
+- **If index fails**: Verify `IGraphIndexGrain` implementation and initialization
+- **If rendering fails**: Update `Admin.razor` to properly iterate over edges
+
+### Step 6: Verification
+
+**Action**:
+- Run `dotnet build` to ensure no compilation errors
+- Run `dotnet test` to verify existing tests still pass
+- Seed `seed-complex.ttl` via Admin UI
+- Verify Area count > 0 in Graph Statistics
+- Verify edges are visually rendered in Graph Hierarchy
+- Document findings in plans.md
+- Manual verification of the Admin UI graph hierarchy (via `scripts/start-system.sh`, Swagger, etc.) remains pending to confirm edges render as expected.
 
 ---
-
-### Phase 4: Testing
-
-#### Task 4.1: Unit Tests for RDF Device/Point Extraction
-- **Files**: `src/Publisher.Tests/RdfTelemetryGeneratorTests.cs` (new, if unit test project created)
-  - Alternatively: `src/DataModel.Analyzer.Tests/` (extend existing tests)
-- **Tests**:
-  - Load a simple RDF file (TTL) with known structure from `src/Telemetry.E2E.Tests/`.
-  - Extract devices and points.
-  - Verify correct DeviceId, point count, and metadata.
-  - Test value generation within constraints.
-- **Acceptance Criteria**:
-  - All tests pass locally with `dotnet test`.
-
-#### Task 4.2: Integration Tests (Telemetry Ingestion Flow)
-- **Files**: `src/Telemetry.E2E.Tests/RdfPublisherE2ETests.cs` (new or extend)
-- **Tests**:
-  1. **Setup**: Seed RDF via `RDF_SEED_PATH` in SiloHost (reference `src/Telemetry.E2E.Tests/seed.ttl`).
-  2. **Publish**: Run publisher with the same RDF to generate telemetry.
-  3. **Ingest**: Verify messages are consumed from RabbitMQ and routed to Orleans.
-  4. **Verify API**: Query device state and confirm point values match published telemetry.
-  5. **Metadata**: Confirm point metadata (unit, type, range) is available.
-- **Docker Compose Integration**:
-  - Extend `docker-compose.yml` to include an optional publisher service (enabled via environment variable).
-  - Mount RDF seed files from `src/Telemetry.E2E.Tests/` into container.
-  - Use helper scripts (`scripts/start-system.sh`, `scripts/stop-system.sh`) with RDF support.
-- **Acceptance Criteria**:
-  - E2E test runs within Docker Compose and completes without errors.
-  - API responses include expected device/point data.
-  - Telemetry flow is unbroken from publisher to API.
-
-#### Task 4.3: Verification Script
-- **Files**: `scripts/verify-rdf-telemetry.sh` (new)
-- **Action**:
-  - Start Docker Compose with RDF seed from `src/Telemetry.E2E.Tests/seed.ttl`.
-  - Publish RDF-aligned telemetry.
-  - Query API to validate ingestion.
-  - Generate a summary report.
-- **Acceptance Criteria**:
-  - Script can be run locally and produces a pass/fail summary.
-
----
-
-## Test Plan (REQUIRED)
-
-### Unit Tests
-
-**Scope**: RDF parsing, device/point extraction, value generation.
-
-**Files and Tests**:
-1. `src/DataModel.Analyzer.Tests/RdfDeviceExtractionTests.cs` (or extend existing):
-   - Load `src/Telemetry.E2E.Tests/seed.ttl` and extract all Equipment entries.
-   - Verify correct DeviceId, name, and point associations.
-   - Test edge cases: empty DeviceId, missing points.
-
-2. `src/Publisher.Tests/RdfTelemetryGeneratorTests.cs` (new, if project created):
-   - Instantiate `RdfTelemetryGenerator` with a test `BuildingDataModel`.
-   - Call `GenerateValueForPoint()` and verify ranges.
-   - Test all PointType categories (numeric, boolean, string, enum).
-
-**Execution**:
-```bash
-cd /home/takashi/projects/dotnet/orleans-telemetry-sample
-dotnet test src/DataModel.Analyzer.Tests
-dotnet test src/Publisher.Tests  # if created
-```
-
-### Integration / E2E Tests
-
-**Scope**: Full telemetry flow from publisher through Orleans to API.
-
-**Files and Tests**:
-1. `src/Telemetry.E2E.Tests/RdfPublisherE2ETests.cs` (new or extend):
-   - Test method: `TestRdfPublisherTelemetryIngestion()`:
-     1. Set `RDF_SEED_PATH=/app/seed/seed.ttl` (or full path to `src/Telemetry.E2E.Tests/seed.ttl`), `TENANT_ID=t1`.
-     2. Start Docker Compose (or local Orleans + RabbitMQ).
-     3. Run publisher for a fixed duration (e.g., 10 seconds).
-     4. Query API for device state.
-     5. Assert: device exists, point count matches RDF, values are in range.
-   
-   - Test method: `TestRdfMetadataIsAccessible()`:
-     1. Seed RDF from `src/Telemetry.E2E.Tests/seed.ttl`.
-     2. Publish telemetry.
-     3. Query API device endpoint.
-     4. Assert: response includes point metadata (unit, type, min/max).
-
-**Docker Compose Execution**:
-```bash
-# Using helper script
-cd /home/takashi/projects/dotnet/orleans-telemetry-sample
-export RDF_SEED_PATH=./src/Telemetry.E2E.Tests/seed.ttl
-./scripts/start-system.sh
-
-# In another terminal: run tests
-cd /home/takashi/projects/dotnet/orleans-telemetry-sample
-dotnet test src/Telemetry.E2E.Tests --filter "RdfPublisher"
-
-# Cleanup
-./scripts/stop-system.sh
-```
-
-**Standalone Execution** (if Docker Compose is overkill):
-```bash
-# Start RabbitMQ
-docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:management
-
-# Start Orleans silo (separate terminal)
-export RDF_SEED_PATH=/home/takashi/projects/dotnet/orleans-telemetry-sample/src/Telemetry.E2E.Tests/seed.ttl
-dotnet run --project src/SiloHost
-
-# Start API gateway (separate terminal)
-dotnet run --project src/ApiGateway
-
-# Run E2E tests
-export RDF_SEED_PATH=/home/takashi/projects/dotnet/orleans-telemetry-sample/src/Telemetry.E2E.Tests/seed.ttl
-dotnet test src/Telemetry.E2E.Tests --filter "RdfPublisher"
-
-# Cleanup
-docker stop rabbitmq
-docker rm rabbitmq
-```
-
-### Test Data
-
-**RDF Seed Files** (stored in `src/Telemetry.E2E.Tests/`):
-- `seed.ttl` – Existing minimal RDF used by E2E tests. Reuse this for publisher tests.
-- `seed-rdf-publisher-test.ttl` – New focused test RDF for publisher validation:
-  - Define 2–3 Equipment with distinct PointTypes.
-  - Include range constraints, units, and metadata.
-
-**Expected Telemetry Behavior**:
-- For each Equipment in the RDF, one `TelemetryMsg` per publish cycle.
-- Properties include values for all associated Points.
-- Sequences increase monotonically per device.
-
----
-
-## Assumptions and Constraints
-
-### Assumptions
-
-1. **RDF Format Consistency**:
-   - Input RDF follows the SBCO (Smart Building Ontology) or Brick schema conventions.
-   - Equipment and Point entities are properly linked via `sbco:hasPoint` or similar.
-   - DeviceId is present on Equipment; if missing, a fallback generation strategy is acceptable.
-
-2. **Telemetry Message Contract**:
-   - `TelemetryMsg` structure (in `Grains.Abstractions`) is stable; no breaking changes expected.
-   - Sequences are validated by Orleans and must be monotonic per device.
-
-3. **Orleans Grain Initialization**:
-   - Seeding via `GraphSeedService` is independent and can occur in parallel with telemetry ingestion.
-   - Grains are created on-demand as telemetry arrives; no pre-creation is required.
-
-4. **Multi-Tenancy**:
-   - `TENANT_ID` environment variable is synchronized between SiloHost, Publisher, and API calls.
-   - Tenant context is preserved through the ingestion pipeline.
-
-5. **Local Development Only**:
-   - Publisher is intended for simulation and testing; production-grade features (e.g., error recovery, backpressure) are out of scope.
-
-6. **RDF File Location**:
-   - RDF seed files are stored in `src/Telemetry.E2E.Tests/` so they are accessible to both publisher and E2E tests.
-   - `RDF_SEED_PATH` environment variable points to the full or relative path of these files.
-
-### Constraints (from AGENTS.md)
-
-1. **No External Services**: All data (RDF, telemetry, storage) remains within the Docker Compose stack or local development environment.
-2. **Incremental Changes**: Modifications preserve existing behavior (e.g., publisher can still run in random mode if RDF_SEED_PATH is unset).
-3. **Local Verification**: All tests must pass locally using `dotnet test` and `docker compose up/down`.
-4. **No Breaking Changes**: Existing Orleans contracts, API endpoints, and telemetry routing remain compatible.
-
----
-
-## Out of Scope
-
-This plan **does not** cover:
-
-1. **Production Deployment**:
-   - Kubernetes, cloud hosting, or production-grade scalability are not addressed.
-   - Load testing beyond simple E2E verification is deferred.
-
-2. **Advanced RDF Features**:
-   - Custom ontology extensions beyond SBCO/Brick.
-   - RDF reasoning or inference (e.g., derived properties).
-   - Real-time RDF updates (RDF is consumed once at startup).
-
-3. **Publisher Enhancements Beyond RDF**:
-   - Time-series simulation (e.g., synthetic trends, seasonal patterns).
-   - Failure injection or anomaly simulation.
-   - Kafka connector support (RabbitMQ only).
-
-4. **gRPC Implementation**:
-   - Full gRPC service implementation is not included; REST API verification is sufficient.
-
-5. **Admin Console or Monitoring**:
-   - Updates to the admin UI or monitoring dashboards are not included.
-   - Existing admin console continues to work.
-
-6. **Graph Grain Querying**:
-   - Telemetry does not directly update graph grains; graph seeding is independent.
-   - Graph query optimization is out of scope.
-
-7. **Storage Optimization**:
-   - Parquet compression and long-term storage are not modified.
-   - Existing storage layer remains unchanged.
-
----
-
-## Success Criteria Summary
-
-A task is complete when:
-
-1. **Unit Tests Pass**: `dotnet test src/DataModel.Analyzer.Tests` succeeds.
-2. **E2E Tests Pass**: `dotnet test src/Telemetry.E2E.Tests` completes without errors (within Docker Compose).
-3. **Integration Verified**:
-   - RDF seed is loaded by publisher from `src/Telemetry.E2E.Tests/seed.ttl`.
-   - Telemetry is published with RDF-derived device and point information.
-   - REST API queries return device state reflecting published telemetry.
-4. **No Regressions**: Existing publisher behavior (random mode) continues to work.
-5. **Documentation Updated**: README or dedicated doc file explains RDF-driven publisher usage and RDF file location conventions.
-
----
-
-## Next Steps (Future Issues)
-
-Once this plan is implemented, the following enhancements are candidates for future work:
-
-- **Point Value Simulation**: Add time-series generation (e.g., sinusoidal variation) for more realistic data.
-- **Control Flow Implementation**: Allow publisher to respond to Orleans control commands (e.g., set setpoint on writable points).
-- **Multi-RDF Support**: Load multiple RDF files or incremental RDF updates.
-- **Metrics and Observability**: Add OpenTelemetry instrumentation to publisher and Orleans pipeline.
-
-## ExecPlan
-
-The following execution plan focuses on delivering the Next Steps outlined above, starting with the highest-impact simulator improvements and building toward observability enhancements.
-
-1. **Point Value Simulation Prototype**: Update the publisher's telemetry generator to produce deterministic time-series data (sinusoidal, ramp, or noise-modulated) for RDF point definitions; capture requirements for range-preserving randomness and document how point metadata drives the waveform.
-2. **Control Flow Hook**: Design and implement a simple control channel (e.g., a message queue or HTTP endpoint) that can send setpoint adjustments from APIs or test harnesses back to the publisher; wire the publisher to listen for these commands and apply them to writable points.
-3. **Multi-RDF Management**: Extend configuration/loader logic to accept multiple `RDF_SEED_PATH` entries (or a directory) and reconcile their equipment/point definitions; provide conflict resolution rules and update documentation accordingly.
-4. **Metrics & Observability Additions**: Instrument the publisher and relevant Orleans services with OpenTelemetry traces/metrics so that the new RDF-driven flows can be monitored; ensure metrics cover ingestion rate, payload errors, and control command latency.
 
 ## Progress
 
-- [x] Point Value Simulation Prototype
-- [x] Control Flow Hook
-- [ ] Multi-RDF Management
-- [ ] Metrics & Observability Additions
+- [x] Step 1 – Diagnose RDF parsing for Area
+- [x] Step 2 – Diagnose Graph Seeding
+- [x] Step 3 – Verify Index Grain Behavior
+- [x] Step 4 – Diagnose Hierarchy Visualization
+- [x] Step 5 – Root Cause Fix
+- [ ] Step 6 – Verification
+
+---
 
 ## Observations
 
-- `dotnet test src/Publisher.Tests` initially failed because MSBuild could not create temp files under the default sandboxed directories; rerunning the command with escalated permissions (`sandbox_permissions=require_escalated`) succeeded.
-- Publisher now listens on `telemetry-control` (configurable via `CONTROL_QUEUE`) and applies JSON overrides for writable RDF points while keeping the `_pointMetadata` payload intact.
+- Observed `RdfAnalyzerService.ExtractAreas` filters only for `sbco:Space`/`rec:Space`/`rec:Area`, so `sbco:Area` subjects were skipped and never seeded, explaining the zero-count in statistics.
+- Added node-type logging in `GraphSeeder.SeedAsync` to confirm Area nodes are produced by the analyzer before Orleans grains run.
+- Added `GraphIndexGrainTests` covering add/remove behavior so we can reason about type-specific indexing without starting Orleans infrastructure.
+- RDF data relies on `rec:isPartOf`/`sbco:isPartOf` rather than `hasPart`, so building, level, area, equipment, and point parents were missing. Storing those parent URIs and applying them in `BuildHierarchy` now rebuilds every relationship so edges appear.
+- Ran `dotnet test src/DataModel.Analyzer.Tests/DataModel.Analyzer.Tests.csproj` to verify the analyzer suite accepts the new parent handling (required elevated permissions to create temp directories).
+- Ran `dotnet build` (the solution compiles cleanly, with pre-existing Moq 4.20.0 warnings) to satisfy the build validation step.
+
+---
 
 ## Decisions
 
-- ExecPlan focuses on incremental work that can be validated via existing tests and instrumentation; no alternative approaches have been adopted yet.
-- Chose deterministic sine-wave-driven value generation with stable per-point seeds so ranges stay consistent and booleans follow predictable sequence offsets.
-- Control commands reuse the existing RabbitMQ stack (`telemetry-control` queue) rather than adding an HTTP endpoint, keeping the publisher lightweight and ensuring FIFO handling.
+- Adding `sbco:Area` to the `ExtractAreas` subject types provides coverage for the Area entities defined in `seed-complex.ttl` without touching downstream grains or UI logic.
+- Logging node-type counts at seeding ensures we can verify Area node volume early and aids diagnosing index/edge issues.
+- Verified indexing logic via `GraphIndexGrain` unit tests backed by a `TestPersistentState` harness rather than hitting a live Orleans silo.
+- Chose to preserve edges for Site→Building→Level→Area→Equipment→Point by storing `rec:isPartOf` relationships during extraction and rehydrating them in `BuildHierarchy` so GraphSeeder can emit the appropriate edges.
 
-## Retrospective
-
-- Awaiting implementation to record learnings and verification outcomes.
+---
 
 ## ExecPlan
 
 ### Purpose
-Capture the concrete work required to complete the "Next Steps" improvements by adding targeted tests and verification coverage tied to the current RDF-driven publisher behavior.
+Provide concrete, verifiable steps to identify and resolve the Area recognition and edge relationship issues in the Admin UI.
 
 ### Tasks
-1. **Unit tests** – Add `RdfTelemetryGeneratorTests` (or extend the appropriate publisher test project) to validate device/point extraction, metadata enrichment, and value generation boundaries from `BuildingDataModel`.
-2. **Integration/E2E tests** – Expand `Telemetry.E2E.Tests` (and any helper scripts) to run the publisher with `RDF_SEED_PATH`, exercise the Orleans/RabbitMQ stack, and assert that published telemetry and metadata appear through the API.
-3. **Verification artifacts** – Document how to run the new tests (dotnet commands, Docker Compose flows) and capture any required shell helpers/scripts.
 
-### Verification
-- `dotnet test src/Publisher.Tests` (or whichever test project hosts the generator tests) must pass.
-- `dotnet test src/Telemetry.E2E.Tests --filter RdfPublisher` (or similar) should succeed after seeding the RDF and running the publisher.
-- Provide notes on any manual Docker Compose steps used for API validation.
+1. **Diagnose RDF Parsing**: Review `RdfAnalyzerService` to confirm Area extraction from `seed-complex.ttl`.
+   - Load the RDF file and verify BuildingDataModel includes Area entities.
+   - Add unit test to validate extraction count.
 
-### Progress
-- [x] Task 1 – Implement unit tests covering `RdfTelemetryGenerator`.
-- [x] Task 2 – Extend integration/E2E tests to run the RDF-driven publisher and validate API visibility.
-- [ ] Task 3 – Document verification commands and any helper scripts.
+2. **Diagnose Graph Seeding**: Review `GraphSeeder.SeedAsync()` to confirm Area nodes are registered in the index.
+   - Add debug logging for node type counts.
+   - Run with `seed-complex.ttl` and capture logs.
 
-### Decisions
-- Tests should reuse existing RDF seeds (`src/Telemetry.E2E.Tests/seed.ttl`) where possible to keep configuration aligned with the publisher’s runtime expectations.
-- If Docker Compose is required for the E2E flow, keep volume mounts consistent with the `RDF_SEED_PATH` conventions already documented.
-- The publisher assembly exposes an `InternalsVisibleTo("Publisher.Tests")` attribute so the new generator tests can exercise device/point definitions without expanding the public API surface.
+3. **Verify Index Grain**: Query `IGraphIndexGrain` to confirm Area nodes are retrievable.
+   - Write Orleans client test or manual verification script.
 
-## Success Criteria
+4. **Diagnose Hierarchy Rendering**: Review `AdminMetricsService` and `Admin.razor` for edge handling.
+   - Confirm `OutgoingEdges` are populated and rendered.
 
-- Publisher can load `RDF_SEED_PATH`, parse the RDF via `RdfAnalyzerService`, and report the device/point counts at startup.
-- Telemetry messages derived from RDF keep monotonic sequences, respect min/max ranges, and include a `_pointMetadata` entry for downstream clients while keeping raw point values simple.
-- `plans.md` captures the current work items, progress flags, and decision log before further implementation.
+5. **Implement Fix**: Based on findings, fix parsing, seeding, indexing, or rendering.
+   - Update relevant files.
+   - Run `dotnet build` and `dotnet test`.
 
-## Steps
+6. **E2E Verification**: Seed `seed-complex.ttl` and verify Admin UI displays Area and edges.
+   - Use Docker Compose or local services.
+   - Document results.
 
-1. Extend `Publisher` to reference `DataModel.Analyzer`, read `RDF_SEED_PATH`, and build a `BuildingDataModel` at startup.
-2. Implement `RdfTelemetryGenerator` to extract devices/points, generate constrained values, and provide metadata that can be baked into `TelemetryMsg`.
-3. Wire the generator into the main publishing loop so RDF-derived devices stream telemetry while falling back to the existing random mode, then document progress and decisions.
+### Verification Steps
 
-## Progress
+**Build & Unit Tests**:
+```bash
+cd /home/takashi/projects/dotnet/orleans-telemetry-sample
+dotnet build
+dotnet test
+```
 
-- [x] Step 1 – Cargo cult the RDF analyzer into the publisher and validate the model load/logging flow.
-- [x] Step 2 – Build the telemetry generator that maps equipment to points with metadata-aware values.
-- [x] Step 3 – Replace the hardcoded publishing loop, maintain sequence tracking, and note design decisions/test needs.
+**Docker Compose Verification**:
+```bash
+cd /home/takashi/projects/dotnet/orleans-telemetry-sample/scripts
+./start-system.sh
 
-## Observations
+# Open Admin UI in browser: http://localhost:8082/
+# Upload seed-complex.ttl via /admin/graph/import
+# Check Graph Statistics for Area count > 0
+# Check Graph Hierarchy for visible edges
 
-- Publisher now logs RDF load outcomes and drops back to the legacy random generator whenever the seed file is absent or invalid.
-- The new generator builds device/point definitions from the analyzer model and keeps metadata inside `_pointMetadata` while presenting primitive point values.
-- Added unit tests that cover device/point extraction, metadata exposure, and value generation behavior so future changes can be verified quickly.
-- The integration test `RdfPublisherTelemetry_IsVisibleThroughApi` injects normalized RDF telemetry via the Orleans router and confirms the API still exposes the expected point value while preserving the `_pointMetadata` payload.
-- The README records the specific `dotnet test` commands used for the generator and E2E checks so verification steps remain discoverable.
+./stop-system.sh
+```
 
-## Decisions
-
-- Metadata will be communicated via a reserved `_pointMetadata` dictionary entry so existing consumers still see primitive point values while metadata stays accessible.
-- Device IDs without an explicit `DeviceId` will fallback to a sanitized form of the equipment URI/name so telemetry remains deterministic.
-- Boolean points are detected heuristically via keyword matching (`Binary`, `Boolean`, `Switch`, etc.) while all other points default to constrained numeric values derived from `MinPresValue`/`MaxPresValue`.
-- Added an `InternalsVisibleTo("Publisher.Tests")` assembly attribute so generator internals can be exercised by the new unit tests without enlarging the public API.
-- Normalizing `_pointMetadata` entries to lightweight dictionaries before routing telemetry prevents Orleans serializer errors while keeping metadata accessible downstream.
+---
 
 ## Retrospective
 
-- Run `dotnet build`/`dotnet test` for both the analyzer and publisher when time permits, and add targeted unit tests for `RdfTelemetryGenerator`.
+*To be updated after completion.*
