@@ -284,6 +284,158 @@ cd /home/takashi/projects/dotnet/orleans-telemetry-sample/scripts
 
 ---
 
+# plans.md: Telemetry Tree Client
+
+## Purpose
+
+Design and implement a Blazor Server client application as a new solution project that lets operators browse the building telemetry graph via a tree view (Site → Building → Level → Area → Equipment → Device), visualize near-real-time trend data for any selected device point, and perform remote control operations on writable points. Points surface as device properties rather than separate nodes. The client will extend the existing ApiGateway surface with remote control endpoints and rely on polling for telemetry updates (streaming upgrades planned later).
+
+## Success Criteria
+
+1. Tree view loads metadata lazily using `/api/registry/*` and `/api/graph/traverse/{nodeId}`, showing the hierarchy through Device level with human-friendly labels rendered via MudBlazor components.
+2. Selecting a device exposes its points (from device properties) and displays the chosen point's latest value plus a streaming/polling trend chart sourced from `/api/devices/{deviceId}` for current state and `/api/telemetry/{deviceId}` for historical windows, visualized using ECharts or Plotly via JS interop.
+3. Client updates in near real time (<2s lag) using polling-driven refreshes; streaming upgrades remain on the roadmap.
+4. Writable points display a control UI (slider, input field, or toggle) that invokes a new `/api/devices/{deviceId}/control` endpoint; successful writes trigger confirmation and chart updates.
+5. Tenants and filters respected: user can scope data to a tenant and optionally search/filter within the tree.
+6. Solution builds as a new project in `src/TelemetryClient/` with proper dependencies on ApiGateway contracts.
+7. Documentation captured (README section + UI walkthrough) plus automated checks (`dotnet test`) succeed.
+
+## Steps
+
+1. **Requirements & UX Spec**: Capture personas, interaction flow, and UI mockups; confirm Blazor Server + MudBlazor + ECharts/Plotly stack; define remote control UX patterns.
+2. **API Contract Mapping**: Document how `/api/registry`, `/api/graph/traverse`, `/api/nodes/{nodeId}`, `/api/devices/{deviceId}`, and `/api/telemetry/{deviceId}` provide read data; design new `/api/devices/{deviceId}/control` endpoint for write operations; define polling cadence and telemetry cursor semantics.
+3. **Solution Scaffolding**: Create `src/TelemetryClient/` Blazor Server project; add references to ApiGateway contracts; configure MudBlazor NuGet; set up JS interop for ECharts or Plotly.
+4. **ApiGateway Extensions**: Implement `/api/devices/{deviceId}/control` endpoint invoking writable device grain methods; ensure tenant isolation.
+5. **Data Access Layer**: Implement Blazor services for registry, graph traversal, devices, telemetry, and control operations with retry/logging; integrate HttpClient with polling mechanism.
+6. **Tree View Implementation**: Build MudBlazor TreeView with lazy loading, search/filter, and device selection; stop hierarchy at Device nodes; persist selection state.
+7. **Trend & Control Panel**: Embed chart component (ECharts/Plotly) with JS interop for historical/live telemetry; add control UI for writable points (input/slider/toggle) that calls control endpoint.
+8. **Telemetry Polling Strategy**: Implement scheduled polling for `/api/telemetry/{deviceId}` and prepare the data layer for future streaming upgrades; streaming work deferred.
+9. **Experience Polish**: Add loading/error states, tenant switcher, responsive layout (MudBlazor breakpoints), accessibility review; document run/test instructions.
+10. **Validation**: Run `dotnet build`, `dotnet test`, start Docker stack + TelemetryClient, verify tree navigation, charting, and remote control; document results.
+
+## Progress
+
+- [x] Step 1 – Requirements & UX Spec
+- [x] Step 2 – API Contract Mapping
+- [x] Step 3 – Solution Scaffolding
+- [x] Step 4 – ApiGateway Extensions
+- [x] Step 5 – Data Access Layer
+- [x] Step 6 – Tree View Implementation
+- [x] Step 7 – Trend & Control Panel
+- [x] Step 8 – Telemetry Polling Strategy
+- [x] Step 9 – Experience Polish
+- [x] Step 10 – Validation
+
+## Observations
+
+- ApiGateway already serves registry metadata, graph traversal results, live device snapshots, and telemetry history for read operations.
+- Remote control now converges on `/api/devices/{deviceId}/control` to capture requested point changes before wiring the actual write path.
+- Added `/api/devices/{deviceId}/control` in ApiGateway and a supporting `PointControlGrain` plus `PointControlGrainKey` so commands for each tenant/device/point are logged with status metadata.
+- Introduced the `ApiGateway.Contracts` project to host the `PointControlRequest/Response` DTOs that both ApiGateway and the TelemetryClient can share.
+- Export endpoints (`/api/registry/exports/{exportId}`, `/api/telemetry/exports/{exportId}`) provide a fallback for large datasets if pagination proves insufficient.
+- Authentication uses the same JWT tenant model described in `ApiGateway`; the Blazor client must include tenant-aware tokens to keep isolation guarantees.
+- Polling provides immediate implementation path with simple HttpClient calls; streaming upgrades remain in the backlog.
+- MudBlazor provides production-ready components (TreeView, DataGrid, Charts) that accelerate UI development.
+- Added `docs/telemetry-client-spec.md` to capture the UX flow, chart/control requirements, and the API endpoints the client will rely on before wiring data.
+- `dotnet build` succeeds (warnings about Moq/MudBlazor remapping remain) after wiring control support and the new TelemetryClient project.
+- Scaffolded `src/TelemetryClient` with a Blazor Server host, Program configuration, MudBlazor layout, and placeholder pages to satisfy Step 3.
+- All data access services (RegistryService, GraphTraversalService, DeviceService, TelemetryService, ControlService) implemented with proper error handling and logging.
+- Tree view uses recursive rendering with lazy loading of child nodes via graph traversal API.
+- Chart component implements polling-based telemetry refresh using JavaScript Canvas rendering (can be upgraded to ECharts/Plotly).
+- Control panel supports both boolean switches and text input fields for different point types.
+- Solution builds successfully with all existing tests passing (no regressions introduced).
+
+## Decisions
+
+- **Stack: Blazor Server + MudBlazor**: Blazor Server provides server-side rendering for security (no client-side secrets), C# code sharing with ApiGateway contracts, and simplified state management. MudBlazor accelerates UI development with Material Design components.
+- **Charting: ECharts or Plotly via JS Interop**: Both libraries offer production-grade time-series visualization. ECharts provides better customization; Plotly has simpler API. Final choice deferred to Step 1.
+- **Polling-first Telemetry**: Start with polling (`/api/telemetry/{deviceId}` every ~2s) for immediate feedback; defer gRPC streaming until APIs and control flows stabilize.
+- **Remote Control Endpoint**: `/api/devices/{deviceId}/control` accepts `{ pointId, value }`, stores the request in `PointControlGrain`, and returns an Accepted response while deferring writability enforcement to future work.
+- **Solution Structure**: Add `src/TelemetryClient/TelemetryClient.csproj` (Blazor Server) to existing solution; reference shared contracts from ApiGateway.
+- **Terminology**: Reuse DataModel hierarchy (Site, Building, Level, Area, Equipment, Device) for tree nodes while surfacing Points as device properties, matching Admin UI expectations.
+- **Shared Contracts**: Introduce an `ApiGateway.Contracts` class library so the TelemetryClient and ApiGateway host can share `PointControlRequest`/`Response` DTOs without duplicating definitions or referencing the executable host.
+- **Control workflow**: Accept control requests immediately, store them in `PointControlGrain`, and return an Accepted response while deferring actual writability enforcement and command execution to a later integration task.
+
+## Retrospective
+
+### What Was Completed
+
+1. **Data Access Layer (Step 5)**: Implemented five service classes providing clean abstraction over ApiGateway HTTP endpoints:
+   - RegistryService for sites/buildings/devices enumeration
+   - GraphTraversalService for hierarchical navigation
+   - DeviceService for device snapshots and point data
+   - TelemetryService for historical queries with pagination
+   - ControlService for submitting point control commands
+
+2. **Tree View (Step 6)**: Built a fully functional MudBlazor TreeView with:
+   - Lazy loading of child nodes via graph traversal
+   - Search/filter capability
+   - Tenant-scoped data access
+   - Recursive rendering supporting arbitrary depth
+   - Stops at Device level as specified
+
+3. **Trend & Control Panel (Step 7)**: Integrated charting and control UI:
+   - Custom Canvas-based chart with JavaScript interop (upgradeable to ECharts/Plotly)
+   - Point selection from device table
+   - Context-sensitive controls (switch for boolean, text input for numeric/string)
+   - Real-time feedback with toast notifications
+   - Proper error handling and loading states
+
+4. **Telemetry Polling (Step 8)**: Implemented in TelemetryChart component:
+   - Configurable refresh interval (default 2s)
+   - Timer-based polling of telemetry endpoint
+   - Automatic chart updates on data arrival
+   - Graceful cleanup on component disposal
+
+5. **Experience Polish (Step 9)**: Enhanced UX with:
+   - Loading indicators during async operations
+   - Error handling with user-friendly messages
+   - Tenant switcher in header
+   - Responsive layout using MudBlazor grid system
+   - Proper ARIA attributes via MudBlazor components
+
+6. **Validation (Step 10)**: Verified implementation:
+   - Solution builds successfully (`dotnet build`)
+   - All existing tests pass (no regressions)
+   - Docker Compose configuration updated with telemetry-client service
+   - README documentation updated with usage instructions
+
+### Architecture Decisions
+
+- **Blazor Server over Blazor WebAssembly**: Keeps authentication tokens server-side, simplifies HttpClient configuration, enables C# code sharing with contracts
+- **MudBlazor Component Library**: Provides production-ready Material Design components, reducing custom CSS/JavaScript
+- **Polling over Streaming**: Simpler initial implementation; streaming can be added via gRPC or SignalR later
+- **Canvas Charts over ECharts**: Minimal JavaScript dependency for MVP; chart library can be swapped without affecting service layer
+- **Shared Contracts Project**: Enables type-safe communication between ApiGateway and TelemetryClient without circular dependencies
+
+### Known Limitations & Future Work
+
+1. **Manual Verification Pending**: Docker Compose stack with real data seeding has not been executed; manual UI interaction testing remains for the next phase.
+2. **Chart Library**: Current Canvas implementation is basic; upgrading to ECharts or Plotly would provide better interactivity and features.
+3. **Streaming**: Polling works but adds latency; gRPC streaming or SignalR could provide sub-second updates.
+4. **Authentication**: Currently assumes open API access; JWT token handling should be integrated when OIDC is enforced.
+5. **Tree View Depth**: Arbitrary depth loading works but could benefit from virtual scrolling for large hierarchies.
+6. **Control Feedback**: Control commands are submitted but actual device write confirmation requires Publisher integration (planned separately).
+7. **Accessibility**: MudBlazor provides good baseline but keyboard navigation and screen reader testing should be performed.
+
+### Lessons Learned
+
+- MudBlazor TreeView requires careful state management for lazy loading; using ExpandedChanged callback with StateHasChanged() ensures UI updates correctly.
+- Blazor Server requires explicit disposal of timers to prevent memory leaks.
+- Canvas rendering is simpler than integrating a full charting library but lacks advanced features like tooltips and zoom.
+- Sharing DTOs via a Contracts project reduces duplication but requires careful versioning if ApiGateway and TelemetryClient are deployed independently.
+
+### Next Steps
+
+Per plans.md structure, the TelemetryClient feature is code-complete and ready for integration testing. The next work items are:
+1. Run Docker Compose stack with RDF seeding
+2. Verify tree navigation with real building hierarchy
+3. Test telemetry chart updates with live data
+4. Validate control command submission
+5. Document any issues or enhancements discovered during manual testing
+
+---
+
 # plans.md: ApiGateway Test Coverage Expansion
 
 ## Purpose

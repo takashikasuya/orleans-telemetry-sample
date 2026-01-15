@@ -64,6 +64,27 @@ After startup, verify:
 
 ---
 
+## Required Reading Documents
+
+Before starting any work, agents **must** consult the following documents:
+
+1. **`plans.md`** (MANDATORY)
+   - The primary source of truth for current task direction and progress.
+   - Contains purpose, success criteria, steps, observations, decisions, and retrospective.
+   - Must be read before beginning any task and updated incrementally throughout work.
+   - If plans.md does not exist or is incomplete for the current task, create or update it before proceeding.
+
+2. **`PROJECT_OVERVIEW.md`**
+   - High-level architecture and workflow overview.
+
+3. **`README.md`**
+   - Sample service startup sequence and basic usage.
+
+4. **`docs/`**
+   - Technical documentation covering specific subsystems.
+
+---
+
 ## Entry Points and Key Paths
 
 Agents should use the following as guides to understand structure:
@@ -94,6 +115,75 @@ Refer to these for structural context before modifying code.
    - Validate telemetry ingestion by injecting sample telemetry and confirming device grain state updates (as observable through API).
 
 Agents must clearly document which verification steps were executed by the agent and which require local execution.
+
+---
+
+## Consistency Checks for Changes
+
+Before finalizing any code change, agents must verify:
+
+1. **Build Integrity**
+   - Run `dotnet build` to ensure no compilation errors.
+   - All projects in the solution must build successfully.
+
+2. **Test Integrity**
+   - Run `dotnet test` to ensure all existing tests pass.
+   - Add new tests for new functionality.
+
+3. **Documentation Alignment**
+   - Update `plans.md` with the actual changes made.
+   - Verify that README.md, PROJECT_OVERVIEW.md, and docs/ remain accurate.
+   - Update inline code comments if behavior changes.
+
+4. **API Contract Stability**
+   - Public APIs should not change unless explicitly required.
+   - Breaking changes must be documented in plans.md with justification.
+
+5. **Configuration Consistency**
+   - Verify that docker-compose.yml, Dockerfile, and appsettings.json remain consistent.
+   - Test with `docker compose up --build` if configuration changes are made.
+
+6. **Dependency Integrity**
+   - Ensure NuGet package versions are compatible.
+   - Avoid introducing unnecessary dependencies.
+
+---
+
+## Definition of Done
+
+A task is considered complete when all of the following criteria are met:
+
+1. **Code Implementation**
+   - All code changes are implemented as specified in plans.md.
+   - Code follows existing conventions (C# 12, .NET 8, async/await patterns).
+   - No placeholder or TODO comments remain in production code.
+
+2. **Build & Test Success**
+   - `dotnet build` completes with zero errors.
+   - `dotnet test` passes all tests (or new tests are added and passing).
+   - No new warnings introduced (unless documented in plans.md).
+
+3. **Integration Verification**
+   - `docker compose up --build` starts successfully (if applicable).
+   - REST API endpoints respond correctly (verified via Swagger or curl).
+   - gRPC services respond correctly (if applicable).
+   - Telemetry ingestion works end-to-end (if applicable).
+
+4. **Documentation Complete**
+   - `plans.md` updated with final outcomes and retrospective.
+   - All observations, decisions, and trade-offs documented.
+   - README.md or relevant docs/ files updated if behavior changed.
+
+5. **Cleanup & Review**
+   - No debug code, console logs, or temporary files left in repository.
+   - Code is idiomatic and maintainable.
+   - Changes are minimal and focused on the stated purpose.
+
+6. **Agent Confirmation**
+   - Agent explicitly confirms all criteria above are met.
+   - Agent identifies any manual verification steps required by user.
+
+If any criterion cannot be met, document the blocker in plans.md under "Clarification Needed" or "Blockers" section.
 
 ---
 

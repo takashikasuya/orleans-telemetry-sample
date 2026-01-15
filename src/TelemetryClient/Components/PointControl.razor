@@ -1,0 +1,136 @@
+@using ApiGateway.Contracts
+@using TelemetryClient.Services
+@inject ControlService ControlService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h6">Control: @PointId</MudText>
+    
+    @if (PointType?.ToLower() == "boolean" || PointType?.ToLower() == "bool")
+    {
+        <MudSwitch Value="_boolValue" Label="@($"Value: {_boolValue}")" Color="Color.Primary" 
+                   Disabled="_submitting" T="bool" ValueChanged="OnBoolValueChangedAsync" />
+    }
+    else
+    {
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-2">
+            <MudTextField @bind-Value="_stringValue" Label="Value" Variant="Variant.Outlined" 
+                          Disabled="_submitting" Style="flex: 1;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitControlAsync" 
+                       Disabled="_submitting">
+                @if (_submitting)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+                else
+                {
+                    <MudText>Submit</MudText>
+                }
+            </MudButton>
+        </MudStack>
+    }
+    
+    @if (!string.IsNullOrEmpty(_lastStatus))
+    {
+        <MudAlert Severity="@(_lastStatusSuccess ? Severity.Success : Severity.Error)" Class="mt-2">
+            @_lastStatus
+        </MudAlert>
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public string DeviceId { get; set; } = string.Empty;
+    
+    [Parameter]
+    public string PointId { get; set; } = string.Empty;
+    
+    [Parameter]
+    public string? PointType { get; set; }
+    
+    [Parameter]
+    public string TenantId { get; set; } = "default";
+    
+    [Parameter]
+    public string BuildingName { get; set; } = string.Empty;
+    
+    [Parameter]
+    public string SpaceId { get; set; } = string.Empty;
+
+    private bool _submitting = false;
+    private string _stringValue = string.Empty;
+    private bool _boolValue = false;
+    private string? _lastStatus;
+    private bool _lastStatusSuccess = false;
+
+    private async Task OnBoolValueChangedAsync(bool value)
+    {
+        _boolValue = value;
+        await SubmitControlAsync();
+    }
+
+    private async Task SubmitControlAsync()
+    {
+        _submitting = true;
+        _lastStatus = null;
+        
+        try
+        {
+            object? desiredValue = PointType?.ToLower() switch
+            {
+                "boolean" or "bool" => _boolValue,
+                "int" or "integer" => int.TryParse(_stringValue, out var intVal) ? intVal : null,
+                "double" or "float" => double.TryParse(_stringValue, out var dblVal) ? dblVal : null,
+                _ => _stringValue
+            };
+
+            if (desiredValue == null && !string.IsNullOrEmpty(_stringValue))
+            {
+                desiredValue = _stringValue;
+            }
+
+            var request = new PointControlRequest(
+                CommandId: Guid.NewGuid().ToString(),
+                BuildingName: BuildingName,
+                SpaceId: SpaceId,
+                DeviceId: DeviceId,
+                PointId: PointId,
+                DesiredValue: desiredValue,
+                Metadata: null
+            );
+
+            var response = await ControlService.SubmitControlCommandAsync(DeviceId, request, TenantId);
+            
+            if (response != null)
+            {
+                _lastStatus = $"Command {response.Status} at {response.RequestedAt:HH:mm:ss}";
+                _lastStatusSuccess = response.Status == "Accepted" || response.Status == "Applied";
+                
+                if (_lastStatusSuccess)
+                {
+                    Snackbar.Add("Control command submitted successfully", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add($"Control command failed: {response.LastError}", Severity.Error);
+                }
+            }
+            else
+            {
+                _lastStatus = "Failed to submit control command";
+                _lastStatusSuccess = false;
+                Snackbar.Add("Failed to submit control command", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _lastStatus = $"Error: {ex.Message}";
+            _lastStatusSuccess = false;
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

@@ -1,0 +1,206 @@
+@page "/"
+@using TelemetryClient.Models
+@using TelemetryClient.Services
+@inject HierarchyTreeService HierarchyTreeService
+@inject DeviceService DeviceService
+@inject TelemetryService TelemetryService
+@inject ControlService ControlService
+@inject ISnackbar Snackbar
+
+<MudGrid>
+    <MudItem xs="12">
+        <MudPaper Class="pa-4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h4">Telemetry Tree Client</MudText>
+                <MudStack Row="true" Spacing="2">
+                    <MudTextField @bind-Value="_tenantId" Label="Tenant ID" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTreeAsync" Disabled="_loading">
+                        @if (_loading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        }
+                        else
+                        {
+                            <MudText>Load</MudText>
+                        }
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4" Style="height: 70vh; overflow-y: auto;">
+            <MudTextField @bind-Value="_searchTerm" Label="Search" Variant="Variant.Outlined" 
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" 
+                          Margin="Margin.Dense" Immediate="true" DebounceInterval="300" />
+            
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="mt-2" />
+            }
+            else if (_treeNodes.Any())
+            {
+                <MudTreeView T="HierarchyTreeNode" Items="_treeNodes" @bind-SelectedValue="_selectedNode" 
+                             Hover="true" Dense="true" ExpandOnClick="true">
+                    <ItemTemplate Context="item">
+                        <MudTreeViewItem @bind-Expanded="item.IsExpanded" Value="item" 
+                                         Icon="@item.GetIcon()" OnClick="@(() => OnNodeSelectedAsync(item))"
+                                         CanExpand="@item.CanHaveChildren()" LoadingIcon="@Icons.Material.Filled.HourglassEmpty"
+                                         Loading="@(!item.ChildrenLoaded && item.IsExpanded)">
+                            <BodyContent>
+                                <MudText>@item.DisplayName</MudText>
+                            </BodyContent>
+                            <ChildContent>
+                                @if (item.IsExpanded && !item.ChildrenLoaded)
+                                {
+                                    InvokeAsync(async () => await LoadChildrenAsync(item));
+                                }
+                                @if (item.Children.Any())
+                                {
+                                    <MudTreeView T="HierarchyTreeNode" Items="item.Children" @bind-SelectedValue="_selectedNode" 
+                                                 Hover="true" Dense="true" ExpandOnClick="true">
+                                        <ItemTemplate Context="child">
+                                            <MudTreeViewItem @bind-Expanded="child.IsExpanded" Value="child"
+                                                             Icon="@child.GetIcon()" OnClick="@(() => OnNodeSelectedAsync(child))"
+                                                             CanExpand="@child.CanHaveChildren()">
+                                                <MudText>@child.DisplayName</MudText>
+                                            </MudTreeViewItem>
+                                        </ItemTemplate>
+                                    </MudTreeView>
+                                }
+                            </ChildContent>
+                        </MudTreeViewItem>
+                    </ItemTemplate>
+                </MudTreeView>
+            }
+            else
+            {
+                <MudText Class="mt-4" Typo="Typo.body2">No data loaded. Select tenant and click Load.</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="8">
+        <MudPaper Class="pa-4" Style="height: 70vh; overflow-y: auto;">
+            @if (_selectedDevice != null)
+            {
+                <MudText Typo="Typo.h5">@_selectedDevice.Name</MudText>
+                <MudText Typo="Typo.caption" Class="mb-4">Device ID: @_selectedDevice.DeviceId</MudText>
+                
+                <MudDivider Class="my-2" />
+                
+                <MudText Typo="Typo.h6" Class="mt-4">Points</MudText>
+                @if (_selectedDevice.Points.Any())
+                {
+                    <MudTable Items="_selectedDevice.Points" Dense="true" Hover="true" Class="mt-2">
+                        <HeaderContent>
+                            <MudTh>Point ID</MudTh>
+                            <MudTh>Type</MudTh>
+                            <MudTh>Value</MudTh>
+                            <MudTh>Unit</MudTh>
+                            <MudTh>Timestamp</MudTh>
+                            <MudTh>Writable</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Point ID">@context.Value.PointId</MudTd>
+                            <MudTd DataLabel="Type">@context.Value.PointType</MudTd>
+                            <MudTd DataLabel="Value">@context.Value.Value</MudTd>
+                            <MudTd DataLabel="Unit">@context.Value.Unit</MudTd>
+                            <MudTd DataLabel="Timestamp">@context.Value.Timestamp?.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+                            <MudTd DataLabel="Writable">
+                                @if (context.Value.Writable)
+                                {
+                                    <MudChip Size="Size.Small" Color="Color.Success">Yes</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip Size="Size.Small" Color="Color.Default">No</MudChip>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mt-2">No points available.</MudText>
+                }
+            }
+            else
+            {
+                <MudText Typo="Typo.body1">Select a device from the tree to view details.</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private string _tenantId = "default";
+    private string _searchTerm = string.Empty;
+    private bool _loading = false;
+    private List<HierarchyTreeNode> _treeNodes = new();
+    private HierarchyTreeNode? _selectedNode;
+    private DeviceSnapshotDto? _selectedDevice;
+
+    private async Task LoadTreeAsync()
+    {
+        _loading = true;
+        try
+        {
+            _treeNodes = await HierarchyTreeService.LoadRootNodesAsync(_tenantId);
+            Snackbar.Add($"Loaded {_treeNodes.Count} root nodes", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load tree: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadChildrenAsync(HierarchyTreeNode node)
+    {
+        if (node.ChildrenLoaded || !node.CanHaveChildren())
+            return;
+
+        try
+        {
+            node.Children = await HierarchyTreeService.LoadChildrenAsync(node.NodeId, _tenantId);
+            node.ChildrenLoaded = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load children: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnNodeSelectedAsync(HierarchyTreeNode node)
+    {
+        _selectedNode = node;
+        
+        // If device node, load device details
+        if (node.NodeType == "Device")
+        {
+            try
+            {
+                _selectedDevice = await DeviceService.GetDeviceAsync(node.NodeId, _tenantId);
+                if (_selectedDevice == null)
+                {
+                    Snackbar.Add($"Device {node.NodeId} not found", Severity.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to load device: {ex.Message}", Severity.Error);
+            }
+        }
+        else
+        {
+            _selectedDevice = null;
+        }
+    }
+}
+
