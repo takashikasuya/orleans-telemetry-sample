@@ -284,6 +284,75 @@ cd /home/takashi/projects/dotnet/orleans-telemetry-sample/scripts
 
 ---
 
+# plans.md: DataModel.Analyzer Schema Alignment
+
+## Purpose
+
+Update `DataModel.Analyzer` so RDF extraction and Orleans export align with the updated schema files in `src/DataModel.Analyzer/Schema` while keeping backward compatibility with existing seed data.
+
+## Success Criteria
+
+1. **Schema IDs**: `sbco:id` is captured and used as a fallback identifier for Equipment/Point when legacy `sbco:device_id`/`sbco:point_id` are missing.
+2. **Point Relationships**: `brick:Point` and `brick:isPointOf` are supported so point→equipment linkage works with the current SHACL/OWL schema.
+3. **Equipment Extensions**: `sbco:deviceType`, `sbco:installationArea`, `sbco:targetArea`, `sbco:panel` are extracted into the model (new fields or custom properties) and surfaced in exports/graph attributes as needed.
+4. **Space Types**: `sbco:Room`, `sbco:OutdoorSpace`, and `sbco:Zone` are treated as Area/Space equivalents for hierarchy construction.
+5. **Tests/Validation**: `DataModel.Analyzer.Tests` includes coverage for the new predicates and type handling; `dotnet test src/DataModel.Analyzer.Tests` passes.
+
+## Steps
+
+1. **Schema-to-Code Gap Analysis**
+   - Enumerate new/changed classes and predicates in `building_model.owl.ttl` / `building_model.shacl.ttl`.
+   - Map each to current extraction logic and identify missing handling.
+2. **Model Updates**
+   - Decide whether to add explicit fields for `sbco:id`, `installationArea`, `targetArea`, `panel` or store them in `CustomProperties`.
+   - Define ID resolution rules (prefer `sbco:id` when legacy IDs are absent).
+3. **Extractor Updates**
+   - Extend type detection for Areas to include `Room`/`OutdoorSpace`/`Zone`.
+   - Add `brick:isPointOf` and `brick:Point` support.
+   - Add camelCase predicates (`deviceType`, `pointType`, `pointSpecification`, `minPresValue`, `maxPresValue`) where not already supported.
+4. **Export/Integration Updates**
+   - Update `OrleansIntegrationService` and `DataModelExportService` to use the new ID rules and expose new fields in attributes.
+5. **Tests**
+   - Add/extend tests with RDF samples using `sbco:id`, `brick:isPointOf`, and `sbco:deviceType` variants.
+   - Validate hierarchy and point bindings.
+6. **Verification**
+   - Run `dotnet build`.
+   - Run `dotnet test src/DataModel.Analyzer.Tests`.
+
+## Progress
+
+- [x] Step 1 – Schema-to-code gap analysis
+- [x] Step 2 – Model updates
+- [x] Step 3 – Extractor updates
+- [x] Step 4 – Export/integration updates
+- [x] Step 5 – Tests
+- [ ] Step 6 – Verification
+
+## Observations
+
+- The updated SHACL uses `sbco:id` as a required identifier for points/equipment, while legacy `sbco:point_id` / `sbco:device_id` are not present.
+- `brick:isPointOf` is the primary point→equipment linkage in the schema, but the analyzer only checks `rec:isPointOf` / `sbco:isPointOf`.
+- `sbco:EquipmentExt` introduces `deviceType`, `installationArea`, `targetArea`, and `panel` properties that are not captured today.
+- The schema defines additional space subclasses (`Room`, `OutdoorSpace`, `Zone`) that are not included in Area extraction.
+- Confirmed: only `src/DataModel.Analyzer/Schema/building_model.owl.ttl` and `src/DataModel.Analyzer/Schema/building_model.shacl.ttl` are authoritative; no YAML schema is used.
+- Added `SchemaId` to `RdfResource` plus Equipment extension fields (`InstallationArea`, `TargetArea`, `Panel`).
+- Extractor now supports `brick:Point`/`brick:isPointOf`, additional space subclasses, and EquipmentExt properties, with `sbco:id` fallback for DeviceId/PointId.
+- Orleans export/graph seed now uses schema IDs when legacy IDs are missing and surfaces new equipment fields as node attributes.
+- Added analyzer and integration tests covering schema-id fallback and Brick point linkage.
+- `dotnet test src/DataModel.Analyzer.Tests/DataModel.Analyzer.Tests.csproj` fails in this sandbox due to socket permission errors from MSBuild/vstest (named pipe / socket bind). Needs local verification.
+
+## Decisions
+
+- Preserve backward compatibility by supporting both legacy snake_case predicates and schema camelCase predicates.
+- Treat `sbco:id` as the canonical identifier when present; map into `Identifiers` and use as a fallback for `DeviceId` / `PointId`.
+- Fold `Room`/`OutdoorSpace`/`Zone` into the Area model to keep hierarchy shape stable without introducing new node types.
+
+## Retrospective
+
+*To be updated after completion.*
+
+---
+
 # plans.md: Telemetry Tree Client
 
 ## Purpose

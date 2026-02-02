@@ -34,6 +34,23 @@ public class OrleansIntegrationServiceBindingTests
         grainKey.Should().Be("tenantA:BuildingA:Room101:dev-1:temp-1");
     }
 
+    [Fact]
+    public void CreateGraphSeedData_UsesSchemaIdsWhenLegacyIdsMissing()
+    {
+        var model = BuildModelWithSchemaIds();
+        var service = CreateService();
+
+        var seed = service.CreateGraphSeedData(model);
+
+        var equipmentNode = seed.Nodes.Single(node => node.NodeType == GraphNodeType.Equipment);
+        equipmentNode.NodeId.Should().Be("device:equip-1");
+        equipmentNode.Attributes["DeviceId"].Should().Be("equip-1");
+
+        var pointNode = seed.Nodes.Single(node => node.NodeType == GraphNodeType.Point);
+        pointNode.NodeId.Should().Be("point:point-1");
+        pointNode.Attributes["PointId"].Should().Be("point-1");
+    }
+
     private static BuildingDataModel BuildModel()
     {
         var site = new Site { Name = "SiteA", Uri = "site:1" };
@@ -55,6 +72,42 @@ public class OrleansIntegrationServiceBindingTests
             Uri = "point:1",
             PointId = "temp-1",
             PointType = "temperature",
+            EquipmentUri = equipment.Uri
+        };
+
+        site.Buildings.Add(building);
+        building.Levels.Add(level);
+        level.Areas.Add(area);
+        area.Equipment.Add(equipment);
+        equipment.Points.Add(point);
+
+        return new BuildingDataModel
+        {
+            Sites = { site },
+            Buildings = { building },
+            Levels = { level },
+            Areas = { area },
+            Equipment = { equipment },
+            Points = { point }
+        };
+    }
+
+    private static BuildingDataModel BuildModelWithSchemaIds()
+    {
+        var site = new Site { Name = "SiteA", Uri = "site:1" };
+        var building = new Building { Name = "BuildingA", Uri = "building:1", SiteUri = site.Uri };
+        var level = new Level { Name = "L1", Uri = "level:1", BuildingUri = building.Uri };
+        var area = new Area { Name = "Room101", Uri = "area:1", LevelUri = level.Uri };
+        var equipment = new Equipment
+        {
+            Name = "AHU",
+            SchemaId = "equip-1",
+            AreaUri = area.Uri
+        };
+        var point = new Point
+        {
+            Name = "Temperature",
+            SchemaId = "point-1",
             EquipmentUri = equipment.Uri
         };
 

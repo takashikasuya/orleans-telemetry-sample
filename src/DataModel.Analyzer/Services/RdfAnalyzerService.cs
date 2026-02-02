@@ -452,8 +452,14 @@ public class RdfAnalyzerService
         {
             $"{SbcoNamespace}Space",
             $"{SbcoNamespace}Area",
+            $"{SbcoNamespace}Room",
+            $"{SbcoNamespace}OutdoorSpace",
+            $"{SbcoNamespace}Zone",
             $"{RecNamespace}Space",
-            $"{RecNamespace}Area"
+            $"{RecNamespace}Area",
+            $"{RecNamespace}Room",
+            $"{RecNamespace}OutdoorSpace",
+            $"{RecNamespace}Zone"
         });
 
         foreach (var subject in subjects)
@@ -483,7 +489,12 @@ public class RdfAnalyzerService
     private List<Equipment> ExtractEquipment(IGraph graph)
     {
         var equipmentList = new List<Equipment>();
-        var subjects = GetSubjectsOfType(graph, new[] { $"{SbcoNamespace}EquipmentExt", $"{SbcoNamespace}Equipment" });
+        var subjects = GetSubjectsOfType(graph, new[]
+        {
+            $"{SbcoNamespace}EquipmentExt",
+            $"{SbcoNamespace}Equipment",
+            $"{BrickNamespace}Equipment"
+        });
 
         foreach (var subject in subjects)
         {
@@ -492,6 +503,7 @@ public class RdfAnalyzerService
             ExtractCommonProperties(graph, subject, equipment);
             ExtractAssetProperties(graph, subject, equipment);
             ExtractGutpEquipmentProperties(graph, subject, equipment);
+            ExtractEquipmentExtProperties(graph, subject, equipment);
             equipment.Documentation.AddRange(ExtractDocuments(graph, subject));
 
             var pointUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPoint", $"{SbcoNamespace}hasPoint" });
@@ -529,6 +541,11 @@ public class RdfAnalyzerService
                 StoreStringList(equipment.CustomProperties, "isPartOfUris", partOfUris);
             }
 
+            if (string.IsNullOrWhiteSpace(equipment.DeviceId) && !string.IsNullOrWhiteSpace(equipment.SchemaId))
+            {
+                equipment.DeviceId = equipment.SchemaId;
+            }
+
             equipmentList.Add(equipment);
         }
 
@@ -538,7 +555,12 @@ public class RdfAnalyzerService
     private List<Point> ExtractPoints(IGraph graph)
     {
         var points = new List<Point>();
-        var subjects = GetSubjectsOfType(graph, new[] { $"{SbcoNamespace}PointExt", $"{SbcoNamespace}Point" });
+        var subjects = GetSubjectsOfType(graph, new[]
+        {
+            $"{SbcoNamespace}PointExt",
+            $"{SbcoNamespace}Point",
+            $"{BrickNamespace}Point"
+        });
 
         foreach (var subject in subjects)
         {
@@ -547,7 +569,12 @@ public class RdfAnalyzerService
             ExtractCommonProperties(graph, subject, point);
             ExtractPointProperties(graph, subject, point);
 
-            var isPointOfUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}isPointOf", $"{SbcoNamespace}isPointOf" });
+            var isPointOfUris = GetObjectUris(graph, subject, new[]
+            {
+                $"{BrickNamespace}isPointOf",
+                $"{RecNamespace}isPointOf",
+                $"{SbcoNamespace}isPointOf"
+            });
             if (isPointOfUris.Count > 0)
             {
                 point.EquipmentUri = isPointOfUris[0];
@@ -557,6 +584,11 @@ public class RdfAnalyzerService
             if (partOfUris.Count > 0)
             {
                 StoreStringList(point.CustomProperties, "isPartOfUris", partOfUris);
+            }
+
+            if (string.IsNullOrWhiteSpace(point.PointId) && !string.IsNullOrWhiteSpace(point.SchemaId))
+            {
+                point.PointId = point.SchemaId;
             }
             points.Add(point);
         }
@@ -699,6 +731,12 @@ public class RdfAnalyzerService
             resource.Name = name;
         }
 
+        var schemaId = GetFirstLiteralValue(graph, subject, new[] { $"{SbcoNamespace}id", $"{RecNamespace}id" });
+        if (!string.IsNullOrWhiteSpace(schemaId))
+        {
+            resource.SchemaId = schemaId;
+        }
+
         ExtractIdentifiers(graph, subject, resource);
         ExtractCustomProperties(graph, subject, resource);
         ExtractCustomTags(graph, subject, resource);
@@ -724,6 +762,32 @@ public class RdfAnalyzerService
                 property?.SetValue(equipment, value);
             }
         }
+    }
+
+    private void ExtractEquipmentExtProperties(IGraph graph, INode subject, Equipment equipment)
+    {
+        var deviceType = GetFirstLiteralValue(graph, subject, new[] { $"{SbcoNamespace}deviceType" });
+        if (!string.IsNullOrWhiteSpace(deviceType))
+        {
+            equipment.DeviceType = deviceType;
+        }
+
+        equipment.InstallationArea = GetFirstLiteralValue(graph, subject, new[]
+        {
+            $"{SbcoNamespace}installationArea",
+            $"{SbcoNamespace}installation_area"
+        }) ?? equipment.InstallationArea;
+
+        equipment.TargetArea = GetFirstLiteralValue(graph, subject, new[]
+        {
+            $"{SbcoNamespace}targetArea",
+            $"{SbcoNamespace}target_area"
+        }) ?? equipment.TargetArea;
+
+        equipment.Panel = GetFirstLiteralValue(graph, subject, new[]
+        {
+            $"{SbcoNamespace}panel"
+        }) ?? equipment.Panel;
     }
 
     private void ExtractPointProperties(IGraph graph, INode subject, Point point)
