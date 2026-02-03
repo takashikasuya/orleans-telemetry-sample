@@ -16,6 +16,7 @@ Once running:
 - REST Swagger: `http://localhost:8080/swagger`
 - Mock OIDC (for tokens): `http://localhost:8081/default`
 - Admin console (grain/client/storage health): `http://localhost:8082/`
+- Telemetry Tree Client (building hierarchy browser): `http://localhost:8083/`
 
 ### 2. Optional: Seed the Graph from RDF
 
@@ -353,6 +354,44 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```
 
 The mock server does **not** validate signatures; for production, configure a real OIDC provider.
+
+## Telemetry Tree Client
+
+The **Telemetry Tree Client** is a Blazor Server application that provides an interactive UI for browsing the building hierarchy and monitoring device telemetry in real-time.
+
+### Features
+
+- **Hierarchy Tree View**: Browse Site → Building → Level → Area → Equipment → Device nodes with lazy loading
+- **Device Details**: View all points for a selected device with current values and metadata
+- **Real-time Telemetry Charts**: Visualize historical and live telemetry data with automatic polling (2s interval)
+- **Remote Control**: Submit control commands to writable points via the ApiGateway control endpoint
+- **Tenant-aware**: Switch between tenants and ensure proper data isolation
+
+### Access
+
+When running with Docker Compose:
+```
+http://localhost:8083/
+```
+
+### Usage
+
+1. Enter a tenant ID (default: `default`)
+2. Click **Load** to fetch the hierarchy root nodes
+3. Expand nodes in the tree to navigate the building structure
+4. Click on a **Device** node to view its points
+5. Select a point row to display its telemetry trend chart
+6. For writable points, use the control panel to submit new values
+
+### Architecture
+
+The TelemetryClient application:
+- Uses **MudBlazor** for UI components (tree view, tables, forms)
+- Communicates with ApiGateway via HTTP REST endpoints
+- Implements polling-based telemetry refresh (streaming upgrades planned)
+- Renders charts using custom Canvas-based JavaScript (can be replaced with ECharts/Plotly)
+
+See [docs/telemetry-client-spec.md](docs/telemetry-client-spec.md) for detailed specifications.
 
 ## Architecture
 

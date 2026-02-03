@@ -117,16 +117,17 @@ public class DataModelExportService
 
         foreach (var equipment in model.Equipment)
         {
+            var deviceId = ResolveDeviceId(equipment);
             var contract = new DeviceContract
             {
-                DeviceId = equipment.DeviceId,
+                DeviceId = deviceId,
                 GatewayId = equipment.GatewayId,
                 DeviceName = equipment.Name,
                 DeviceType = equipment.DeviceType,
                 LocationPath = BuildLocationPath(model, equipment),
                 Points = equipment.Points.Select(p => new PointContract
                 {
-                    PointId = p.PointId,
+                    PointId = ResolvePointId(p),
                     PointName = p.Name,
                     PointType = p.PointType,
                     PointSpecification = p.PointSpecification,
@@ -175,6 +176,36 @@ public class DataModelExportService
         }
 
         return string.Join("/", parts);
+    }
+
+    private static string ResolveDeviceId(Equipment equipment)
+    {
+        if (!string.IsNullOrWhiteSpace(equipment.DeviceId))
+        {
+            return equipment.DeviceId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(equipment.SchemaId))
+        {
+            return equipment.SchemaId;
+        }
+
+        return string.Empty;
+    }
+
+    private static string ResolvePointId(Point point)
+    {
+        if (!string.IsNullOrWhiteSpace(point.PointId))
+        {
+            return point.PointId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(point.SchemaId))
+        {
+            return point.SchemaId;
+        }
+
+        return string.Empty;
     }
 }
 

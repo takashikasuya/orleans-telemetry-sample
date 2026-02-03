@@ -302,6 +302,59 @@ _:siteId1 <https://www.sbco.or.jp/ont/value> ""SITE-001"" .
         AssertStandardModel(model);
     }
 
+    [Fact]
+    public async Task AnalyzeRdfContent_UsesSchemaIdsAndBrickPointLinks()
+    {
+        var ttl = @"@prefix sbco: <https://www.sbco.or.jp/ont/> .
+@prefix rec: <https://w3id.org/rec/> .
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+
+<urn:room-1> a sbco:Room ;
+  sbco:name ""Room 1"" ;
+  sbco:id ""room-1"" ;
+  sbco:isLocationOf <urn:eq-1> .
+
+<urn:eq-1> a sbco:EquipmentExt ;
+  sbco:name ""Equip 1"" ;
+  sbco:id ""equip-1"" ;
+  sbco:deviceType ""HVAC"" ;
+  sbco:installationArea ""Floor1"" ;
+  sbco:targetArea ""ZoneA"" ;
+  sbco:panel ""Panel-1"" .
+
+<urn:p-1> a brick:Point ;
+  sbco:name ""Point 1"" ;
+  sbco:id ""point-1"" ;
+  sbco:pointType ""Temperature"" ;
+  sbco:pointSpecification ""Measurement"" ;
+  sbco:unit ""celsius"" ;
+  brick:isPointOf <urn:eq-1> .
+";
+
+        var svc = CreateService();
+        var model = await svc.AnalyzeRdfContentAsync(ttl, RdfSerializationFormat.Turtle, "schema-id-test");
+
+        model.Areas.Should().ContainSingle();
+        model.Equipment.Should().ContainSingle();
+        model.Points.Should().ContainSingle();
+
+        var area = model.Areas[0];
+        area.Name.Should().Be("Room 1");
+
+        var equipment = model.Equipment[0];
+        equipment.Name.Should().Be("Equip 1");
+        equipment.DeviceId.Should().Be("equip-1");
+        equipment.DeviceType.Should().Be("HVAC");
+        equipment.InstallationArea.Should().Be("Floor1");
+        equipment.TargetArea.Should().Be("ZoneA");
+        equipment.Panel.Should().Be("Panel-1");
+
+        var point = model.Points[0];
+        point.PointId.Should().Be("point-1");
+        point.EquipmentUri.Should().Be("urn:eq-1");
+        equipment.Points.Should().Contain(point);
+    }
+
     private static RdfAnalyzerService CreateService() => new(NullLogger<RdfAnalyzerService>.Instance);
 
     private static void AssertStandardModel(BuildingDataModel model)
