@@ -204,12 +204,28 @@ public class OrleansIntegrationService
             var equipmentId = ResolveEquipmentId(equipment);
             seed.Nodes.Add(CreateNodeDefinition(equipment, GraphNodeType.Equipment, attrs =>
             {
-                attrs["DeviceId"] = equipment.DeviceId;
+                var deviceId = !string.IsNullOrWhiteSpace(equipment.DeviceId) ? equipment.DeviceId : equipment.SchemaId;
+                if (!string.IsNullOrWhiteSpace(deviceId))
+                {
+                    attrs["DeviceId"] = deviceId;
+                }
                 attrs["GatewayId"] = equipment.GatewayId;
                 attrs["DeviceType"] = equipment.DeviceType;
                 if (!string.IsNullOrWhiteSpace(equipment.AreaUri))
                 {
                     attrs["AreaUri"] = equipment.AreaUri;
+                }
+                if (!string.IsNullOrWhiteSpace(equipment.InstallationArea))
+                {
+                    attrs["InstallationArea"] = equipment.InstallationArea;
+                }
+                if (!string.IsNullOrWhiteSpace(equipment.TargetArea))
+                {
+                    attrs["TargetArea"] = equipment.TargetArea;
+                }
+                if (!string.IsNullOrWhiteSpace(equipment.Panel))
+                {
+                    attrs["Panel"] = equipment.Panel;
                 }
                 if (!string.IsNullOrWhiteSpace(equipment.Supplier))
                 {
@@ -263,7 +279,11 @@ public class OrleansIntegrationService
             var pointId = ResolvePointId(point);
             seed.Nodes.Add(CreateNodeDefinition(point, GraphNodeType.Point, attrs =>
             {
-                attrs["PointId"] = point.PointId;
+                var logicalPointId = !string.IsNullOrWhiteSpace(point.PointId) ? point.PointId : point.SchemaId;
+                if (!string.IsNullOrWhiteSpace(logicalPointId))
+                {
+                    attrs["PointId"] = logicalPointId;
+                }
                 attrs["PointType"] = point.PointType;
                 attrs["PointSpecification"] = point.PointSpecification;
                 attrs["Writable"] = point.Writable.ToString();
@@ -308,9 +328,10 @@ public class OrleansIntegrationService
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(equipment.DeviceId))
+        var deviceId = !string.IsNullOrWhiteSpace(equipment.DeviceId) ? equipment.DeviceId : equipment.SchemaId;
+        if (!string.IsNullOrWhiteSpace(deviceId))
         {
-            attributes["DeviceId"] = equipment.DeviceId;
+            attributes["DeviceId"] = deviceId;
         }
 
         var area = ResolveAreaForEquipment(model, equipment);
@@ -389,6 +410,10 @@ public class OrleansIntegrationService
         {
             attributes["Uri"] = resource.Uri;
         }
+        if (!string.IsNullOrWhiteSpace(resource.SchemaId))
+        {
+            attributes["SchemaId"] = resource.SchemaId;
+        }
 
         foreach (var kv in resource.Identifiers)
         {
@@ -449,6 +474,11 @@ public class OrleansIntegrationService
             return $"device:{equipment.DeviceId}";
         }
 
+        if (!string.IsNullOrWhiteSpace(equipment.SchemaId))
+        {
+            return $"device:{equipment.SchemaId}";
+        }
+
         return $"equipment:{Guid.NewGuid()}";
     }
 
@@ -462,6 +492,11 @@ public class OrleansIntegrationService
         if (!string.IsNullOrWhiteSpace(point.PointId))
         {
             return $"point:{point.PointId}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(point.SchemaId))
+        {
+            return $"point:{point.SchemaId}";
         }
 
         return $"point:{Guid.NewGuid()}";

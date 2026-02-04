@@ -104,6 +104,42 @@ public class OrleansIntegrationServiceBindingTests
         };
     }
 
+    private static BuildingDataModel BuildModelWithSchemaIds()
+    {
+        var site = new Site { Name = "SiteA", Uri = "site:1" };
+        var building = new Building { Name = "BuildingA", Uri = "building:1", SiteUri = site.Uri };
+        var level = new Level { Name = "L1", Uri = "level:1", BuildingUri = building.Uri };
+        var area = new Area { Name = "Room101", Uri = "area:1", LevelUri = level.Uri };
+        var equipment = new Equipment
+        {
+            Name = "AHU",
+            SchemaId = "equip-1",
+            AreaUri = area.Uri
+        };
+        var point = new Point
+        {
+            Name = "Temperature",
+            SchemaId = "point-1",
+            EquipmentUri = equipment.Uri
+        };
+
+        site.Buildings.Add(building);
+        building.Levels.Add(level);
+        level.Areas.Add(area);
+        area.Equipment.Add(equipment);
+        equipment.Points.Add(point);
+
+        return new BuildingDataModel
+        {
+            Sites = { site },
+            Buildings = { building },
+            Levels = { level },
+            Areas = { area },
+            Equipment = { equipment },
+            Points = { point }
+        };
+    }
+
     private static OrleansIntegrationService CreateService()
     {
         var rdfAnalyzer = new RdfAnalyzerService(

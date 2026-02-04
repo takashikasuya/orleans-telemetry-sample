@@ -9,6 +9,7 @@ public abstract class RdfResource
 {
     public string Uri { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string? SchemaId { get; set; }
     public Dictionary<string, string> Identifiers { get; set; } = new();
     public Dictionary<string, string> CustomProperties { get; set; } = new();
     public Dictionary<string, bool> CustomTags { get; set; } = new();
@@ -231,6 +232,9 @@ public class Equipment : Asset
     public string GatewayId { get; set; } = string.Empty;
     public string? Supplier { get; set; }
     public string? Owner { get; set; }
+    public string? InstallationArea { get; set; }
+    public string? TargetArea { get; set; }
+    public string? Panel { get; set; }
     /// <summary>
     /// `Asset.HasPoint` と同期させるため、2つの名前を同一リストとして扱う。
     /// </summary>

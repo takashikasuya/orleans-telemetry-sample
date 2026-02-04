@@ -1,4 +1,9 @@
 using System.Net;
+using System;
+using System.Collections.Generic;
+using ApiGateway.Contracts;
+using ApiControlRequest = ApiGateway.Contracts.PointControlRequest;
+using ApiControlResponse = ApiGateway.Contracts.PointControlResponse;
 using ApiGateway.Infrastructure;
 using ApiGateway.Services;
 using ApiGateway.Telemetry;
@@ -114,6 +119,61 @@ app.MapGet("/api/devices/{deviceId}", async (string deviceId, IClusterClient cli
         snap.UpdatedAt,
         Properties = snap.LatestProps
     });
+}).RequireAuthorization();
+
+app.MapPost("/api/devices/{deviceId}/control", async (
+    string deviceId,
+    ApiControlRequest command,
+    IClusterClient client,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+
+    if (string.IsNullOrWhiteSpace(command.DeviceId))
+    {
+        return Results.BadRequest(new { Message = "DeviceId is required." });
+    }
+
+    if (!string.Equals(deviceId, command.DeviceId, StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.BadRequest(new { Message = "Route deviceId must match request payload." });
+    }
+
+    if (string.IsNullOrWhiteSpace(command.PointId))
+    {
+        return Results.BadRequest(new { Message = "PointId is required." });
+    }
+
+    var requestId = string.IsNullOrWhiteSpace(command.CommandId) ? Guid.NewGuid().ToString("D") : command.CommandId;
+    var metadata = command.Metadata ?? new Dictionary<string, string>();
+    var grainRequest = new Grains.Abstractions.PointControlRequest
+    {
+        CommandId = requestId,
+        TenantId = tenant,
+        BuildingName = command.BuildingName ?? string.Empty,
+        SpaceId = command.SpaceId ?? string.Empty,
+        DeviceId = command.DeviceId,
+        PointId = command.PointId,
+        DesiredValue = command.DesiredValue,
+        Metadata = metadata,
+        RequestedAt = DateTimeOffset.UtcNow
+    };
+
+    var grainKey = PointControlGrainKey.Create(tenant, deviceId, command.PointId);
+    var grain = client.GetGrain<IPointControlGrain>(grainKey);
+    var snapshot = await grain.SubmitAsync(grainRequest);
+    var response = new ApiControlResponse(
+        snapshot.CommandId,
+        snapshot.Status.ToString(),
+        snapshot.RequestedAt,
+        snapshot.AcceptedAt,
+        snapshot.AppliedAt,
+        snapshot.ConnectorName,
+        snapshot.CorrelationId,
+        snapshot.LastError);
+
+    var location = $"/api/devices/{deviceId}/control/{snapshot.CommandId}";
+    return Results.Accepted(location, response);
 }).RequireAuthorization();
 
 

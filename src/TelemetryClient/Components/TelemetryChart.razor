@@ -1,0 +1,104 @@
+@using TelemetryClient.Services
+@inject TelemetryService TelemetryService
+@inject IJSRuntime JSRuntime
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h6">@Title</MudText>
+    <div id="@_chartId" style="width: 100%; height: 400px;"></div>
+    
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public string DeviceId { get; set; } = string.Empty;
+    
+    [Parameter]
+    public string PointId { get; set; } = string.Empty;
+    
+    [Parameter]
+    public string TenantId { get; set; } = "default";
+    
+    [Parameter]
+    public string Title { get; set; } = "Telemetry Trend";
+    
+    [Parameter]
+    public int RefreshIntervalMs { get; set; } = 2000;
+
+    private string _chartId = Guid.NewGuid().ToString("N");
+    private bool _loading = false;
+    private System.Threading.Timer? _pollTimer;
+    private List<TelemetryRecord> _data = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeChartAsync();
+            StartPolling();
+        }
+    }
+
+    private async Task InitializeChartAsync()
+    {
+        // Initialize chart with basic configuration
+        await JSRuntime.InvokeVoidAsync("initializeChart", _chartId);
+    }
+
+    private void StartPolling()
+    {
+        _pollTimer = new System.Threading.Timer(async _ =>
+        {
+            await LoadDataAsync();
+        }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(RefreshIntervalMs));
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (string.IsNullOrEmpty(DeviceId) || string.IsNullOrEmpty(PointId))
+            return;
+
+        _loading = true;
+        try
+        {
+            var result = await TelemetryService.QueryAsync(DeviceId, TenantId, limit: 100);
+            
+            // Filter data for the specific point
+            _data = result.Records
+                .Where(r => r.PointId == PointId)
+                .OrderBy(r => r.Timestamp)
+                .ToList();
+
+            // Update chart with new data
+            await UpdateChartAsync();
+        }
+        catch (Exception ex)
+        {
+            // Log error (could add ILogger if needed for detailed logging)
+            Console.WriteLine($"Error loading telemetry data: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task UpdateChartAsync()
+    {
+        if (_data.Any())
+        {
+            var timestamps = _data.Select(d => d.Timestamp.ToString("HH:mm:ss")).ToArray();
+            var values = _data.Select(d => d.Value?.ToString() ?? "0").ToArray();
+            
+            await JSRuntime.InvokeVoidAsync("updateChart", _chartId, timestamps, values);
+        }
+    }
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+    }
+}
