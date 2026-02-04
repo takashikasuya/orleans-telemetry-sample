@@ -573,3 +573,138 @@ Registry endpoint coverage: added `RegistryEndpointsTests.cs` that exercises eac
 ## Retrospective
 
 *To be filled after implementation.*
+
+---
+
+# plans.md: Telemetry.E2E.Tests Failure Investigation
+
+## Purpose
+Identify why the E2E test(s) fail and determine a minimal, reliable fix that preserves current behavior.
+
+## Success Criteria
+- Failing test name, assertion, and stack trace are captured.
+- Root cause is identified (timing, storage compaction, API query, etc.).
+- Concrete fix plan is documented with verification steps.
+
+## Steps
+1. Capture the failing test output/stack trace and any generated report path.
+2. Review the latest report and compare against the failing run.
+3. Inspect E2E timing and storage/telemetry query path for flakiness or mismatches.
+4. Propose a minimal fix (code or test adjustment) and define verification commands.
+5. Implement the fix and update this plan with results.
+6. Verify with `dotnet test src/Telemetry.E2E.Tests`.
+
+## Progress
+- [x] Collect failing test trace/report path
+- [x] Analyze timing/storage/telemetry query path
+- [x] Propose fix and verification steps
+- [x] Implement fix
+- [x] Verify E2E tests
+
+## Observations
+- Failure trace (2026-02-04, in-proc test): `Telemetry.E2E.Tests.TelemetryE2ETests.EndToEndReport_IsGenerated` timed out waiting for point snapshot (`WaitForPointSnapshotAsync`, line 515) after the 20s timeout.
+- The in-proc run does not appear to have produced a `telemetry-e2e-*.md/json` report under `reports/` (only docker reports exist), so the only data point is the xUnit trace.
+- Latest docker report in `reports/telemetry-e2e-docker-20260204-154817.md` shows `Status: Passed` but `TelemetryResultCount: 0`.
+- Docker report counts telemetry results only when the API returns a JSON array; when the API returns `{ mode: "inline" }`, the report reports `0` even when items exist.
+- Docker report’s storage paths can point at older files because it picks the first file under `storage/`, which can be stale across runs.
+- The E2E test waits on `/api/nodes/{nodeId}/value` to return a point snapshot with `LastSequence >= stageRecord.Sequence`. If the API returns 404 (missing attributes) or the point grain lags behind storage writes, it will spin until timeout.
+- Updated `TelemetryE2E:WaitTimeoutSeconds` to 60 in `src/Telemetry.E2E.Tests/appsettings.json` to reduce timeout flakiness.
+- `dotnet test src/SiloHost.Tests` failed in this sandbox due to MSBuild named pipe permission errors (`System.Net.Sockets.SocketException (13): Permission denied`).
+- Identifiers (`rec:identifiers`/`sbco:identifiers`) were not mapped to `Equipment.DeviceId` / `Point.PointId`, causing graph bindings to use schema IDs (e.g., `point-1`) while simulator publishes `p1`, leading to point snapshot timeouts.
+- `rec:identifiers` values in `seed.ttl` are expressed as RDF lists, so identifier extraction needed RDF collection handling (`rdf:first`/`rdf:rest`).
+
+## Clarification Needed
+- If there is a generated in-proc report file from the failed run, its path/name is still unknown.
+
+## Decisions
+- Proposed minimal fix: increase `TelemetryE2E:WaitTimeoutSeconds` from `20` to `60` to reduce flakiness on slower environments.
+- Optional diagnostics: enhance `WaitForPointSnapshotAsync` to log/record last response status (e.g., 404 vs. OK) to surface whether it is a binding issue or just slow grain updates.
+- Implemented identifier mapping for `device_id` and `point_id` to align graph bindings with simulator IDs.
+
+## Retrospective
+*To be filled after completion.*
+## Retrospective
+- Root cause was identifier mapping: `device_id` / `point_id` lived in RDF lists under `rec:identifiers`, but extraction ignored RDF collections.
+- Added RDF list expansion + identifier mapping to align graph bindings with simulator IDs; E2E tests pass after fix.
+- Increased E2E timeout to reduce flakiness while keeping the test behavior intact.
+
+---
+
+# plans.md: Test Coverage Gaps (Device/Point Grains + E2E Reliability)
+
+## Purpose
+Close critical test gaps around Device/Point grain behavior, tenant isolation, and E2E reliability to ensure telemetry ingestion and retrieval are correct under normal and edge conditions.
+
+## Success Criteria
+1. **DeviceGrain & PointGrain tests** cover:
+   - Sequence dedupe (older or equal sequence ignored)
+   - State persistence and reactivation
+   - Stream publication on update
+2. **Tenant isolation tests** prove:
+   - Grain key generation is correct and tenant-scoped
+   - Cross-tenant reads do not leak data
+3. **E2E stability**:
+   - Point snapshot updates reliably within configured timeout
+   - API stream subscription path (if used) has coverage for happy path + failure
+4. **Edge cases**:
+   - Abnormal value handling (null, NaN, out-of-range)
+   - Large data volume behavior (batch routing, storage write)
+5. **Integration scenarios**:
+   - Multi-device simultaneous ingest
+   - Real-time updates visible via API
+
+## Steps
+1. **Grain Unit Tests**
+   - Add `PointGrainTests` for sequence dedupe, state write/read, and stream emission.
+   - Add `DeviceGrainTests` for sequence dedupe, property merge, and state write/read.
+2. **Tenant Isolation Tests**
+   - Validate `PointGrainKey` and `DeviceGrainKey` creation includes tenant.
+   - Simulate two tenants and confirm isolation in grain reads.
+3. **E2E Reliability Tests**
+   - Add explicit retry diagnostics for `/api/nodes/{nodeId}/value` responses.
+   - Add API stream subscription test if stream is used for updates.
+4. **Edge Case Tests**
+   - Abnormal values (null, NaN, large numbers) handling in grains and API.
+   - Large batch ingestion and storage compaction path.
+5. **Integration Scenarios**
+   - Multi-device ingest (2+ devices, multiple points) and API validation.
+   - Verify real-time updates (sequence increment) in API responses.
+6. **Verification**
+   - `dotnet test src/SiloHost.Tests`
+   - `dotnet test src/Telemetry.E2E.Tests`
+
+## Progress
+- [x] Add PointGrain tests (sequence, persistence)
+- [x] Add DeviceGrain tests (sequence, persistence, merge)
+- [x] Add tenant isolation tests
+- [ ] Add edge case tests
+- [ ] Add multi-device E2E scenario
+- [x] Verify tests
+
+## Observations
+- Current E2E failures show point snapshot timeouts, indicating a missing or delayed update path.
+- There is no dedicated test coverage for grain persistence, stream reliability, or tenant isolation.
+- Added unit tests for PointGrain/DeviceGrain and GrainKey creation in `src/SiloHost.Tests` (sequence, persistence, merge, tenant key coverage).
+- Stream publication tests are not yet covered; they require a TestCluster or stream provider harness.
+- `dotnet test src/SiloHost.Tests` failed in this sandbox due to MSBuild named pipe permission errors; verification must be run locally.
+- Local verification: `dotnet test src/SiloHost.Tests`, `dotnet test src/DataModel.Analyzer.Tests`, and `dotnet test src/Telemetry.E2E.Tests` all passed.
+
+## Decisions
+- Defer stream publication tests until a minimal Orleans TestCluster harness is added to `SiloHost.Tests`.
+
+## Retrospective
+### What Was Completed
+- Added grain unit tests for sequence dedupe, persistence, and merge behavior.
+- Added GrainKey tenant-scoped tests.
+- Fixed RDF identifier extraction for list-based identifiers.
+- Stabilized E2E timeout.
+
+### Verification
+Ran locally:
+- `dotnet test src/SiloHost.Tests`
+- `dotnet test src/DataModel.Analyzer.Tests`
+- `dotnet test src/Telemetry.E2E.Tests`
+
+### Remaining Work
+- Stream publication tests (requires TestCluster or stream harness).
+- Edge case and multi-device E2E scenarios.

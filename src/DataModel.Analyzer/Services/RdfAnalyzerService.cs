@@ -32,6 +32,9 @@ public class RdfAnalyzerService
     private const string BrickNamespace = "https://brickschema.org/schema/Brick#";
     private const string DctNamespace = "http://purl.org/dc/terms/";
     private const string RdfTypeUri = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    private const string RdfFirstUri = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first";
+    private const string RdfRestUri = "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest";
+    private const string RdfNilUri = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil";
     private const string ShaclFileName = "building_model.shacl.ttl";
     private const string SchemaDirectoryName = "Schema";
     private static readonly string[] DocumentationPredicates = { $"{SbcoNamespace}documentation", $"{RecNamespace}documentation" };
@@ -505,6 +508,10 @@ public class RdfAnalyzerService
             ExtractGutpEquipmentProperties(graph, subject, equipment);
             ExtractEquipmentExtProperties(graph, subject, equipment);
             equipment.Documentation.AddRange(ExtractDocuments(graph, subject));
+            if (string.IsNullOrWhiteSpace(equipment.DeviceId) && equipment.Identifiers.TryGetValue("device_id", out var deviceId))
+            {
+                equipment.DeviceId = deviceId;
+            }
 
             var pointUris = GetObjectUris(graph, subject, new[] { $"{RecNamespace}hasPoint", $"{SbcoNamespace}hasPoint" });
             if (pointUris.Count > 0)
@@ -568,6 +575,10 @@ public class RdfAnalyzerService
 
             ExtractCommonProperties(graph, subject, point);
             ExtractPointProperties(graph, subject, point);
+            if (string.IsNullOrWhiteSpace(point.PointId) && point.Identifiers.TryGetValue("point_id", out var pointId))
+            {
+                point.PointId = pointId;
+            }
 
             var isPointOfUris = GetObjectUris(graph, subject, new[]
             {
@@ -678,20 +689,28 @@ public class RdfAnalyzerService
             var predicateNode = graph.CreateUriNode(UriFactory.Create(predicateUri));
             foreach (var triple in graph.GetTriplesWithSubjectPredicate(subject, predicateNode))
             {
-                var entryNode = triple.Object;
-                var key = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}key" });
-                var value = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}value" });
-
-                if (!string.IsNullOrWhiteSpace(key) && value != null)
+                var entries = ExpandRdfList(graph, triple.Object).ToList();
+                if (entries.Count == 0)
                 {
-                    resource.Identifiers[key] = value;
-                    continue;
+                    entries.Add(triple.Object);
                 }
 
-                var dctId = GetFirstLiteralValue(graph, entryNode, new[] { $"{DctNamespace}identifier" });
-                if (!string.IsNullOrWhiteSpace(dctId))
+                foreach (var entryNode in entries)
                 {
-                    resource.Identifiers["dtid"] = dctId;
+                    var key = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}key" });
+                    var value = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}value" });
+
+                    if (!string.IsNullOrWhiteSpace(key) && value != null)
+                    {
+                        resource.Identifiers[key] = value;
+                        continue;
+                    }
+
+                    var dctId = GetFirstLiteralValue(graph, entryNode, new[] { $"{DctNamespace}identifier" });
+                    if (!string.IsNullOrWhiteSpace(dctId))
+                    {
+                        resource.Identifiers["dtid"] = dctId;
+                    }
                 }
             }
         }
@@ -1012,6 +1031,49 @@ public class RdfAnalyzerService
                     yield return triple.Object;
                 }
             }
+        }
+    }
+
+    private static IEnumerable<INode> ExpandRdfList(IGraph graph, INode node)
+    {
+        if (node is IUriNode uriNode && uriNode.Uri.ToString() == RdfNilUri)
+        {
+            yield break;
+        }
+
+        var rdfFirst = graph.CreateUriNode(UriFactory.Create(RdfFirstUri));
+        var rdfRest = graph.CreateUriNode(UriFactory.Create(RdfRestUri));
+        var rdfNil = graph.CreateUriNode(UriFactory.Create(RdfNilUri));
+        var current = node;
+        var seen = new HashSet<string>();
+
+        while (current is not null)
+        {
+            if (current.Equals(rdfNil))
+            {
+                yield break;
+            }
+
+            if (!seen.Add(current.ToString()))
+            {
+                yield break;
+            }
+
+            var first = graph.GetTriplesWithSubjectPredicate(current, rdfFirst).FirstOrDefault()?.Object;
+            if (first is null)
+            {
+                yield break;
+            }
+
+            yield return first;
+
+            var rest = graph.GetTriplesWithSubjectPredicate(current, rdfRest).FirstOrDefault()?.Object;
+            if (rest is null)
+            {
+                yield break;
+            }
+
+            current = rest;
         }
     }
 

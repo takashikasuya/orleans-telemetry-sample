@@ -355,6 +355,53 @@ _:siteId1 <https://www.sbco.or.jp/ont/value> ""SITE-001"" .
         equipment.Points.Should().Contain(point);
     }
 
+    [Fact]
+    public async Task AnalyzeRdfContent_Identifiers_MapDeviceAndPointIds()
+    {
+        var ttl = @"@prefix sbco: <https://www.sbco.or.jp/ont/> .
+@prefix rec: <https://w3id.org/rec/> .
+
+<urn:site-1> a sbco:Site ;
+  sbco:name ""Site 1"" ;
+  sbco:hasPart <urn:building-1> .
+
+<urn:building-1> a sbco:Building ;
+  sbco:name ""Building 1"" ;
+  sbco:hasPart <urn:level-1> .
+
+<urn:level-1> a sbco:Level ;
+  sbco:name ""Level 1"" ;
+  sbco:hasPart <urn:space-1> .
+
+<urn:space-1> a sbco:Space ;
+  sbco:name ""Space 1"" ;
+  rec:isLocationOf <urn:eq-1> .
+
+<urn:eq-1> a sbco:Equipment ;
+  sbco:name ""Equip 1"" ;
+  rec:identifiers (
+    [ a sbco:KeyStringMapEntry ; sbco:key ""device_id"" ; sbco:value ""device-1"" ]
+  ) ;
+  sbco:hasPoint <urn:p-1> .
+
+<urn:p-1> a sbco:Point ;
+  sbco:name ""Point 1"" ;
+  rec:identifiers (
+    [ a sbco:KeyStringMapEntry ; sbco:key ""point_id"" ; sbco:value ""p1"" ]
+  ) ;
+  sbco:isPointOf <urn:eq-1> .
+";
+
+        var svc = CreateService();
+        var model = await svc.AnalyzeRdfContentAsync(ttl, RdfSerializationFormat.Turtle, "identifier-mapping-test");
+
+        model.Equipment.Should().ContainSingle();
+        model.Points.Should().ContainSingle();
+
+        model.Equipment[0].DeviceId.Should().Be("device-1");
+        model.Points[0].PointId.Should().Be("p1");
+    }
+
     private static RdfAnalyzerService CreateService() => new(NullLogger<RdfAnalyzerService>.Instance);
 
     private static void AssertStandardModel(BuildingDataModel model)

@@ -1,31 +1,149 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rec: <https://w3id.org/rec/> .
+@prefix brick: <https://brickschema.org/schema/Brick#> .
 @prefix sbco: <https://www.sbco.or.jp/ont/> .
 
+# ============================================
+# SITE
+# ============================================
 <urn:site-1> a sbco:Site ;
-  sbco:name "Test Site" ;
-  rec:hasPart <urn:building-1> .
+    sbco:id "site-1" ;
+    sbco:name "Test Site" ;
+    rec:description "Simple test site for E2E testing" ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "site_code" ;
+            sbco:value "TEST-SITE-001" ]
+    ) ;
+    rec:hasPart <urn:building-1> .
 
+# ============================================
+# BUILDING
+# ============================================
 <urn:building-1> a sbco:Building ;
-  sbco:name "building" ;
-  rec:hasPart <urn:level-1> .
+    sbco:id "building-1" ;
+    sbco:name "building" ;
+    rec:description "Test building with single level" ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "building_code" ;
+            sbco:value "BLD-TEST-001" ]
+    ) ;
+    rec:hasPart <urn:level-1> .
 
+# ============================================
+# LEVEL
+# ============================================
 <urn:level-1> a sbco:Level ;
-  sbco:name "level-1" ;
-  rec:hasPart <urn:space-1> .
+    sbco:id "level-1" ;
+    sbco:name "level-1" ;
+    rec:description "First level of test building" ;
+    rec:levelNumber 1 ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "floor_code" ;
+            sbco:value "F01" ]
+    ) ;
+    rec:hasPart <urn:space-1> .
 
+# ============================================
+# SPACE
+# ============================================
 <urn:space-1> a sbco:Space ;
-  sbco:name "space" ;
-  rec:isLocationOf <urn:equipment-1> .
+    sbco:id "space-1" ;
+    sbco:name "space" ;
+    rec:description "Test space containing equipment" ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "area_code" ;
+            sbco:value "A101" ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "is_test_area" ;
+            sbco:value true ]
+    ) .
 
-<urn:equipment-1> a sbco:Equipment ;
-  sbco:name "equip-1" ;
-  sbco:device_id "device1" ;
-  sbco:device_type "sim" ;
-  sbco:locatedIn <urn:space-1> ;
-  rec:hasPoint <urn:point-1> .
+# ============================================
+# EQUIPMENT
+# ============================================
+<urn:equipment-1> a sbco:EquipmentExt ;
+    sbco:id "equipment-1" ;
+    sbco:name "equip-1" ;
+    rec:description "Test equipment with temperature sensor" ;
+    rec:assetTag "ASSET-TEST-001"^^xsd:string ;
+    rec:installationDate "2024-01-15"^^xsd:date ;
+    rec:locatedIn <urn:space-1> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "equipment_code" ;
+            sbco:value "EQ-TEST-001" ]
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "device_id" ;
+            sbco:value "device1" ]
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "device_type" ;
+            sbco:value "sim" ]
+    ) ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "device_specs" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "manufacturer" ;
+                    sbco:value "TestCorp" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "model" ;
+                    sbco:value "SIM-1000" ]
+            ) ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "monitored" ;
+            sbco:value true ]
+    ) .
 
-<urn:point-1> a sbco:Point ;
-  sbco:name "point-1" ;
-  sbco:point_id "p1" ;
-  sbco:point_type "temperature" ;
-  rec:isPointOf <urn:equipment-1> .
+# ============================================
+# POINT
+# ============================================
+<urn:point-1> a sbco:PointExt ;
+    sbco:id "point-1" ;
+    sbco:name "point-1" ;
+    rec:description "Temperature measurement point" ;
+    sbco:pointType "Temperature" ;
+    sbco:pointSpecification "Measurement" ;
+    sbco:unit "celsius" ;
+    sbco:minPresValue 0.0 ;
+    sbco:maxPresValue 100.0 ;
+    sbco:scale 1.0 ;
+    brick:hasQuantity "Temperature" ;
+    brick:hasSubstance "Air" ;
+    sbco:aggregate <https://www.sbco.or.jp/ont/AggregateEnum#average> ;
+    brick:isPointOf <urn:equipment-1> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "point_code" ;
+            sbco:value "TEMP-TEST-001" ]
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "point_id" ;
+            sbco:value "p1" ]
+    ) ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "sensor_info" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "sensor_type" ;
+                    sbco:value "thermistor" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "accuracy" ;
+                    sbco:value "±0.5°C" ]
+            ) ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "is_writable" ;
+            sbco:value false ]
+    ) .
