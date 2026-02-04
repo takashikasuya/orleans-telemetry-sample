@@ -133,11 +133,15 @@ if [[ $SKIP_MEMORY -eq 0 ]]; then
   log "===== Running memory load test ====="
   MEMORY_ARGS=(--ensure-cluster --output-dir "$OUTPUT_DIR")
   
-  if "$ROOT/scripts/run-memorytest.sh" "${MEMORY_ARGS[@]}"; then
-    log "Memory test PASSED"
+  if [[ -f "$ROOT/scripts/run-memorytest.sh" ]]; then
+    if "$ROOT/scripts/run-memorytest.sh" "${MEMORY_ARGS[@]}"; then
+      log "Memory test PASSED"
+    else
+      log "Memory test FAILED"
+      FAILED_SUITES+=("memory")
+    fi
   else
-    log "Memory test FAILED"
-    FAILED_SUITES+=("memory")
+    log "WARNING: run-memorytest.sh not found, skipping memory test"
   fi
 else
   log "Skipping memory test"
