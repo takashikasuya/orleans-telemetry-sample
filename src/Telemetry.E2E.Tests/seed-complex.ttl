@@ -20,6 +20,7 @@
             sbco:key "location" ;
             sbco:value "Tokyo, Japan" ]
     ) ;
+    rec:hasPart <urn:building-main>, <urn:building-lab> ;
     rec:customTags (
         [ a sbco:KeyBoolMapEntry ;
             sbco:key "is_primary" ;
@@ -33,7 +34,7 @@
     sbco:id "building-main" ;
     sbco:name "Main Office Building" ;
     rec:description "Primary office building with 5 floors" ;
-    rec:isPartOf <urn:site-tokyo> ;
+    rec:hasPart <urn:level-main-1>, <urn:level-main-2> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "building_code" ;
@@ -62,7 +63,7 @@
     sbco:id "building-lab" ;
     sbco:name "Research Lab Building" ;
     rec:description "Dedicated research and development facility" ;
-    rec:isPartOf <urn:site-tokyo> ;
+    rec:hasPart <urn:level-lab-1> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "building_code" ;
@@ -76,8 +77,8 @@
     sbco:id "level-main-1" ;
     sbco:name "Ground Floor" ;
     rec:description "Lobby and public spaces" ;
-    rec:isPartOf <urn:building-main> ;
     rec:levelNumber 1 ;
+    rec:hasPart <urn:area-main-f1-lobby> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "floor_code" ;
@@ -91,8 +92,8 @@
     sbco:id "level-main-2" ;
     sbco:name "Second Floor" ;
     rec:description "Executive offices and meeting rooms" ;
-    rec:isPartOf <urn:building-main> ;
     rec:levelNumber 2 ;
+    rec:hasPart <urn:area-main-f2-server> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "floor_code" ;
@@ -106,8 +107,8 @@
     sbco:id "level-lab-1" ;
     sbco:name "Lab Floor 1" ;
     rec:description "Experimental laboratories" ;
-    rec:isPartOf <urn:building-lab> ;
     rec:levelNumber 1 ;
+    rec:hasPart <urn:area-lab-f1-exp-a> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "floor_code" ;
@@ -117,11 +118,10 @@
 # ============================================
 # AREA 1.1.1: Main F1 - Lobby
 # ============================================
-<urn:area-main-f1-lobby> a sbco:Area ;
+<urn:area-main-f1-lobby> a sbco:Space ;
     sbco:id "area-main-f1-lobby" ;
     sbco:name "Main Lobby" ;
     rec:description "Reception and main entrance lobby" ;
-    rec:isPartOf <urn:level-main-1> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "area_code" ;
@@ -136,11 +136,10 @@
 # ============================================
 # AREA 1.2.1: Main F2 - Server Room
 # ============================================
-<urn:area-main-f2-server> a sbco:Area ;
+<urn:area-main-f2-server> a sbco:Space ;
     sbco:id "area-main-f2-server" ;
     sbco:name "Server Room" ;
     rec:description "Data center and IT infrastructure" ;
-    rec:isPartOf <urn:level-main-2> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "area_code" ;
@@ -155,11 +154,10 @@
 # ============================================
 # AREA 2.1.1: Lab F1 - Experiment Room A
 # ============================================
-<urn:area-lab-f1-exp-a> a sbco:Area ;
+<urn:area-lab-f1-exp-a> a sbco:Space ;
     sbco:id "area-lab-f1-exp-a" ;
     sbco:name "Experiment Room A" ;
     rec:description "Temperature and humidity controlled lab space" ;
-    rec:isPartOf <urn:level-lab-1> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "area_code" ;
@@ -174,11 +172,13 @@
 # ============================================
 # EQUIPMENT: HVAC System (Main F1 Lobby)
 # ============================================
-<urn:equipment-hvac-f1> a sbco:Equipment ;
+<urn:equipment-hvac-f1> a sbco:EquipmentExt ;
     sbco:id "equipment-hvac-f1" ;
     sbco:name "HVAC Unit F1" ;
     rec:description "Air handling unit for Floor 1" ;
-    rec:isPartOf <urn:area-main-f1-lobby> ;
+    rec:assetTag "ASSET-HVAC-001"^^xsd:string ;
+    rec:installationDate "2022-03-15"^^xsd:date ;
+    rec:locatedIn <urn:area-main-f1-lobby> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "equipment_code" ;
@@ -197,60 +197,142 @@
                 [ a sbco:KeyStringMapEntry ;
                     sbco:key "manufacturer" ;
                     sbco:value "Carrier" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "serial_number" ;
+                    sbco:value "CA-AQE-2022-0051" ]
             ) ]
     ) ;
     rec:customTags (
         [ a sbco:KeyBoolMapEntry ;
             sbco:key "monitored" ;
             sbco:value true ]
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "under_warranty" ;
+            sbco:value true ]
     ) .
 
 # ============================================
 # EQUIPMENT: Server Rack (Main F2 Server Room)
 # ============================================
-<urn:equipment-server-rack> a sbco:Equipment ;
+<urn:equipment-server-rack> a sbco:EquipmentExt ;
     sbco:id "equipment-server-rack" ;
     sbco:name "Server Rack A" ;
     rec:description "Primary server rack in data center" ;
-    rec:isPartOf <urn:area-main-f2-server> ;
+    rec:assetTag "ASSET-SRV-001"^^xsd:string ;
+    rec:installationDate "2023-06-10"^^xsd:date ;
+    rec:locatedIn <urn:area-main-f2-server> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "equipment_code" ;
             sbco:value "SRV-F2-001" ]
-    ) .
-
-# ============================================
-# EQUIPMENT: Lab Incubator (Lab F1)
-# ============================================
-<urn:equipment-incubator> a sbco:Equipment ;
-    sbco:id "equipment-incubator" ;
-    sbco:name "Temperature Incubator" ;
-    rec:description "Precision temperature control chamber for experiments" ;
-    rec:isPartOf <urn:area-lab-f1-exp-a> ;
-    rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
-            sbco:key "equipment_code" ;
-            sbco:value "LAB-INC-001" ]
+            sbco:key "rack_units" ;
+            sbco:value "42U" ]
     ) ;
-    brick:feeds <urn:equipment-chiller> ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "power_specs" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "input_amps" ;
+                    sbco:value "30" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "breaker_a" ;
+                    sbco:value "30A" ]
+            ) ]
+    ) ;
     rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "monitored" ;
+            sbco:value true ]
         [ a sbco:KeyBoolMapEntry ;
             sbco:key "critical" ;
             sbco:value true ]
     ) .
 
 # ============================================
+# EQUIPMENT: Lab Incubator (Lab F1)
+# ============================================
+<urn:equipment-incubator> a sbco:EquipmentExt ;
+    sbco:id "equipment-incubator" ;
+    sbco:name "Temperature Incubator" ;
+    rec:description "Precision temperature control chamber for experiments" ;
+    rec:assetTag "ASSET-LAB-INC-001"^^xsd:string ;
+    rec:installationDate "2023-08-22"^^xsd:date ;
+    rec:locatedIn <urn:area-lab-f1-exp-a> ;
+    rec:identifiers (
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "equipment_code" ;
+            sbco:value "LAB-INC-001" ]
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "model" ;
+            sbco:value "Thermo Fisher 3111" ]
+    ) ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "chamber_specs" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "internal_volume_liters" ;
+                    sbco:value "311" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "temp_range_celsius" ;
+                    sbco:value "0-65" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "stability" ;
+                    sbco:value "±0.1°C" ]
+            ) ]
+    ) ;
+    brick:feeds <urn:equipment-chiller> ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "critical" ;
+            sbco:value true ]
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "under_warranty" ;
+            sbco:value false ]
+    ) .
+
+# ============================================
 # EQUIPMENT: Chiller (Lab F1)
 # ============================================
-<urn:equipment-chiller> a sbco:Equipment ;
+<urn:equipment-chiller> a sbco:EquipmentExt ;
     sbco:id "equipment-chiller" ;
     sbco:name "Lab Chiller Unit" ;
     rec:description "Cooling unit supporting incubator" ;
-    rec:isPartOf <urn:area-lab-f1-exp-a> ;
+    rec:assetTag "ASSET-LAB-CHIL-001"^^xsd:string ;
+    rec:installationDate "2023-08-22"^^xsd:date ;
+    rec:locatedIn <urn:area-lab-f1-exp-a> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "equipment_code" ;
             sbco:value "LAB-CHIL-001" ]
+        [ a sbco:KeyStringMapEntry ;
+            sbco:key "model" ;
+            sbco:value "Circulated Water Chiller CW-600" ]
+    ) ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "cooling_specs" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "cooling_capacity_kw" ;
+                    sbco:value "6" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "setpoint_celsius" ;
+                    sbco:value "12" ]
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "accuracy" ;
+                    sbco:value "±0.5°C" ]
+            ) ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "monitored" ;
+            sbco:value true ]
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "critical" ;
+            sbco:value true ]
     ) .
 
 # ============================================
@@ -261,7 +343,13 @@
     sbco:name "HVAC Supply Temperature" ;
     rec:description "Discharge air temperature from HVAC unit" ;
     sbco:pointType "Temperature" ;
+    sbco:pointSpecification "Measurement" ;
     sbco:unit "celsius" ;
+    sbco:minPresValue 5.0 ;
+    sbco:maxPresValue 45.0 ;
+    sbco:scale 1.0 ;
+    brick:hasQuantity "Temperature" ;
+    brick:hasSubstance "Air" ;
     sbco:aggregate <https://www.sbco.or.jp/ont/AggregateEnum#average> ;
     brick:isPointOf <urn:equipment-hvac-f1> ;
     rec:identifiers (
@@ -281,7 +369,7 @@
                     sbco:value "±0.5°C" ]
             ) ]
     ) ;
-    sbco:customTags (
+    rec:customTags (
         [ a sbco:KeyBoolMapEntry ;
             sbco:key "is_writable" ;
             sbco:value false ]
@@ -295,7 +383,13 @@
     sbco:name "HVAC Supply Humidity" ;
     rec:description "Relative humidity of discharge air" ;
     sbco:pointType "RelativeHumidity" ;
+    sbco:pointSpecification "Measurement" ;
     sbco:unit "percent" ;
+    sbco:minPresValue 10.0 ;
+    sbco:maxPresValue 100.0 ;
+    sbco:scale 1.0 ;
+    brick:hasQuantity "Relative_Humidity" ;
+    brick:hasSubstance "Air" ;
     brick:isPointOf <urn:equipment-hvac-f1> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
@@ -311,14 +405,20 @@
     sbco:name "Server Rack Power Consumption" ;
     rec:description "Real-time power draw from server rack" ;
     sbco:pointType "Power" ;
+    sbco:pointSpecification "Measurement" ;
     sbco:unit "percent" ;
+    sbco:minPresValue 0.0 ;
+    sbco:maxPresValue 100.0 ;
+    sbco:scale 1.0 ;
+    brick:hasQuantity "Active_Power" ;
+    brick:hasSubstance "ACElec" ;
     brick:isPointOf <urn:equipment-server-rack> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "point_code" ;
             sbco:value "PWR-F2-001" ]
     ) ;
-    sbco:customTags (
+    rec:customTags (
         [ a sbco:KeyBoolMapEntry ;
             sbco:key "alarm_enabled" ;
             sbco:value true ]
@@ -332,7 +432,13 @@
     sbco:name "Incubator Chamber Temperature" ;
     rec:description "Internal temperature of incubation chamber" ;
     sbco:pointType "Temperature" ;
+    sbco:pointSpecification "Measurement" ;
     sbco:unit "celsius" ;
+    sbco:minPresValue 20.0 ;
+    sbco:maxPresValue 50.0 ;
+    sbco:scale 1.0 ;
+    brick:hasQuantity "Temperature" ;
+    brick:hasSubstance "Air" ;
     sbco:aggregate <https://www.sbco.or.jp/ont/AggregateEnum#average> ;
     brick:isPointOf <urn:equipment-incubator> ;
     rec:identifiers (
@@ -352,7 +458,7 @@
                     sbco:value "±0.1" ]
             ) ]
     ) ;
-    sbco:customTags (
+    rec:customTags (
         [ a sbco:KeyBoolMapEntry ;
             sbco:key "is_writable" ;
             sbco:value false ]
@@ -366,10 +472,34 @@
     sbco:name "Chiller Discharge Temperature" ;
     rec:description "Cooling water discharge temperature" ;
     sbco:pointType "Temperature" ;
+    sbco:pointSpecification "Measurement" ;
     sbco:unit "celsius" ;
+    sbco:minPresValue 5.0 ;
+    sbco:maxPresValue 25.0 ;
+    sbco:scale 1.0 ;
+    brick:hasQuantity "Temperature" ;
+    brick:hasSubstance "Water" ;
+    sbco:aggregate <https://www.sbco.or.jp/ont/AggregateEnum#average> ;
     brick:isPointOf <urn:equipment-chiller> ;
     rec:identifiers (
         [ a sbco:KeyStringMapEntry ;
             sbco:key "point_code" ;
             sbco:value "TEMP-CHIL-001" ]
+    ) ;
+    rec:customProperties (
+        [ a sbco:KeyMapOfStringMapEntry ;
+            sbco:key "nominal_setpoint" ;
+            sbco:value (
+                [ a sbco:KeyStringMapEntry ;
+                    sbco:key "celsius" ;
+                    sbco:value "12" ]
+            ) ]
+    ) ;
+    rec:customTags (
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "is_writable" ;
+            sbco:value false ]
+        [ a sbco:KeyBoolMapEntry ;
+            sbco:key "is_active_alarm" ;
+            sbco:value true ]
     ) .

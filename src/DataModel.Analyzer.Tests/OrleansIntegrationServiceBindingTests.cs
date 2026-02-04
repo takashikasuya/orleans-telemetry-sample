@@ -34,6 +34,35 @@ public class OrleansIntegrationServiceBindingTests
         grainKey.Should().Be("tenantA:BuildingA:Room101:dev-1:temp-1");
     }
 
+    [Fact]
+    public void CreateGraphSeedData_AddsSpatialNodesAndEdges()
+    {
+        var model = BuildModel();
+        var service = CreateService();
+
+        var seed = service.CreateGraphSeedData(model);
+
+        seed.Nodes.Should().ContainSingle(node => node.NodeType == GraphNodeType.Site && node.NodeId == "site:1");
+        seed.Nodes.Should().ContainSingle(node => node.NodeType == GraphNodeType.Building && node.NodeId == "building:1");
+        seed.Nodes.Should().ContainSingle(node => node.NodeType == GraphNodeType.Level && node.NodeId == "level:1");
+        seed.Nodes.Should().ContainSingle(node => node.NodeType == GraphNodeType.Area && node.NodeId == "area:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "hasBuilding" &&
+            edge.SourceNodeId == "site:1" &&
+            edge.TargetNodeId == "building:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "hasLevel" &&
+            edge.SourceNodeId == "building:1" &&
+            edge.TargetNodeId == "level:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "hasArea" &&
+            edge.SourceNodeId == "level:1" &&
+            edge.TargetNodeId == "area:1");
+    }
+
     private static BuildingDataModel BuildModel()
     {
         var site = new Site { Name = "SiteA", Uri = "site:1" };

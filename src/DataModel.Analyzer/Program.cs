@@ -24,81 +24,71 @@ class Program
 @prefix sbco:  <https://www.sbco.or.jp/ont/> .
 @prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
 
-sbco:Site_001 a sbco:Site ;
-    sbco:name ""Main Site"" ;
-    sbco:id ""SITE_001"" ;
-    sbco:identifiers _:siteId1 ;
-    sbco:hasPart sbco:Building_001 .
+sbco:Site_001 a rec:Site ;
+    rec:name ""Main Site""^^xsd:string ;
+    sbco:id ""SITE_001""^^xsd:string ;
+    rec:identifiers _:siteId1 .
 
-sbco:Building_001 a sbco:Building ;
-    sbco:name ""Headquarters Building"" ;
-    sbco:id ""BLD_001"" ;
-    sbco:identifiers _:bldId1 ;
-    sbco:isPartOf sbco:Site_001 ;
-    sbco:hasPart sbco:Level_01 .
+sbco:Building_001 a rec:Building ;
+    rec:name ""Headquarters Building""^^xsd:string ;
+    sbco:id ""BLD_001""^^xsd:string ;
+    rec:identifiers _:bldId1 .
 
-sbco:Level_01 a sbco:Level ;
-    sbco:name ""Level 1"" ;
-    sbco:id ""LVL_01"" ;
-    sbco:identifiers _:lvlId1 ;
-    sbco:levelNumber 1 ;
-    sbco:isPartOf sbco:Building_001 ;
-    sbco:hasPart sbco:Space_101 .
+sbco:Level_01 a rec:Level ;
+    rec:name ""Level 1""^^xsd:string ;
+    sbco:id ""LVL_01""^^xsd:string ;
+    rec:identifiers _:lvlId1 ;
+    rec:levelNumber 1 .
 
-sbco:Space_101 a sbco:Space ;
-    sbco:name ""Room 101"" ;
-    sbco:id ""SPC_101"" ;
-    sbco:identifiers _:spcId1 ;
-    sbco:isPartOf sbco:Level_01 .
+sbco:Space_101 a rec:Space ;
+    rec:name ""Room 101""^^xsd:string ;
+    sbco:id ""SPC_101""^^xsd:string ;
+    rec:identifiers _:spcId1 .
 
 sbco:AHU_01 a sbco:EquipmentExt ;
-    sbco:name ""AHU-1"" ;
-    sbco:id ""EQP_AHU1"" ;
-    sbco:identifiers _:eqpId1 ;
-    sbco:assetTag ""AT-1001"" ;
-    sbco:installationDate ""2023-05-01""^^xsd:date ;
-    sbco:IPAddress ""10.0.1.10"" ;
-    sbco:locatedIn sbco:Space_101 ;
-    sbco:hasPoint sbco:Point_Temp_101 .
+    rec:name ""AHU-1""^^xsd:string ;
+    sbco:id ""EQP_AHU1""^^xsd:string ;
+    rec:identifiers _:eqpId1 ;
+    rec:assetTag ""AT-1001""^^xsd:string ;
+    rec:installationDate ""2023-05-01""^^xsd:date ;
+    rec:locatedIn sbco:Space_101 ;
+    rec:hasPoint sbco:Point_Temp_101 .
 
 sbco:Point_Temp_101 a sbco:PointExt ;
-    sbco:name ""Room 101 Temperature"" ;
-    sbco:id ""PNT_TEMP_101"" ;
-    sbco:identifiers _:pntId1 ;
-    sbco:pointType ""TemperatureSensorProfile"" ;
-    sbco:pointSpecification ""Measurement"" ;
-    sbco:unit ""celsius"" ;
-    brick:hasQuantity ""Temperature"" ;
+    rec:name ""Room 101 Temperature""^^xsd:string ;
+    sbco:id ""PNT_TEMP_101""^^xsd:string ;
+    sbco:pointType ""TemperatureSensorProfile""^^xsd:string ;
+    rec:identifiers _:pntId1 ;
+    sbco:pointSpecification ""Measurement""^^xsd:string ;
+    sbco:unit ""celsius""^^xsd:string ;
+    brick:hasQuantity ""Temperature""^^xsd:string ;
     brick:isPointOf sbco:AHU_01 ;
-    sbco:minPresValue ""0.0""^^xsd:float ;
-    sbco:maxPresValue ""50.0""^^xsd:float ;
-    sbco:scale ""1.0""^^xsd:float ;
-    brick:aggregate ""average"" ;
-    brick:hasSubstance ""Air"" .
+    brick:aggregate ""average""^^xsd:string ;
+    brick:hasSubstance ""Air""^^xsd:string .
 
 _:siteId1 a sbco:KeyStringMapEntry ;
-    sbco:key ""site_code"" ;
-    sbco:value ""SITE-001"" .
+    sbco:key ""site_code""^^xsd:string ;
+    sbco:value ""SITE-001""^^xsd:string .
 
 _:bldId1 a sbco:KeyStringMapEntry ;
-    sbco:key ""building_code"" ;
-    sbco:value ""HQ-01"" .
+    sbco:key ""building_code""^^xsd:string ;
+    sbco:value ""HQ-01""^^xsd:string .
 
 _:lvlId1 a sbco:KeyStringMapEntry ;
-    sbco:key ""level_code"" ;
-    sbco:value ""L1"" .
+    sbco:key ""level_code""^^xsd:string ;
+    sbco:value ""L1""^^xsd:string .
 
 _:spcId1 a sbco:KeyStringMapEntry ;
-    sbco:key ""room_code"" ;
-    sbco:value ""101"" .
+    sbco:key ""room_code""^^xsd:string ;
+    sbco:value ""101""^^xsd:string .
 
 _:eqpId1 a sbco:KeyStringMapEntry ;
-    sbco:key ""equipment_code"" ;
-    sbco:value ""AHU-1"" .
+    sbco:key ""equipment_code""^^xsd:string ;
+    sbco:value ""AHU-1""^^xsd:string .
 
 _:pntId1 a sbco:KeyStringMapEntry ;
-    sbco:key ""point_code"" ;
-    sbco:value ""TEMP-101"" .
+    sbco:key ""point_code""^^xsd:string ;
+    sbco:value ""TEMP-101""^^xsd:string .
 ";
 
         var shapesPath = Path.Combine(AppContext.BaseDirectory, "Schema", "building_model.shacl.ttl");
@@ -155,6 +145,31 @@ _:pntId1 a sbco:KeyStringMapEntry ;
             Console.WriteLine("5. Orleans用コントラクト生成");
             var contracts = analyzer.ExportToOrleansContracts(model);
             Console.WriteLine($"   生成されたコントラクト数: {contracts.Count}");
+            
+            // コントラクトの詳細を出力
+            foreach (var contract in contracts)
+            {
+                Console.WriteLine($"   デバイス: {contract.DeviceName} (ID: {contract.DeviceId})");
+                Console.WriteLine($"     - デバイスタイプ: {contract.DeviceType}");
+                Console.WriteLine($"     - ゲートウェイID: {contract.GatewayId}");
+                Console.WriteLine($"     - ロケーションパス: {contract.LocationPath}");
+                Console.WriteLine($"     - ポイント数: {contract.Points.Count}");
+                
+                foreach (var point in contract.Points)
+                {
+                    Console.WriteLine($"       ポイント: {point.PointName} (ID: {point.PointId})");
+                    Console.WriteLine($"         タイプ: {point.PointType}, 仕様: {point.PointSpecification}");
+                    Console.WriteLine($"         ユニット: {point.Unit}, 書き込み可能: {point.Writable}");
+                    if (point.MinValue.HasValue || point.MaxValue.HasValue)
+                    {
+                        Console.WriteLine($"         範囲: {point.MinValue} ～ {point.MaxValue}");
+                    }
+                    if (point.Interval.HasValue)
+                    {
+                        Console.WriteLine($"         間隔: {point.Interval}ms");
+                    }
+                }
+            }
             Console.WriteLine();
 
             if (args.Length > 0)

@@ -3,15 +3,42 @@ using Orleans;
 
 namespace Grains.Abstractions;
 
+/// <summary>
+/// Represents the type of a node in the graph.
+/// </summary>
 public enum GraphNodeType
 {
+    /// <summary>
+    /// Unknown node type.
+    /// </summary>
     Unknown = 0,
+    /// <summary>
+    /// Site node type.
+    /// </summary>
     Site = 1,
+    /// <summary>
+    /// Building node type.
+    /// </summary>
     Building = 2,
+    /// <summary>
+    /// Level node type.
+    /// </summary>
     Level = 3,
+    /// <summary>
+    /// Area node type.
+    /// </summary>
     Area = 4,
+    /// <summary>
+    /// Equipment node type.
+    /// </summary>
     Equipment = 5,
+    /// <summary>
+    /// Device node type.
+    /// </summary>
     Device = 6,
+    /// <summary>
+    /// Point node type.
+    /// </summary>
     Point = 7
 }
 
