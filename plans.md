@@ -964,6 +964,9 @@ GraphNodeGrain と PointGrain の関連を API で活用し、`/api/nodes/{nodeI
 ## Purpose
 AdminGateway について、RDF を入力として grain を生成し、ツリー UI の動作を継続検証できるテスト戦略を定義する。
 
+### 現在フェーズ
+- **Phase 2: Blazor UI テストを追加する** を完了。次は Phase 3（E2E UI テスト）に進む。
+
 ## Success Criteria
 1. AdminGateway の現行フロー（RDF→GraphSeed→AdminMetricsService→MudTreeView）を前提に、層別テスト方針（データ/サービス/UI/E2E）を文書化する。
 2. 最小実行単位（最初のスプリント）で着手できるテスト導入ステップを明示する。
@@ -974,22 +977,29 @@ AdminGateway について、RDF を入力として grain を生成し、ツリ�
 2. 設計方針ドキュメントを `docs/` に追加する。
 3. README の Documentation セクションにリンクを追加する。
 4. `dotnet build` / `dotnet test` で回帰確認する。
+5. Phase 2 として `AdminGateway.Tests` に bUnit を導入し、`Admin.razor` の表示/選択 UI テストを追加する。
+6. `dotnet test src/AdminGateway.Tests` を実行し、Phase 2 の追加テストが通ることを確認する。
 
 ## Progress
 - [x] AdminGateway の構造と既存ドキュメントを確認
 - [x] 設計方針ドキュメントを追加
 - [x] README へのリンク追加
 - [x] ビルド/テストの実行結果を記録
+- [x] Phase 1 (サービス層テスト方針の確定)
+- [x] Phase 2 (bUnit UI テスト実装)
+- [x] Phase 2 のテスト実行確認 (`dotnet test src/AdminGateway.Tests`)
 
 ## Observations
-- `AdminGateway` 用の専用テストプロジェクトは現時点で存在しない。
+- `src/AdminGateway.Tests` を新設し、bUnit + xUnit + Moq で `Admin.razor` の UI テスト実行基盤を追加した。
 - ツリー構築ロジックは `AdminMetricsService` 内に集約されており、関係解釈（`hasPart`/`isPartOf`/`locatedIn`/`isLocationOf`）と `Device` 正規化が主要なテスト対象。
-- `dotnet build` と `dotnet test` は通過し、回帰は発生していない。
+- `dotnet test src/AdminGateway.Tests` で Phase 2 の 2 テスト（ツリー表示 / ノード選択詳細表示）を追加し通過した。
+- `AdminMetricsService` が concrete + internal のため、`AdminGateway` 側に `InternalsVisibleTo("AdminGateway.Tests")` を追加してテストから DI 構成できるようにした。
 
 ## Decisions
 - 今回はコード実装より先に、導入順序が明確なテスト設計方針をドキュメント化する。
 - 層A（RDF解析）/層B（サービス）/層C（bUnit UI）/統合D（Playwright E2E）の 4 区分で段階導入する。
+- Phase 2 はまず `Admin.razor` の最小 2 ケース（階層表示 / ノード選択）で固定し、壊れやすい表示ロジックを PR ごとに検知できる形にする。
 
 ## Retrospective
-- ドキュメント先行でテスト実装方針を固定できたため、次の実装タスクで `AdminGateway.Tests` を迷わず起票できる状態になった。
+- Phase 2 の最小スコープ（表示 + ノード選択）を実装できたため、次は Phase 3 の Playwright E2E へ接続しやすい土台が整った。
 - `dotnet build` / `dotnet test` は成功したが、既存 warning（MudBlazor 近似解決、Moq 脆弱性通知、XML コメント警告）は継続しているため別タスクでの解消が必要。

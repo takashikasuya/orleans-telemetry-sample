@@ -501,7 +501,7 @@ else
             builder.AddAttribute(sequence++, "Text", node.DisplayName);
             builder.AddAttribute(sequence++, "Icon", GetTreeIcon(node.NodeType));
             builder.AddAttribute(sequence++, "CanExpand", node.Children.Count > 0);
-            builder.AddAttribute(sequence++, "OnClick", EventCallback.Factory.Create(this, () => SelectGraphNodeAsync(node.NodeId)));
+            builder.AddAttribute(sequence++, "OnClick", EventCallback.Factory.Create<MouseEventArgs>(this, _ => SelectGraphNodeAsync(node.NodeId)));
             if (node.Children.Count > 0)
             {
                 builder.AddAttribute(sequence++, "ChildContent", RenderGraphTree(node.Children));
