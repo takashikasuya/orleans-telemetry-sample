@@ -8,5 +8,6 @@
     <ProjectReference Include="../Telemetry.Ingest/Telemetry.Ingest.csproj" />
     <PackageReference Include="Microsoft.Orleans.Client" Version="9.2.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.1" />
+    <PackageReference Include="MudBlazor" Version="7.6.1" />
   </ItemGroup>
 </Project>

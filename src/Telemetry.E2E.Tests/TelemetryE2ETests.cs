@@ -12,12 +12,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Orleans;
 using Orleans.Hosting;
+using Orleans.Serialization;
 using Telemetry.Ingest;
 using Telemetry.Ingest.Kafka;
 using Telemetry.Ingest.RabbitMq;
 using Telemetry.Ingest.Simulator;
 using Telemetry.Storage;
 using Publisher;
+using SiloHost;
 using Xunit;
 
 namespace Telemetry.E2E.Tests;
@@ -395,6 +397,11 @@ public sealed class TelemetryE2ETests
         builder.ConfigureServices((context, services) =>
         {
             services.AddDataModelAnalyzer();
+            services.AddSerializer(builder =>
+            {
+                builder.AddAssembly(typeof(TelemetryRouterGrain).Assembly);
+                builder.AddAssembly(typeof(ITelemetryRouterGrain).Assembly);
+            });
             services.AddSingleton<ITelemetryRouterGrain>(provider =>
             {
                 var grainFactory = provider.GetRequiredService<IGrainFactory>();

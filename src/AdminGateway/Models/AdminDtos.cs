@@ -47,3 +47,9 @@ public sealed record GraphStatisticsSummary(
 public sealed record GraphNodeHierarchy(
     IReadOnlyList<GraphNodeSnapshot> Nodes,
     string TenantId);
+
+public sealed record GraphTreeNode(
+    string NodeId,
+    string DisplayName,
+    GraphNodeType NodeType,
+    IReadOnlyList<GraphTreeNode> Children);

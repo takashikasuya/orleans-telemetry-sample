@@ -4,15 +4,15 @@
 
 <section class="admin-header">
     <div>
-        <p class="eyebrow">Orleans Telemetry - 管理コンソール</p>
+        <p class="eyebrow">Orleans Telemetry - Admin Console</p>
         <h1>Cluster Overview</h1>
     </div>
-    <button class="refresh-button" @onclick="RefreshAsync">データを更新</button>
+    <button class="refresh-button" @onclick="RefreshAsync">Refresh</button>
 </section>
 
 @if (_loading)
 {
-    <p class="status">ダッシュボードを読み込み中...</p>
+    <p class="status">Loading dashboard data...</p>
 }
 else if (_error is not null)
 {
@@ -23,8 +23,8 @@ else
     <section class="overview">
         <article>
             <h2>Ingest</h2>
-            <p>バッチサイズ: @_ingest?.BatchSize</p>
-            <p>チャネル容量: @_ingest?.ChannelCapacity</p>
+            <p>Batch size: @_ingest?.BatchSize</p>
+            <p>Channel capacity: @_ingest?.ChannelCapacity</p>
             <div class="tag-row">
                 <strong>Connectors</strong>
                 @if (_ingest?.EnabledConnectors.Length > 0)
@@ -36,7 +36,7 @@ else
                 }
                 else
                 {
-                    <span class="tag muted">未構成</span>
+                    <span class="tag muted">None</span>
                 }
             </div>
             <div class="tag-row">
@@ -50,7 +50,7 @@ else
                 }
                 else
                 {
-                    <span class="tag muted">未構成</span>
+                    <span class="tag muted">None</span>
                 }
             </div>
         </article>
@@ -60,7 +60,7 @@ else
             {
                 <p>Stage: @_storage.Stage.FileCount files</p>
                 <p>Parquet: @_storage.Parquet.FileCount files</p>
-                <p>インデックス: @_storage.Index.FileCount files</p>
+                <p>Index: @_storage.Index.FileCount files</p>
             }
             else
             {
@@ -69,8 +69,8 @@ else
         </article>
         <article>
             <h2>Clients</h2>
-            <p>Silodis: @_silos.Length</p>
-            <p>合計クライアント: @(_silos.Sum(s => s.ClientCount))</p>
+            <p>Silos: @_silos.Length</p>
+            <p>Total clients: @(_silos.Sum(s => s.ClientCount))</p>
         </article>
     </section>
 
@@ -78,7 +78,7 @@ else
         <h2>Activation Explorer (@_grains.Length types)</h2>
         @if (_grains.Length == 0)
         {
-            <p class="status muted">グレインデータがまだありません。</p>
+            <p class="status muted">No grain activations yet.</p>
         }
         else
         {
@@ -88,7 +88,7 @@ else
                         <tr>
                             <th>Grain Type</th>
                             <th>Activations</th>
-                            <th>Silod</th>
+                            <th>Silos</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -110,7 +110,7 @@ else
         <h2>Client Connections</h2>
         @if (_silos.Length == 0)
         {
-            <p class="status muted">シロ統計が取得できません。</p>
+            <p class="status muted">No active silos detected.</p>
         }
         else
         {
@@ -154,11 +154,11 @@ else
                     <article>
                         <h3>@tier.Tier</h3>
                         <p>@FormatBytes(tier.TotalBytes) · @tier.FileCount files</p>
-                        <p class="muted">ルート: @tier.RootPath</p>
+                        <p class="muted">Root: @tier.RootPath</p>
                         <ul>
                             @if (tier.Tenants.Count == 0)
                             {
-                                <li class="muted">アクティブなテナントがありません。</li>
+                                <li class="muted">No active tenants.</li>
                             }
                             else
                             {
@@ -177,6 +177,7 @@ else
             }
         </div>
     </section>
+
     <section>
         <h2>Graph Statistics</h2>
         <div class="graph-tenant-selector">
@@ -194,7 +195,7 @@ else
             }
             else
             {
-                <p class="status muted">RDF をインポートするとテナント ID が登録され、ここに表示されます。</p>
+                <p class="status muted">Import RDF to register tenant IDs.</p>
             }
         </div>
         @if (_graphStats is not null && !string.IsNullOrWhiteSpace(_selectedGraphTenant))
@@ -246,66 +247,56 @@ else
 
     <section>
         <h2>Graph Hierarchy</h2>
-        <button class="refresh-button" @onclick="LoadGraphHierarchyAsync" disabled="@string.IsNullOrWhiteSpace(_selectedGraphTenant)">階層を読み込む</button>
+        <button class="refresh-button" @onclick="LoadGraphHierarchyAsync" disabled="@string.IsNullOrWhiteSpace(_selectedGraphTenant)">Load Hierarchy</button>
         @if (string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
-            <p class="status muted">Tenant を選択してください。</p>
+            <p class="status muted">Select a tenant.</p>
         }
-        else if (_graphRenderNodes.Count > 0)
+        else if (_graphTreeNodes.Count > 0)
         {
-            <div class="graph-network-wrapper">
-                <div class="graph-network-canvas">
-                    <svg width="@_graphCanvasWidth" height="@_graphCanvasHeight" role="img" aria-label="Graph network">
-                        @foreach (var edge in _graphRenderEdges)
-                        {
-                            if (_renderNodeMap.TryGetValue(edge.SourceId, out var source) && _renderNodeMap.TryGetValue(edge.TargetId, out var target))
-                            {
-                                <line class="graph-edge" x1="@source.X" y1="@source.Y" x2="@target.X" y2="@target.Y" />
-                                <svg:text class="graph-edge-label" x="@((source.X + target.X) / 2)" y="@((source.Y + target.Y) / 2 - 5)">
-                                    @edge.Predicate
-                                </svg:text>
-                            }
-                        }
-                        @foreach (var node in _graphRenderNodes)
-                        {
-                            var isActive = string.Equals(_selectedGraphNode?.Node?.NodeId, node.NodeId, StringComparison.OrdinalIgnoreCase);
-                            <g class="graph-node-group" @onclick="() => SelectGraphNode(node.NodeId)" tabindex="0">
-                                <circle class="graph-node @(isActive ? "active" : "")" cx="@node.X" cy="@node.Y" r="18" />
-                                <svg:text class="graph-node-label" x="@node.X" y="@(node.Y + 5)">
-                                    @node.DisplayName
-                                </svg:text>
-                            </g>
-                        }
-                    </svg>
-                </div>
-                <aside class="graph-node-details">
+            <div class="graph-tree-layout">
+                <MudPaper Class="pa-3 graph-tree-panel">
+                    <MudText Typo="Typo.subtitle1">Hierarchy Tree</MudText>
+                    <MudTreeView T="GraphTreeNode" Hover="true" Class="graph-tree-view">
+                        @RenderGraphTree(_graphTreeNodes)
+                    </MudTreeView>
+                </MudPaper>
+                <MudPaper Class="pa-3 graph-tree-details">
+                    <MudText Typo="Typo.subtitle1">Node Details</MudText>
                     @if (_selectedGraphNode is not null)
                     {
-                        <h3>@GetNodeLabel(_selectedGraphNode)</h3>
-                        <p><strong>ID:</strong> @_selectedGraphNode.Node?.NodeId</p>
-                        <p><strong>Class:</strong> @_selectedGraphNode.Node?.NodeType</p>
-                        <p><strong>Attributes:</strong></p>
-                        <ul>
-                            @foreach (var attr in _selectedGraphNode.Node?.Attributes ?? new Dictionary<string, string>())
-                            {
-                                <li>@attr.Key: @attr.Value</li>
-                            }
-                        </ul>
+                        <MudText Typo="Typo.h6">@GetNodeLabel(_selectedGraphNode)</MudText>
+                        <MudText Typo="Typo.body2"><strong>ID:</strong> @_selectedGraphNode.Node?.NodeId</MudText>
+                        <MudText Typo="Typo.body2"><strong>Class:</strong> @NormalizeNodeType(_selectedGraphNode.Node?.NodeType ?? GraphNodeType.Unknown)</MudText>
+                        <MudText Typo="Typo.subtitle2" Class="mt-2">Attributes</MudText>
+                        @if ((_selectedGraphNode.Node?.Attributes?.Count ?? 0) == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="muted">No attributes.</MudText>
+                        }
+                        else
+                        {
+                            <MudList T="string" Dense="true">
+                                @foreach (var attr in _selectedGraphNode.Node?.Attributes ?? new Dictionary<string, string>())
+                                {
+                                    <MudListItem T="string">@attr.Key: @attr.Value</MudListItem>
+                                }
+                            </MudList>
+                        }
                     }
                     else
                     {
-                        <p class="muted">ノードをクリックして詳細を表示します。</p>
+                        <MudText Typo="Typo.body2" Class="muted">Select a node to view details.</MudText>
                     }
-                </aside>
+                </MudPaper>
             </div>
         }
         else if (_loadingHierarchy)
         {
-            <p class="status">階層データを読み込み中...</p>
+            <p class="status">Loading hierarchy...</p>
         }
         else
         {
-            <p class="status muted">階層データがありません。</p>
+            <p class="status muted">No hierarchy data available.</p>
         }
     </section>
 
@@ -322,7 +313,7 @@ else
                     <input class="graph-input" @bind="_graphTenant" />
                 </label>
                 <button class="refresh-button" @onclick="TriggerGraphSeedAsync" disabled="@_isImporting">
-                    @_isImporting ? "実行中..." : "インポートを実行"
+                    @_isImporting ? "Importing..." : "Run import"
                 </button>
             </div>
             <div class="graph-status-card">
@@ -332,18 +323,18 @@ else
                 </div>
                 @if (_graphStatus is not null)
                 {
-                    <p class="graph-status-line">パス: @_graphStatus.Path</p>
-                    <p class="graph-status-line">テナント: @_graphStatus.TenantId</p>
-                    <p class="graph-status-line">@_graphStatus.StartedAt:u → @_graphStatus.CompletedAt:u</p>
-                    <p class="graph-status-line">ノード: @_graphStatus.NodeCount · エッジ: @_graphStatus.EdgeCount</p>
+                    <p class="graph-status-line">Path: @_graphStatus.Path</p>
+                    <p class="graph-status-line">Tenant: @_graphStatus.TenantId</p>
+                    <p class="graph-status-line">@_graphStatus.StartedAt:u · @_graphStatus.CompletedAt:u</p>
+                    <p class="graph-status-line">Nodes: @_graphStatus.NodeCount · Edges: @_graphStatus.EdgeCount</p>
                     @if (!string.IsNullOrWhiteSpace(_graphStatus.Message))
                     {
-                        <p class="graph-status-line status muted">メッセージ: @_graphStatus.Message</p>
+                        <p class="graph-status-line status muted">Message: @_graphStatus.Message</p>
                     }
                 }
                 else
                 {
-                    <p class="graph-status-line muted">Graph seed の実行履歴がありません。</p>
+                    <p class="graph-status-line muted">No graph seed history.</p>
                 }
             </div>
         </div>
@@ -379,13 +370,7 @@ else
     private string[] _graphTenants = Array.Empty<string>();
     private string? _selectedGraphTenant;
     private GraphStatisticsSummary? _graphStats;
-    private GraphNodeHierarchy? _graphHierarchy;
-    private Dictionary<string, GraphNodeSnapshot> _graphNodeLookup = new(StringComparer.OrdinalIgnoreCase);
-    private List<GraphRenderNode> _graphRenderNodes = new();
-    private List<GraphRenderEdge> _graphRenderEdges = new();
-    private Dictionary<string, GraphRenderNode> _renderNodeMap = new(StringComparer.OrdinalIgnoreCase);
-    private double _graphCanvasWidth;
-    private double _graphCanvasHeight;
+    private List<GraphTreeNode> _graphTreeNodes = new();
     private GraphNodeSnapshot? _selectedGraphNode;
     private bool _loadingHierarchy;
 
@@ -410,7 +395,7 @@ else
         }
         catch (Exception ex)
         {
-            _error = $"読み込みに失敗: {ex.Message}";
+            _error = $"Failed to load dashboard data: {ex.Message}";
         }
         finally
         {
@@ -423,22 +408,20 @@ else
     {
         if (string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
-            _graphHierarchy = null;
-            _graphNodeLookup = new(StringComparer.OrdinalIgnoreCase);
-            ResetGraphRenderState();
+            _graphTreeNodes.Clear();
+            _selectedGraphNode = null;
             return;
         }
 
         _loadingHierarchy = true;
         try
         {
-            _graphHierarchy = await Metrics.GetGraphHierarchyAsync(_selectedGraphTenant);
-            _graphNodeLookup = BuildNodeLookup(_graphHierarchy);
-            BuildGraphRenderState();
+            _graphTreeNodes = (await Metrics.GetGraphTreeAsync(_selectedGraphTenant)).ToList();
+            _selectedGraphNode = null;
         }
         catch (Exception ex)
         {
-            _error = $"階層読み込みに失敗: {ex.Message}";
+            _error = $"Failed to load hierarchy: {ex.Message}";
         }
         finally
         {
@@ -459,12 +442,12 @@ else
         }
 
         if (string.IsNullOrWhiteSpace(_selectedGraphTenant) ||
-            !Array.Exists(_graphTenants, tenant => string.Equals(tenant, _selectedGraphTenant, System.StringComparison.OrdinalIgnoreCase)))
+            !Array.Exists(_graphTenants, tenant => string.Equals(tenant, _selectedGraphTenant, StringComparison.OrdinalIgnoreCase)))
         {
             _selectedGraphTenant = _graphTenants[0];
         }
 
-        if (string.Equals(_graphTenant, "default", System.StringComparison.OrdinalIgnoreCase) &&
+        if (string.Equals(_graphTenant, "default", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             _graphTenant = _selectedGraphTenant;
@@ -491,23 +474,9 @@ else
 
         _selectedGraphTenant = tenant;
         await LoadGraphStatisticsAsync();
-        _graphHierarchy = null;
-        _graphNodeLookup = new(StringComparer.OrdinalIgnoreCase);
-        ResetGraphRenderState();
+        _graphTreeNodes.Clear();
+        _selectedGraphNode = null;
         StateHasChanged();
-    }
-
-    private static Dictionary<string, GraphNodeSnapshot> BuildNodeLookup(GraphNodeHierarchy? hierarchy)
-    {
-        if (hierarchy is null)
-        {
-            return new(StringComparer.OrdinalIgnoreCase);
-        }
-
-        return hierarchy.Nodes
-            .Where(snapshot => snapshot.Node?.NodeId is { } id && !string.IsNullOrWhiteSpace(id))
-            .DistinctBy(snapshot => snapshot.Node!.NodeId, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(snapshot => snapshot.Node!.NodeId, snapshot => snapshot, StringComparer.OrdinalIgnoreCase);
     }
 
     private static int GetGraphStatCount(GraphStatisticsSummary stats, GraphNodeType type)
@@ -522,96 +491,52 @@ else
             _ => 0
         };
 
-    private void ResetGraphRenderState()
+    private RenderFragment RenderGraphTree(IReadOnlyList<GraphTreeNode> nodes) => builder =>
     {
-        _graphRenderNodes.Clear();
-        _graphRenderEdges.Clear();
-        _renderNodeMap.Clear();
-        _graphCanvasWidth = 0;
-        _graphCanvasHeight = 0;
-        _selectedGraphNode = null;
-    }
+        var sequence = 0;
+        foreach (var node in nodes)
+        {
+            builder.OpenComponent<MudTreeViewItem<GraphTreeNode>>(sequence++);
+            builder.AddAttribute(sequence++, "Value", node);
+            builder.AddAttribute(sequence++, "Text", node.DisplayName);
+            builder.AddAttribute(sequence++, "Icon", GetTreeIcon(node.NodeType));
+            builder.AddAttribute(sequence++, "CanExpand", node.Children.Count > 0);
+            builder.AddAttribute(sequence++, "OnClick", EventCallback.Factory.Create(this, () => SelectGraphNodeAsync(node.NodeId)));
+            if (node.Children.Count > 0)
+            {
+                builder.AddAttribute(sequence++, "ChildContent", RenderGraphTree(node.Children));
+            }
+            builder.CloseComponent();
+        }
+    };
 
-    private void BuildGraphRenderState()
+    private async Task SelectGraphNodeAsync(string nodeId)
     {
-        ResetGraphRenderState();
-
-        if (_graphHierarchy is null)
-        {
-            return;
-        }
-
-        var columnSpacing = 180;
-        var rowSpacing = 70;
-        var maxNodesPerColumn = 12;
-        var maxY = 0.0;
-
-        for (var columnIndex = 0; columnIndex < GraphStatOrder.Length; columnIndex++)
-        {
-            var nodeType = GraphStatOrder[columnIndex];
-            var snapshots = _graphHierarchy.Nodes
-                .Where(snapshot => snapshot.Node?.NodeType == nodeType && !string.IsNullOrWhiteSpace(snapshot.Node.NodeId))
-                .DistinctBy(snapshot => snapshot.Node!.NodeId, StringComparer.OrdinalIgnoreCase)
-                .Take(maxNodesPerColumn)
-                .ToList();
-
-            for (var rowIndex = 0; rowIndex < snapshots.Count; rowIndex++)
-            {
-                var snapshot = snapshots[rowIndex];
-                var nodeId = snapshot.Node!.NodeId;
-                var displayName = string.IsNullOrWhiteSpace(snapshot.Node.DisplayName) ? nodeId : snapshot.Node.DisplayName;
-                var x = columnIndex * columnSpacing + 60;
-                var y = 40 + rowIndex * rowSpacing;
-                var renderNode = new GraphRenderNode(nodeId, snapshot.Node.NodeType, displayName, x, y);
-                _graphRenderNodes.Add(renderNode);
-                _renderNodeMap[nodeId] = renderNode;
-                maxY = Math.Max(maxY, y);
-            }
-        }
-
-        _graphCanvasWidth = GraphStatOrder.Length * columnSpacing + 80;
-        _graphCanvasHeight = Math.Max(240, maxY + 80);
-
-        var allowedPredicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "hasBuilding", "hasLevel", "hasPart", "hasArea",
-            "hasEquipment", "hasPoint", "isLocationOf", "locatedIn"
-        };
-
-        foreach (var node in _graphRenderNodes)
-        {
-            if (!_graphNodeLookup.TryGetValue(node.NodeId, out var snapshot))
-            {
-                continue;
-            }
-
-            foreach (var edge in snapshot.OutgoingEdges)
-            {
-                if (string.IsNullOrWhiteSpace(edge.TargetNodeId) || !allowedPredicates.Contains(edge.Predicate))
-                {
-                    continue;
-                }
-
-                if (!_renderNodeMap.ContainsKey(edge.TargetNodeId))
-                {
-                    continue;
-                }
-
-                _graphRenderEdges.Add(new GraphRenderEdge(node.NodeId, edge.TargetNodeId, edge.Predicate));
-            }
-        }
-    }
-
-    private void SelectGraphNode(string nodeId)
-    {
-        if (string.IsNullOrWhiteSpace(nodeId))
+        if (string.IsNullOrWhiteSpace(nodeId) || string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             _selectedGraphNode = null;
             return;
         }
 
-        _selectedGraphNode = _graphNodeLookup.TryGetValue(nodeId, out var snapshot) ? snapshot : null;
+        _selectedGraphNode = await Metrics.GetGraphNodeAsync(_selectedGraphTenant, nodeId);
+        StateHasChanged();
     }
+
+    private static string GetTreeIcon(GraphNodeType type)
+        => type switch
+        {
+            GraphNodeType.Site => Icons.Material.Filled.Public,
+            GraphNodeType.Building => Icons.Material.Filled.HomeWork,
+            GraphNodeType.Level => Icons.Material.Filled.Layers,
+            GraphNodeType.Area => Icons.Material.Filled.Map,
+            GraphNodeType.Equipment => Icons.Material.Filled.Memory,
+            GraphNodeType.Device => Icons.Material.Filled.Memory,
+            GraphNodeType.Point => Icons.Material.Filled.ControlPoint,
+            _ => Icons.Material.Filled.DeviceHub
+        };
+
+    private static GraphNodeType NormalizeNodeType(GraphNodeType type)
+        => type == GraphNodeType.Device ? GraphNodeType.Equipment : type;
 
     private static string GetNodeLabel(GraphNodeSnapshot? snapshot)
     {
@@ -622,9 +547,6 @@ else
 
         return !string.IsNullOrWhiteSpace(node.DisplayName) ? node.DisplayName : node.NodeId;
     }
-
-    private sealed record GraphRenderNode(string NodeId, GraphNodeType NodeType, string DisplayName, double X, double Y);
-    private sealed record GraphRenderEdge(string SourceId, string TargetId, string Predicate);
 
     private static string FormatBytes(long? bytes) => FormatBytes((double?)bytes);
 
@@ -667,7 +589,7 @@ else
     }
 
     private static string GetGraphStatusLabel(GraphSeedStatus? status)
-        => status is null ? "未実行" : status.Success ? "成功" : "失敗";
+        => status is null ? "Not run" : status.Success ? "Success" : "Failure";
 
     private static string GetGraphStatusBadgeClass(GraphSeedStatus? status)
         => status is null ? "status-badge muted" : status.Success ? "status-badge success" : "status-badge failure";
@@ -681,11 +603,13 @@ else
             var request = new GraphSeedRequest(_graphPath, _graphTenant);
             var result = await Metrics.TriggerGraphSeedAsync(request);
             _graphStatus = result;
-            _graphFeedback = result.Success ? "インポートが完了しました。" : $"失敗: {result.Message ?? "未知のエラー"}";
+            _graphFeedback = result.Success
+                ? "Import completed."
+                : $"Import failed: {result.Message ?? "Unknown error"}";
         }
         catch (Exception ex)
         {
-            _graphFeedback = $"インポートで例外: {ex.Message}";
+            _graphFeedback = $"Import failed: {ex.Message}";
         }
         finally
         {

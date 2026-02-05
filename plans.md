@@ -2,6 +2,127 @@
 
 ---
 
+# plans.md: AdminGateway Graph Tree (MudBlazor)
+
+## Purpose
+Replace the AdminGateway SVG graph view with a MudBlazor-based tree view that expresses the graph as a hierarchy (Site → Building → Level → Area → Equipment → Point), treating Device as Equipment and mapping location/part relationships into a tree representation.
+
+## Success Criteria
+1. AdminGateway uses MudBlazor and renders graph hierarchy as a tree (no SVG graph).
+2. Tree uses these rules:
+   - Containment: `hasBuilding`, `hasLevel`, `hasArea`, `hasPart` (and `isPartOf` reversed)
+   - Placement: `locatedIn` and `isLocationOf` show equipment under area
+   - `Device` is displayed as `Equipment`
+3. Selecting a tree node shows details (ID, type, attributes).
+4. Build succeeds (`dotnet build`).
+
+## Steps
+1. Add MudBlazor to `AdminGateway` (package, services, host references).
+2. Implement tree DTO + tree building in `AdminMetricsService`.
+3. Replace the SVG graph section in `Admin.razor` with MudTreeView.
+4. Update docs and styles to reflect the tree view.
+
+## Progress
+- [x] Add MudBlazor dependencies and setup
+- [x] Implement tree building logic
+- [x] Replace SVG graph with MudTreeView UI
+- [x] Update docs/styles and note verification
+
+## Observations
+- MudBlazor added to AdminGateway and SVG graph removed in favor of a hierarchy tree.
+- Build/test not run in this environment.
+
+## Decisions
+*To be updated during implementation.*
+
+## Retrospective
+*To be updated after completion.*
+
+---
+
+# plans.md: Windows PowerShell Script Wrappers
+
+## Purpose
+Provide PowerShell command files for the existing `scripts/*.sh` utilities so they can be run on Windows without Bash.
+
+## Success Criteria
+- PowerShell equivalents exist for `run-all-tests`, `run-e2e`, `run-loadtest`, `start-system`, and `stop-system`.
+- Each PowerShell script preserves the original options/behavior (including report paths and Docker Compose overrides).
+- No existing behavior is changed; Bash scripts remain intact.
+
+## Steps
+1. Translate each Bash script into a PowerShell `.ps1` file under `scripts/`.
+2. Ensure argument parsing and defaults match the Bash scripts.
+3. Record any behavioral differences or Windows-specific notes here.
+
+## Progress
+- [x] Add PowerShell script wrappers
+- [ ] Note verification steps (manual)
+
+## Observations
+- Added PowerShell equivalents for `run-all-tests`, `run-e2e`, `run-loadtest`, `start-system`, and `stop-system`.
+- PowerShell scripts preserve the Bash options and defaults while using PowerShell-native JSON handling and URL encoding.
+- Fixed a PowerShell parser error in `run-e2e.ps1` by escaping the interpolated key in the markdown line.
+- Updated `run-e2e.ps1` to avoid `Get-Date -AsUTC` for compatibility with older PowerShell versions.
+- Updated `run-all-tests.ps1` to avoid `Get-Date -AsUTC` for compatibility with older PowerShell versions.
+- Added `MOCK_OIDC_PORT` override in `run-e2e.ps1` to avoid port 8081 conflicts.
+- Added `API_WAIT_SECONDS` override in `run-e2e.ps1` to allow slower API startup.
+- Updated `run-loadtest.ps1` to avoid `Get-Date -AsUTC` for compatibility with older PowerShell versions.
+- Fixed variable interpolation for volume paths in `start-system.ps1` (`${var}:/path`).
+
+## Decisions
+- Use `.ps1` wrappers rather than `.cmd` to keep parity with Bash argument handling.
+
+## Retrospective
+*To be updated after completion.*
+
+---
+
+# plans.md: Graph Reverse Edges for Location/Part Relations
+
+## Purpose
+RDF の `rec:locatedIn` / `rec:hasPart` などの親子関係が Graph ノードの `incomingEdges` に現れず、`/api/nodes/{nodeId}` で関係性を辿れない問題を解消する。  
+`isLocationOf` / `hasPart` の逆参照として、ノード間の関係性を GraphSeedData に追加できるようにする。
+
+## Success Criteria
+1. `OrleansIntegrationService.CreateGraphSeedData` が以下の関係を**追加で**出力する:
+   - `locatedIn` と `isLocationOf` の双方向エッジ (Equipment ↔ Area)
+   - `hasPart` と `isPartOf` の双方向エッジ (Site/Building/Level/Area 階層)
+2. 既存の `hasBuilding` / `hasLevel` / `hasArea` / `hasEquipment` / `hasPoint` / `feeds` / `isFedBy` は保持される。
+3. `seed-complex.ttl` の `urn:equipment-hvac-f1` が `incomingEdges` に `isLocationOf` (source: `urn:area-main-f1-lobby`) を持つこと。
+4. `DataModel.Analyzer.Tests` に逆参照エッジを検証するテストを追加し、`dotnet test src/DataModel.Analyzer.Tests` が通る。
+
+## Steps
+1. `OrleansIntegrationService.CreateGraphSeedData` のエッジ生成箇所を整理し、逆参照のマッピング方針を確定する。
+2. 逆参照エッジ生成を追加する (重複は排除し、既存の正方向エッジは維持)。
+3. `OrleansIntegrationServiceBindingTests` に以下のテストを追加する:
+   - `locatedIn` と `isLocationOf` が Equipment/Area 間で出力される
+   - `hasPart` / `isPartOf` が Site/Building/Level/Area で出力される
+4. 既存の `seed-complex.ttl` を使った E2E 検証の手順を整理する (必要なら `Telemetry.E2E.Tests` の追加テストを検討)。
+5. 検証: `dotnet build` と `dotnet test src/DataModel.Analyzer.Tests` を実行する。
+
+## Progress
+- [x] 逆参照エッジの設計を確定
+- [x] `CreateGraphSeedData` に逆参照エッジ生成を追加
+- [x] `DataModel.Analyzer.Tests` に逆参照の検証を追加
+- [x] 検証コマンドの実行記録を残す
+
+## Observations
+- 現状は `locatedIn` が `Equipment.AreaUri` にのみ反映され、GraphSeed では `hasEquipment` に正規化されている。
+- `incomingEdges` は GraphSeed で追加されたエッジの「逆向き同 predicate」を保存しているため、逆参照 predicate (`isLocationOf`, `isPartOf`) は別途追加が必要。
+- GraphSeed に追加するエッジの重複を避けるため、seed 内で一意キーを使って追加制御した。
+- `dotnet build` は成功 (警告: MudBlazor 7.6.1 → 7.7.0 の近似解決、Moq 4.20.0 の低重大度脆弱性)。
+- `dotnet test src/DataModel.Analyzer.Tests` は成功 (20 tests, 0 failed)。
+
+## Decisions
+- 既存の正規化 predicate (`hasBuilding` / `hasLevel` / `hasArea` / `hasEquipment`) は維持し、RDF 由来の predicate (`hasPart`, `isPartOf`, `locatedIn`, `isLocationOf`) を**追加**する方針とする。
+- 逆参照の追加によって GraphTraversal の結果が増える可能性があるため、テストでは predicate 指定あり/なしの挙動を確認する。
+
+## Retrospective
+*To be updated after completion.*
+
+---
+
 # plans.md: ApiGateway API Description
 
 ## Purpose
@@ -670,6 +791,8 @@ Identify why the E2E test(s) fail and determine a minimal, reliable fix that pre
 - `dotnet test src/SiloHost.Tests` failed in this sandbox due to MSBuild named pipe permission errors (`System.Net.Sockets.SocketException (13): Permission denied`).
 - Identifiers (`rec:identifiers`/`sbco:identifiers`) were not mapped to `Equipment.DeviceId` / `Point.PointId`, causing graph bindings to use schema IDs (e.g., `point-1`) while simulator publishes `p1`, leading to point snapshot timeouts.
 - `rec:identifiers` values in `seed.ttl` are expressed as RDF lists, so identifier extraction needed RDF collection handling (`rdf:first`/`rdf:rest`).
+- Current E2E failure (2026-02-05): `Unable to find an IGrainReferenceActivatorProvider for grain type telemetryrouter` when resolving `ITelemetryRouterGrain` in `TelemetryE2ETests.CreateSiloHost`, indicating the in-proc test host did not register the SiloHost grain assembly as an Orleans application part.
+- Build error after fix attempt: `ISiloBuilder` lacked `ConfigureApplicationParts` in `Telemetry.E2E.Tests`, requiring an explicit `Microsoft.Orleans.Server` reference in the test project.
 
 ## Clarification Needed
 - If there is a generated in-proc report file from the failed run, its path/name is still unknown.
@@ -678,6 +801,9 @@ Identify why the E2E test(s) fail and determine a minimal, reliable fix that pre
 - Proposed minimal fix: increase `TelemetryE2E:WaitTimeoutSeconds` from `20` to `60` to reduce flakiness on slower environments.
 - Optional diagnostics: enhance `WaitForPointSnapshotAsync` to log/record last response status (e.g., 404 vs. OK) to surface whether it is a binding issue or just slow grain updates.
 - Implemented identifier mapping for `device_id` and `point_id` to align graph bindings with simulator IDs.
+- Add `ConfigureApplicationParts` in the E2E test silo host to load the `SiloHost` grain assembly (`TelemetryRouterGrain` + referenced grains) so `IGrainFactory.GetGrain<ITelemetryRouterGrain>` can create references.
+- Add `Microsoft.Orleans.Server` package reference to `Telemetry.E2E.Tests` so the `ConfigureApplicationParts` extension is available at build time.
+- Replace `ConfigureApplicationParts` with `services.AddSerializer(builder => builder.AddAssembly(...))` to explicitly register the `SiloHost` and `Grains.Abstractions` assemblies in the Orleans type manifest used by grain reference activators.
 
 ## Retrospective
 *To be filled after completion.*
@@ -685,6 +811,8 @@ Identify why the E2E test(s) fail and determine a minimal, reliable fix that pre
 - Root cause was identifier mapping: `device_id` / `point_id` lived in RDF lists under `rec:identifiers`, but extraction ignored RDF collections.
 - Added RDF list expansion + identifier mapping to align graph bindings with simulator IDs; E2E tests pass after fix.
 - Increased E2E timeout to reduce flakiness while keeping the test behavior intact.
+- Current fix pending verification: ensure the E2E in-proc host registers `SiloHost` application parts to resolve `telemetryrouter` grain references.
+- Pending re-run: `dotnet test src/Telemetry.E2E.Tests` after adding `Microsoft.Orleans.Server`.
 
 ---
 

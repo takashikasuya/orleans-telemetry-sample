@@ -320,4 +320,253 @@ internal sealed class AdminMetricsService
             return new GraphNodeHierarchy(new List<GraphNodeSnapshot>(), tenantId);
         }
     }
+
+    public async Task<IReadOnlyList<GraphTreeNode>> GetGraphTreeAsync(string tenantId = "default", int maxPerType = 200)
+    {
+        try
+        {
+            var snapshots = await LoadGraphSnapshotsAsync(tenantId, maxPerType);
+            if (snapshots.Count == 0)
+            {
+                return Array.Empty<GraphTreeNode>();
+            }
+
+            var relations = BuildGraphRelations(snapshots);
+            var nodeMap = snapshots
+                .Where(kvp => kvp.Value.Node?.NodeId is { } id && !string.IsNullOrWhiteSpace(id))
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+
+            var childrenByParent = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            var parentByChild = new Dictionary<string, (string ParentId, int Priority)>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var relation in relations)
+            {
+                if (!nodeMap.ContainsKey(relation.ParentId) || !nodeMap.ContainsKey(relation.ChildId))
+                {
+                    continue;
+                }
+
+                if (parentByChild.TryGetValue(relation.ChildId, out var existing) && existing.Priority <= relation.Priority)
+                {
+                    continue;
+                }
+
+                parentByChild[relation.ChildId] = (relation.ParentId, relation.Priority);
+            }
+
+            foreach (var (childId, info) in parentByChild)
+            {
+                if (!childrenByParent.TryGetValue(info.ParentId, out var list))
+                {
+                    list = new List<string>();
+                    childrenByParent[info.ParentId] = list;
+                }
+
+                list.Add(childId);
+            }
+
+            var rootIds = nodeMap.Values
+                .Select(snapshot => snapshot.Node?.NodeId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id!)
+                .Where(id => !parentByChild.ContainsKey(id))
+                .ToList();
+
+            if (rootIds.Count == 0)
+            {
+                rootIds = nodeMap.Values
+                    .Where(snapshot => snapshot.Node?.NodeType is GraphNodeType.Site or GraphNodeType.Building)
+                    .Select(snapshot => snapshot.Node!.NodeId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            var tree = new List<GraphTreeNode>();
+            foreach (var rootId in rootIds)
+            {
+                tree.Add(BuildTreeNode(rootId, nodeMap, childrenByParent, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
+            }
+
+            return tree;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to build graph tree for tenant {TenantId}.", tenantId);
+            return Array.Empty<GraphTreeNode>();
+        }
+    }
+
+    public async Task<GraphNodeSnapshot?> GetGraphNodeAsync(string tenantId, string nodeId)
+    {
+        try
+        {
+            var key = GraphNodeKey.Create(tenantId, nodeId);
+            var grain = _client.GetGrain<IGraphNodeGrain>(key);
+            return await grain.GetAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve graph node {NodeId} for tenant {TenantId}.", nodeId, tenantId);
+            return null;
+        }
+    }
+
+    private async Task<Dictionary<string, GraphNodeSnapshot>> LoadGraphSnapshotsAsync(string tenantId, int maxPerType)
+    {
+        var index = _client.GetGrain<IGraphIndexGrain>(tenantId);
+        var idsByType = new Dictionary<GraphNodeType, IReadOnlyList<string>>
+        {
+            [GraphNodeType.Site] = await index.GetByTypeAsync(GraphNodeType.Site),
+            [GraphNodeType.Building] = await index.GetByTypeAsync(GraphNodeType.Building),
+            [GraphNodeType.Level] = await index.GetByTypeAsync(GraphNodeType.Level),
+            [GraphNodeType.Area] = await index.GetByTypeAsync(GraphNodeType.Area),
+            [GraphNodeType.Equipment] = await index.GetByTypeAsync(GraphNodeType.Equipment),
+            [GraphNodeType.Device] = await index.GetByTypeAsync(GraphNodeType.Device),
+            [GraphNodeType.Point] = await index.GetByTypeAsync(GraphNodeType.Point)
+        };
+
+        var snapshots = new Dictionary<string, GraphNodeSnapshot>(StringComparer.OrdinalIgnoreCase);
+        foreach (var nodeIds in idsByType.Values)
+        {
+            foreach (var nodeId in nodeIds.Take(maxPerType))
+            {
+                if (snapshots.ContainsKey(nodeId))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var key = GraphNodeKey.Create(tenantId, nodeId);
+                    var grain = _client.GetGrain<IGraphNodeGrain>(key);
+                    var snapshot = await grain.GetAsync();
+                    if (snapshot?.Node?.NodeId is not { } resolved || string.IsNullOrWhiteSpace(resolved))
+                    {
+                        continue;
+                    }
+
+                    snapshots[resolved] = snapshot;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Unable to load node {NodeId} for tree building.", nodeId);
+                }
+            }
+        }
+
+        return snapshots;
+    }
+
+    private static List<GraphRelation> BuildGraphRelations(Dictionary<string, GraphNodeSnapshot> snapshots)
+    {
+        var relations = new List<GraphRelation>();
+        var containment = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "hasBuilding", "hasLevel", "hasArea", "hasPart", "hasEquipment", "hasPoint"
+        };
+
+        foreach (var (nodeId, snapshot) in snapshots)
+        {
+            var sourceType = NormalizeNodeType(snapshot.Node?.NodeType ?? GraphNodeType.Unknown);
+            foreach (var edge in snapshot.OutgoingEdges)
+            {
+                if (string.IsNullOrWhiteSpace(edge.TargetNodeId))
+                {
+                    continue;
+                }
+
+                var targetId = edge.TargetNodeId;
+                if (!snapshots.TryGetValue(targetId, out var targetSnapshot))
+                {
+                    continue;
+                }
+
+                var targetType = NormalizeNodeType(targetSnapshot.Node?.NodeType ?? GraphNodeType.Unknown);
+
+                if (containment.Contains(edge.Predicate))
+                {
+                    if (IsContainmentPair(sourceType, targetType))
+                    {
+                        relations.Add(new GraphRelation(nodeId, targetId, 1));
+                    }
+
+                    continue;
+                }
+
+                if (string.Equals(edge.Predicate, "isPartOf", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (IsContainmentPair(targetType, sourceType))
+                    {
+                        relations.Add(new GraphRelation(targetId, nodeId, 1));
+                    }
+
+                    continue;
+                }
+
+                if (string.Equals(edge.Predicate, "locatedIn", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (IsLocationPair(targetType, sourceType))
+                    {
+                        relations.Add(new GraphRelation(targetId, nodeId, 2));
+                    }
+
+                    continue;
+                }
+
+                if (string.Equals(edge.Predicate, "isLocationOf", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (IsLocationPair(sourceType, targetType))
+                    {
+                        relations.Add(new GraphRelation(nodeId, targetId, 2));
+                    }
+                }
+            }
+        }
+
+        return relations;
+    }
+
+    private static GraphTreeNode BuildTreeNode(
+        string nodeId,
+        Dictionary<string, GraphNodeSnapshot> nodeMap,
+        Dictionary<string, List<string>> childrenByParent,
+        HashSet<string> visited)
+    {
+        if (!nodeMap.TryGetValue(nodeId, out var snapshot) || snapshot.Node is null)
+        {
+            return new GraphTreeNode(nodeId, nodeId, GraphNodeType.Unknown, Array.Empty<GraphTreeNode>());
+        }
+
+        if (!visited.Add(nodeId))
+        {
+            return new GraphTreeNode(nodeId, nodeId, NormalizeNodeType(snapshot.Node.NodeType), Array.Empty<GraphTreeNode>());
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(snapshot.Node.DisplayName) ? snapshot.Node.NodeId : snapshot.Node.DisplayName;
+        var children = new List<GraphTreeNode>();
+        if (childrenByParent.TryGetValue(nodeId, out var childIds))
+        {
+            foreach (var childId in childIds.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                children.Add(BuildTreeNode(childId, nodeMap, childrenByParent, visited));
+            }
+        }
+
+        visited.Remove(nodeId);
+        return new GraphTreeNode(snapshot.Node.NodeId, displayName, NormalizeNodeType(snapshot.Node.NodeType), children);
+    }
+
+    private static GraphNodeType NormalizeNodeType(GraphNodeType nodeType)
+        => nodeType == GraphNodeType.Device ? GraphNodeType.Equipment : nodeType;
+
+    private static bool IsContainmentPair(GraphNodeType parent, GraphNodeType child)
+        => (parent is GraphNodeType.Site or GraphNodeType.Building or GraphNodeType.Level or GraphNodeType.Area
+            && child is GraphNodeType.Building or GraphNodeType.Level or GraphNodeType.Area or GraphNodeType.Equipment)
+           || (parent == GraphNodeType.Equipment && child == GraphNodeType.Point);
+
+    private static bool IsLocationPair(GraphNodeType areaType, GraphNodeType equipmentType)
+        => areaType == GraphNodeType.Area
+           && equipmentType == GraphNodeType.Equipment;
+
+    private sealed record GraphRelation(string ParentId, string ChildId, int Priority);
 }

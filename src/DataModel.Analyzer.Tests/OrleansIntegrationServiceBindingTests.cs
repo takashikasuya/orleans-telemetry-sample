@@ -63,6 +63,55 @@ public class OrleansIntegrationServiceBindingTests
             edge.TargetNodeId == "area:1");
     }
 
+    [Fact]
+    public void CreateGraphSeedData_AddsReverseEdgesForLocationAndParts()
+    {
+        var model = BuildModel();
+        var service = CreateService();
+
+        var seed = service.CreateGraphSeedData(model);
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "locatedIn" &&
+            edge.SourceNodeId == "equip:1" &&
+            edge.TargetNodeId == "area:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "isLocationOf" &&
+            edge.SourceNodeId == "area:1" &&
+            edge.TargetNodeId == "equip:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "hasPart" &&
+            edge.SourceNodeId == "site:1" &&
+            edge.TargetNodeId == "building:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "isPartOf" &&
+            edge.SourceNodeId == "building:1" &&
+            edge.TargetNodeId == "site:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "hasPart" &&
+            edge.SourceNodeId == "building:1" &&
+            edge.TargetNodeId == "level:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "isPartOf" &&
+            edge.SourceNodeId == "level:1" &&
+            edge.TargetNodeId == "building:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "hasPart" &&
+            edge.SourceNodeId == "level:1" &&
+            edge.TargetNodeId == "area:1");
+
+        seed.Edges.Should().ContainSingle(edge =>
+            edge.Predicate == "isPartOf" &&
+            edge.SourceNodeId == "area:1" &&
+            edge.TargetNodeId == "level:1");
+    }
+
     private static BuildingDataModel BuildModel()
     {
         var site = new Site { Name = "SiteA", Uri = "site:1" };

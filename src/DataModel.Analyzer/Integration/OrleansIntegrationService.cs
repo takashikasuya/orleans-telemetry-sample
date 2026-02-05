@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using DataModel.Analyzer.Models;
 using DataModel.Analyzer.Services;
@@ -126,6 +127,7 @@ public class OrleansIntegrationService
     public GraphSeedData CreateGraphSeedData(BuildingDataModel model)
     {
         var seed = new GraphSeedData();
+        var edgeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var site in model.Sites)
         {
@@ -144,12 +146,10 @@ public class OrleansIntegrationService
 
             if (!string.IsNullOrWhiteSpace(building.SiteUri))
             {
-                seed.Edges.Add(new GraphSeedEdge
-                {
-                    SourceNodeId = building.SiteUri,
-                    Predicate = "hasBuilding",
-                    TargetNodeId = ResolveNodeId(building, "building", building.Uri)
-                });
+                var buildingId = ResolveNodeId(building, "building", building.Uri);
+                AddEdge(seed, edgeKeys, building.SiteUri, "hasBuilding", buildingId);
+                AddEdge(seed, edgeKeys, building.SiteUri, "hasPart", buildingId);
+                AddEdge(seed, edgeKeys, buildingId, "isPartOf", building.SiteUri);
             }
         }
 
@@ -169,12 +169,10 @@ public class OrleansIntegrationService
 
             if (!string.IsNullOrWhiteSpace(level.BuildingUri))
             {
-                seed.Edges.Add(new GraphSeedEdge
-                {
-                    SourceNodeId = level.BuildingUri,
-                    Predicate = "hasLevel",
-                    TargetNodeId = ResolveNodeId(level, "level", level.Uri)
-                });
+                var levelId = ResolveNodeId(level, "level", level.Uri);
+                AddEdge(seed, edgeKeys, level.BuildingUri, "hasLevel", levelId);
+                AddEdge(seed, edgeKeys, level.BuildingUri, "hasPart", levelId);
+                AddEdge(seed, edgeKeys, levelId, "isPartOf", level.BuildingUri);
             }
         }
 
@@ -190,12 +188,10 @@ public class OrleansIntegrationService
 
             if (!string.IsNullOrWhiteSpace(area.LevelUri))
             {
-                seed.Edges.Add(new GraphSeedEdge
-                {
-                    SourceNodeId = area.LevelUri,
-                    Predicate = "hasArea",
-                    TargetNodeId = ResolveNodeId(area, "area", area.Uri)
-                });
+                var areaId = ResolveNodeId(area, "area", area.Uri);
+                AddEdge(seed, edgeKeys, area.LevelUri, "hasArea", areaId);
+                AddEdge(seed, edgeKeys, area.LevelUri, "hasPart", areaId);
+                AddEdge(seed, edgeKeys, areaId, "isPartOf", area.LevelUri);
             }
         }
 
@@ -239,24 +235,16 @@ public class OrleansIntegrationService
 
             if (!string.IsNullOrWhiteSpace(equipment.AreaUri))
             {
-                seed.Edges.Add(new GraphSeedEdge
-                {
-                    SourceNodeId = equipment.AreaUri,
-                    Predicate = "hasEquipment",
-                    TargetNodeId = equipmentId
-                });
+                AddEdge(seed, edgeKeys, equipment.AreaUri, "hasEquipment", equipmentId);
+                AddEdge(seed, edgeKeys, equipmentId, "locatedIn", equipment.AreaUri);
+                AddEdge(seed, edgeKeys, equipment.AreaUri, "isLocationOf", equipmentId);
             }
 
             foreach (var fed in equipment.Feeds)
             {
                 if (!string.IsNullOrWhiteSpace(fed))
                 {
-                    seed.Edges.Add(new GraphSeedEdge
-                    {
-                        SourceNodeId = equipmentId,
-                        Predicate = "feeds",
-                        TargetNodeId = fed
-                    });
+                    AddEdge(seed, edgeKeys, equipmentId, "feeds", fed);
                 }
             }
 
@@ -264,12 +252,7 @@ public class OrleansIntegrationService
             {
                 if (!string.IsNullOrWhiteSpace(fedBy))
                 {
-                    seed.Edges.Add(new GraphSeedEdge
-                    {
-                        SourceNodeId = equipmentId,
-                        Predicate = "isFedBy",
-                        TargetNodeId = fedBy
-                    });
+                    AddEdge(seed, edgeKeys, equipmentId, "isFedBy", fedBy);
                 }
             }
         }
@@ -308,16 +291,30 @@ public class OrleansIntegrationService
 
             if (!string.IsNullOrWhiteSpace(point.EquipmentUri))
             {
-                seed.Edges.Add(new GraphSeedEdge
-                {
-                    SourceNodeId = point.EquipmentUri,
-                    Predicate = "hasPoint",
-                    TargetNodeId = pointId
-                });
+                AddEdge(seed, edgeKeys, point.EquipmentUri, "hasPoint", pointId);
             }
         }
 
         return seed;
+    }
+
+    private static void AddEdge(GraphSeedData seed, HashSet<string> edgeKeys, string sourceNodeId, string predicate, string targetNodeId)
+    {
+        if (string.IsNullOrWhiteSpace(sourceNodeId) || string.IsNullOrWhiteSpace(targetNodeId))
+        {
+            return;
+        }
+
+        var key = $"{sourceNodeId}|{predicate}|{targetNodeId}";
+        if (edgeKeys.Add(key))
+        {
+            seed.Edges.Add(new GraphSeedEdge
+            {
+                SourceNodeId = sourceNodeId,
+                Predicate = predicate,
+                TargetNodeId = targetNodeId
+            });
+        }
     }
 
     private void AddPointBindingAttributes(BuildingDataModel model, Point point, Dictionary<string, string> attributes)
