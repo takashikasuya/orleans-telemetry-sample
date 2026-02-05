@@ -956,3 +956,40 @@ GraphNodeGrain と PointGrain の関連を API で活用し、`/api/nodes/{nodeI
 
 ## Retrospective
 *To be updated after completion.*
+
+---
+
+# plans.md: AdminGateway RDF起点 UIテスト設計
+
+## Purpose
+AdminGateway について、RDF を入力として grain を生成し、ツリー UI の動作を継続検証できるテスト戦略を定義する。
+
+## Success Criteria
+1. AdminGateway の現行フロー（RDF→GraphSeed→AdminMetricsService→MudTreeView）を前提に、層別テスト方針（データ/サービス/UI/E2E）を文書化する。
+2. 最小実行単位（最初のスプリント）で着手できるテスト導入ステップを明示する。
+3. README のドキュメント一覧から本方針に辿れるようにする。
+
+## Steps
+1. AdminGateway と RDF/grain 関連実装を確認し、テスト設計上の論点を抽出する。
+2. 設計方針ドキュメントを `docs/` に追加する。
+3. README の Documentation セクションにリンクを追加する。
+4. `dotnet build` / `dotnet test` で回帰確認する。
+
+## Progress
+- [x] AdminGateway の構造と既存ドキュメントを確認
+- [x] 設計方針ドキュメントを追加
+- [x] README へのリンク追加
+- [x] ビルド/テストの実行結果を記録
+
+## Observations
+- `AdminGateway` 用の専用テストプロジェクトは現時点で存在しない。
+- ツリー構築ロジックは `AdminMetricsService` 内に集約されており、関係解釈（`hasPart`/`isPartOf`/`locatedIn`/`isLocationOf`）と `Device` 正規化が主要なテスト対象。
+- `dotnet build` と `dotnet test` は通過し、回帰は発生していない。
+
+## Decisions
+- 今回はコード実装より先に、導入順序が明確なテスト設計方針をドキュメント化する。
+- 層A（RDF解析）/層B（サービス）/層C（bUnit UI）/統合D（Playwright E2E）の 4 区分で段階導入する。
+
+## Retrospective
+- ドキュメント先行でテスト実装方針を固定できたため、次の実装タスクで `AdminGateway.Tests` を迷わず起票できる状態になった。
+- `dotnet build` / `dotnet test` は成功したが、既存 warning（MudBlazor 近似解決、Moq 脆弱性通知、XML コメント警告）は継続しているため別タスクでの解消が必要。
