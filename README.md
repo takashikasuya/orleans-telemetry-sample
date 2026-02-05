@@ -296,6 +296,7 @@ RDF resources become nodes; predicates become edges.
 
 #### Documentation
 
+- [docs/api-gateway-apis.md](docs/api-gateway-apis.md): API Gateway の REST/gRPC エンドポイント概要と OpenAPI 出力手順
 - [docs/rdf-loading-and-grains.md](docs/rdf-loading-and-grains.md): RDF 読み込みと Orleans Grain 化の概要（データモデル/オントロジー含む）
 
 ### Control Flow (Draft)

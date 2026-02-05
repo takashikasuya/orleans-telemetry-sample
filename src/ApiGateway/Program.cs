@@ -38,6 +38,7 @@ builder.Services.AddHostedService<TelemetryExportCleanupService>();
 builder.Services.Configure<RegistryExportOptions>(builder.Configuration.GetSection("RegistryExport"));
 builder.Services.AddSingleton<RegistryExportService>();
 builder.Services.AddSingleton<GraphRegistryService>();
+builder.Services.AddSingleton<GraphPointResolver>();
 builder.Services.AddHostedService<RegistryExportCleanupService>();
 
 // Configure gRPC
@@ -105,19 +106,25 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // REST endpoint to fetch device snapshot
-app.MapGet("/api/devices/{deviceId}", async (string deviceId, IClusterClient client, HttpContext http) =>
+app.MapGet("/api/devices/{deviceId}", async (
+    string deviceId,
+    IClusterClient client,
+    GraphPointResolver pointResolver,
+    HttpContext http) =>
 {
     var tenant = TenantResolver.ResolveTenant(http);
     var grainKey = DeviceGrainKey.Create(tenant, deviceId);
     var grain = client.GetGrain<IDeviceGrain>(grainKey);
     var snap = await grain.GetAsync();
+    var points = await pointResolver.GetPointsForDeviceAsync(tenant, deviceId);
     http.Response.Headers.ETag = $"W/\"{snap.LastSequence}\"";
     return Results.Ok(new
     {
         deviceId,
         snap.LastSequence,
         snap.UpdatedAt,
-        Properties = snap.LatestProps
+        Properties = snap.LatestProps,
+        Points = points
     });
 }).RequireAuthorization();
 
@@ -178,13 +185,24 @@ app.MapPost("/api/devices/{deviceId}/control", async (
 
 
 // Graph endpoints for node metadata and value bindings
-app.MapGet("/api/nodes/{nodeId}", async (string nodeId, IClusterClient client, HttpContext http) =>
+app.MapGet("/api/nodes/{nodeId}", async (
+    string nodeId,
+    IClusterClient client,
+    GraphPointResolver pointResolver,
+    HttpContext http) =>
 {
     var tenant = TenantResolver.ResolveTenant(http);
     var grainKey = GraphNodeKey.Create(tenant, nodeId);
     var grain = client.GetGrain<IGraphNodeGrain>(grainKey);
     var snap = await grain.GetAsync();
-    return Results.Ok(snap);
+    var points = await pointResolver.GetPointsForNodeAsync(tenant, snap);
+    return Results.Ok(new
+    {
+        snap.Node,
+        snap.OutgoingEdges,
+        snap.IncomingEdges,
+        Points = points
+    });
 }).RequireAuthorization();
 
 app.MapGet("/api/nodes/{nodeId}/value", async (string nodeId, IClusterClient client, HttpContext http) =>

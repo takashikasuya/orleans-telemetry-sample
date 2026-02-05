@@ -1,5 +1,63 @@
 # plans.md
 
+---
+
+# plans.md: ApiGateway API Description
+
+## Purpose
+Create a clear Japanese description of the API Gateway REST/gRPC surface and document how to export OpenAPI/Swagger output from code.
+
+## Success Criteria
+- New documentation file describes each API Gateway endpoint, request/response shape, and key behaviors (auth, tenant, export modes).
+- Documentation explains how to generate or fetch OpenAPI (Swagger) output from the running API.
+- README references the new documentation.
+- gRPC の計画仕様（REST 等価）と公開 proto 案がドキュメントに追記される。
+- gRPC 検証に必要な手順が本計画に明記される。
+
+## Steps
+1. Enumerate ApiGateway endpoints and behaviors from `src/ApiGateway/Program.cs` and related services.
+2. Draft a Japanese API description document with endpoint tables and examples.
+3. Add an OpenAPI export section (Swagger JSON, Docker/Dev environment notes).
+4. Add gRPC planned spec and proto publication to the documentation.
+5. Define gRPC verification steps (local + Docker, tooling).
+6. Link the new document from README and update this plan with outcomes.
+
+## Progress
+- [x] Enumerate endpoints and behaviors
+- [x] Write API description document
+- [x] Add OpenAPI export guidance
+- [x] Add gRPC planned spec and proto publication
+- [x] Define gRPC verification steps
+- [x] Update README and plans
+
+## Observations
+
+- ApiGateway の Swagger は Development 環境のみ有効。
+- gRPC DeviceService は現在コメントアウトされており REST のみ実運用。
+
+## Decisions
+
+- gRPC は REST 等価を前提に設計し、エクスポート系は server-streaming でダウンロードできる案とする。
+
+## gRPC Verification (Draft)
+
+1. 実装準備
+2. `DeviceService` の gRPC 実装復帰（`DeviceServiceBase` 継承と実装復帰）。
+3. `Program.cs` の `MapGrpcService` と認証ミドルウェアが動作することを確認。
+4. gRPC クライアント検証（ローカル）
+5. `grpcurl` または `grpcui` を利用し、JWT をメタデータに付与して呼び出す。
+6. `GetSnapshot` / `StreamUpdates` の疎通を確認。
+7. Graph / Registry / Telemetry / Control の各 RPC で REST と同等の応答内容を確認。
+8. Docker Compose 環境での検証
+9. `api` サービスに gRPC ポート公開を追加（必要に応じて）。
+10. ローカルと Docker の両方で `grpcurl` による疎通確認を記録。
+
+## Decisions
+
+## Retrospective
+
+- 新規ドキュメント `docs/api-gateway-apis.md` を追加し、README から参照した。
+
 ## Purpose
 Add tests that verify RDF-derived spatial nodes and relationships are exported into GraphSeedData (space grains and edges) so we can confirm where space grains and their relationships are generated.
 
@@ -708,3 +766,65 @@ Ran locally:
 ### Remaining Work
 - Stream publication tests (requires TestCluster or stream harness).
 - Edge case and multi-device E2E scenarios.
+
+---
+
+# plans.md: Point Properties on Node/Device APIs
+
+## Purpose
+GraphNodeGrain と PointGrain の関連を API で活用し、`/api/nodes/{nodeId}` と `/api/devices/{deviceId}` の取得結果にポイント情報を「プロパティ」として含める。プロパティ名は `pointType` を用い、API 利用時にポイント情報をノード/デバイスの属性として一括取得できるようにする。プロパティとして返す値は **ポイントの value と updated timestamp のみ** とし、他のメタデータは別 API で取得する。
+
+## Success Criteria
+1. `/api/nodes/{nodeId}` のレスポンスに `pointType` キーで **`value` と `updatedAt` のみ** が取得できる（GraphNodeSnapshot に追加フィールドを付与する形で後方互換）。
+2. `/api/devices/{deviceId}` のレスポンスに `pointType` キーで **`value` と `updatedAt` のみ** が取得できる（既存 `Properties` は保持し、ポイント情報は追加フィールド）。
+3. `pointType` が未設定/空の場合のフォールバック規約が明確（例: `PointId` または `Unknown`）。
+4. テストで以下を検証:
+   - GraphNode 取得で `pointType` → `{ value, updatedAt }` が含まれる
+   - Device 取得で `pointType` → `{ value, updatedAt }` が含まれる
+5. `dotnet build` と対象テストが通る（ローカル検証前提）。
+
+## Steps
+1. **Point 付与ルールの整理**
+   - `pointType` の採用元（GraphNodeDefinition.Attributes の `PointType`）を確定。
+   - `pointType` 重複時の扱い（配列化 or suffix 付与）を決定。
+   - API レスポンスの追加フィールド名（例: `pointProperties`）を確定。
+2. **Graph から Point 解決の実装方針**
+   - ノード取得時: `GraphNodeSnapshot.OutgoingEdges` から `hasPoint` を辿り、Point ノードの `PointType`/`PointId` を解決。
+   - デバイス取得時: `Equipment` ノード（`DeviceId` 属性一致）を解決 → `hasPoint` から Point を列挙。
+3. **ApiGateway 実装**
+   - `/api/nodes/{nodeId}`: GraphNodeSnapshot を取得し、PointGrain の最新値を `pointType` キーで付与（返却するのは `value` と `updatedAt` のみ）。
+   - `/api/devices/{deviceId}`: DeviceGrain snapshot に加えて、Graph 経由で同一 device のポイントを集約し `pointType` で返却（返却するのは `value` と `updatedAt` のみ）。
+   - 共通ロジックは `GraphPointResolver` などの helper/service に集約。
+4. **DataModel / Graph 属性整備**
+   - `OrleansIntegrationService.CreateGraphSeedData` の `PointType`/`PointId` 属性を前提に、必要なら不足時の補完を追加。
+5. **テスト追加/更新**
+   - `ApiGateway.Tests` に `GraphNodePointPropertiesTests` と `DevicePointPropertiesTests` を追加。
+   - モック GraphNode/PointGrain を用意し、`pointType` キーで値が返ることを検証。
+6. **検証**
+   - `dotnet build`
+   - `dotnet test src/ApiGateway.Tests`
+
+## Progress
+- [x] Step 1: 付与ルールの整理
+- [x] Step 2: Graph から Point 解決の設計
+- [x] Step 3: ApiGateway 実装
+- [ ] Step 4: DataModel/Graph 属性整備
+- [x] Step 5: テスト追加/更新
+- [ ] Step 6: 検証
+
+## Observations
+- Graph 側では `PointType` / `PointId` が `GraphNodeDefinition.Attributes` に登録済みで、`hasPoint` edge で Equipment→Point が張られている。
+- `/api/nodes/{nodeId}` は現在 GraphNodeSnapshot をそのまま返却しているため、追加フィールドは後方互換で付与可能。
+- `/api/devices/{deviceId}` は DeviceGrain の `LatestProps` のみ返却しており、ポイント情報が別取得になっている。
+- 返却するポイント情報は **value と updatedAt のみ** に限定する（PointId/Unit/Meta は別 API）。
+ - `points` フィールドで `pointType` をキーに `{ value, updatedAt }` を返す実装を追加。
+ - `ApiGateway.Tests` にノード/デバイスの points 返却を検証するテストを追加。
+
+## Decisions
+- API 互換性を維持するため、既存レスポンス構造は保持し、ポイント情報は追加フィールド `points` として返す。
+- `pointType` が空/未設定の場合は `PointId` をキーにする（必要なら `"Unknown:{PointId}"` の形式で衝突を回避）。
+- ポイント情報の値は `{ value, updatedAt }` のみに限定する。
+ - `pointType` が重複する場合は suffix 付与（`_2`, `_3`）で区別する。
+
+## Retrospective
+*To be updated after completion.*
