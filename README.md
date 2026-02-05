@@ -298,6 +298,7 @@ RDF resources become nodes; predicates become edges.
 
 - [docs/api-gateway-apis.md](docs/api-gateway-apis.md): API Gateway の REST/gRPC エンドポイント概要と OpenAPI 出力手順
 - [docs/rdf-loading-and-grains.md](docs/rdf-loading-and-grains.md): RDF 読み込みと Orleans Grain 化の概要（データモデル/オントロジー含む）
+- [docs/admin-gateway-rdf-ui-test-strategy.md](docs/admin-gateway-rdf-ui-test-strategy.md): AdminGatewayでRDF起点のgrain生成とUI検証を行うためのテスト設計方針
 
 ### Control Flow (Draft)
 
