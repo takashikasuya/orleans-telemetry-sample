@@ -53,3 +53,23 @@ public sealed record GraphTreeNode(
     string DisplayName,
     GraphNodeType NodeType,
     IReadOnlyList<GraphTreeNode> Children);
+
+public enum GrainHierarchyNodeKind
+{
+    Silo,
+    GrainType,
+    GrainId,
+    Info
+}
+
+public sealed record GrainHierarchyNode(
+    string NodeId,
+    string Label,
+    int ActivationCount,
+    GrainHierarchyNodeKind Kind,
+    IReadOnlyList<GrainHierarchyNode> Children);
+
+public sealed record GraphNodeDetailView(
+    GraphNodeSnapshot Snapshot,
+    PointSnapshot? PointSnapshot,
+    string? PointGrainKey);

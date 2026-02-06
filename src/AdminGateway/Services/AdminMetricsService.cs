@@ -411,6 +411,195 @@ internal sealed class AdminMetricsService
         }
     }
 
+    public async Task<GraphNodeDetailView?> GetGraphNodeDetailsAsync(string tenantId, string nodeId)
+    {
+        var snapshot = await GetGraphNodeAsync(tenantId, nodeId);
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        PointSnapshot? pointSnapshot = null;
+        string? pointGrainKey = null;
+
+        if (snapshot.Node.NodeType == GraphNodeType.Point)
+        {
+            if (TryGetAttribute(snapshot.Node.Attributes, "PointId", out var pointIdValue) &&
+                TryGetAttribute(snapshot.Node.Attributes, "DeviceId", out var deviceIdValue))
+            {
+                var pointId = pointIdValue!;
+                var deviceId = deviceIdValue!;
+                snapshot.Node.Attributes.TryGetValue("BuildingName", out var buildingNameValue);
+                snapshot.Node.Attributes.TryGetValue("SpaceId", out var spaceIdValue);
+                var buildingName = buildingNameValue ?? string.Empty;
+                var spaceId = spaceIdValue ?? string.Empty;
+
+                pointGrainKey = PointGrainKey.Create(
+                    tenantId,
+                    buildingName,
+                    spaceId,
+                    deviceId,
+                    pointId);
+
+                try
+                {
+                    var pointGrain = _client.GetGrain<IPointGrain>(pointGrainKey);
+                    pointSnapshot = await pointGrain.GetAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Failed to load point grain snapshot for {PointKey}.", pointGrainKey);
+                }
+            }
+        }
+
+        return new GraphNodeDetailView(snapshot, pointSnapshot, pointGrainKey);
+    }
+
+    public async Task<IReadOnlyList<GrainHierarchyNode>> GetGrainHierarchyAsync(
+        int maxTypesPerSilo = 20,
+        int maxGrainsPerType = 50)
+    {
+        try
+        {
+            var mgmt = _client.GetGrain<IManagementGrain>(0);
+            var simple = await mgmt.GetSimpleGrainStatistics();
+            var typeFilter = simple?
+                .Select(stat => stat.GrainType)
+                .Where(type => !string.IsNullOrWhiteSpace(type))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray() ?? Array.Empty<string>();
+
+            var detailed = typeFilter.Length > 0
+                ? await mgmt.GetDetailedGrainStatistics(typeFilter, Array.Empty<SiloAddress>())
+                : Array.Empty<DetailedGrainStatistic>();
+
+            if (detailed is null || !detailed.Any())
+            {
+                return BuildFallbackHierarchy(simple, maxTypesPerSilo);
+            }
+
+            var siloGroups = detailed
+                .GroupBy(stat => stat.SiloAddress?.ToString() ?? "unknown", StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase);
+
+            var result = new List<GrainHierarchyNode>();
+            foreach (var siloGroup in siloGroups)
+            {
+                var typeNodes = new List<GrainHierarchyNode>();
+                var typeGroups = siloGroup
+                    .GroupBy(stat => stat.GrainType?.ToString() ?? "<unknown>", StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(group => group.Count())
+                    .Take(maxTypesPerSilo);
+
+                foreach (var typeGroup in typeGroups)
+                {
+                    var grainGroups = typeGroup
+                        .GroupBy(stat => stat.GrainId.ToString(), StringComparer.OrdinalIgnoreCase)
+                        .OrderByDescending(group => group.Count())
+                        .ToList();
+
+                    var grainNodes = new List<GrainHierarchyNode>();
+                    var displayed = 0;
+                    foreach (var grainGroup in grainGroups.Take(maxGrainsPerType))
+                    {
+                        displayed++;
+                        var grainId = grainGroup.Key;
+                        var activationCount = grainGroup.Count();
+                        grainNodes.Add(new GrainHierarchyNode(
+                            grainId,
+                            $"{grainId} ({activationCount})",
+                            activationCount,
+                            GrainHierarchyNodeKind.GrainId,
+                            Array.Empty<GrainHierarchyNode>()));
+                    }
+
+                    var remaining = grainGroups.Count - displayed;
+                    if (remaining > 0)
+                    {
+                        grainNodes.Add(new GrainHierarchyNode(
+                            $"more:{typeGroup.Key}",
+                            $"+{remaining} more...",
+                            0,
+                            GrainHierarchyNodeKind.Info,
+                            Array.Empty<GrainHierarchyNode>()));
+                    }
+
+                    var typeCount = typeGroup.Count();
+                    typeNodes.Add(new GrainHierarchyNode(
+                        typeGroup.Key,
+                        $"{SimplifyGrainType(typeGroup.Key)} ({typeCount})",
+                        typeCount,
+                        GrainHierarchyNodeKind.GrainType,
+                        grainNodes));
+                }
+
+                var siloCount = siloGroup.Count();
+                result.Add(new GrainHierarchyNode(
+                    siloGroup.Key,
+                    $"{siloGroup.Key} ({siloCount})",
+                    siloCount,
+                    GrainHierarchyNodeKind.Silo,
+                    typeNodes));
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve grain hierarchy.");
+            return Array.Empty<GrainHierarchyNode>();
+        }
+    }
+
+    private static IReadOnlyList<GrainHierarchyNode> BuildFallbackHierarchy(
+        IReadOnlyList<SimpleGrainStatistic>? stats,
+        int maxTypes)
+    {
+        if (stats is null || stats.Count == 0)
+        {
+            return Array.Empty<GrainHierarchyNode>();
+        }
+
+        var typeGroups = stats
+            .GroupBy(stat => stat.GrainType ?? "<unknown>", StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Sum(item => item.ActivationCount))
+            .Take(maxTypes);
+
+        var typeNodes = new List<GrainHierarchyNode>();
+        foreach (var typeGroup in typeGroups)
+        {
+            var activationCount = typeGroup.Sum(item => item.ActivationCount);
+            typeNodes.Add(new GrainHierarchyNode(
+                typeGroup.Key,
+                $"{SimplifyGrainType(typeGroup.Key)} ({activationCount})",
+                activationCount,
+                GrainHierarchyNodeKind.GrainType,
+                Array.Empty<GrainHierarchyNode>()));
+        }
+
+        return new[]
+        {
+            new GrainHierarchyNode(
+                "cluster",
+                $"Cluster ({typeNodes.Sum(node => node.ActivationCount)})",
+                typeNodes.Sum(node => node.ActivationCount),
+                GrainHierarchyNodeKind.Silo,
+                typeNodes)
+        };
+    }
+
+    private static string SimplifyGrainType(string grainType)
+    {
+        if (string.IsNullOrWhiteSpace(grainType))
+        {
+            return "<unknown>";
+        }
+
+        var lastDot = grainType.LastIndexOf('.');
+        return lastDot > -1 && lastDot < grainType.Length - 1 ? grainType[(lastDot + 1)..] : grainType;
+    }
+
     private async Task<Dictionary<string, GraphNodeSnapshot>> LoadGraphSnapshotsAsync(string tenantId, int maxPerType)
     {
         var index = _client.GetGrain<IGraphIndexGrain>(tenantId);
@@ -465,9 +654,12 @@ internal sealed class AdminMetricsService
             "hasBuilding", "hasLevel", "hasArea", "hasPart", "hasEquipment", "hasPoint"
         };
 
+        var relationKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (nodeId, snapshot) in snapshots)
         {
             var sourceType = NormalizeNodeType(snapshot.Node?.NodeType ?? GraphNodeType.Unknown);
+            AddAttributeBasedRelation(snapshot.Node, nodeId, sourceType, relationKeys, relations);
+
             foreach (var edge in snapshot.OutgoingEdges)
             {
                 if (string.IsNullOrWhiteSpace(edge.TargetNodeId))
@@ -482,48 +674,116 @@ internal sealed class AdminMetricsService
                 }
 
                 var targetType = NormalizeNodeType(targetSnapshot.Node?.NodeType ?? GraphNodeType.Unknown);
+                var predicate = NormalizePredicate(edge.Predicate);
 
-                if (containment.Contains(edge.Predicate))
+                if (containment.Contains(predicate))
                 {
                     if (IsContainmentPair(sourceType, targetType))
                     {
-                        relations.Add(new GraphRelation(nodeId, targetId, 1));
+                        AddRelation(nodeId, targetId, 1, relationKeys, relations);
                     }
 
                     continue;
                 }
 
-                if (string.Equals(edge.Predicate, "isPartOf", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(predicate, "isPartOf", StringComparison.OrdinalIgnoreCase))
                 {
                     if (IsContainmentPair(targetType, sourceType))
                     {
-                        relations.Add(new GraphRelation(targetId, nodeId, 1));
+                        AddRelation(targetId, nodeId, 1, relationKeys, relations);
                     }
 
                     continue;
                 }
 
-                if (string.Equals(edge.Predicate, "locatedIn", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(predicate, "isPointOf", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (targetType == GraphNodeType.Equipment && sourceType == GraphNodeType.Point)
+                    {
+                        AddRelation(targetId, nodeId, 1, relationKeys, relations);
+                    }
+
+                    continue;
+                }
+
+                if (string.Equals(predicate, "locatedIn", StringComparison.OrdinalIgnoreCase))
                 {
                     if (IsLocationPair(targetType, sourceType))
                     {
-                        relations.Add(new GraphRelation(targetId, nodeId, 2));
+                        AddRelation(targetId, nodeId, 2, relationKeys, relations);
                     }
 
                     continue;
                 }
 
-                if (string.Equals(edge.Predicate, "isLocationOf", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(predicate, "isLocationOf", StringComparison.OrdinalIgnoreCase))
                 {
                     if (IsLocationPair(sourceType, targetType))
                     {
-                        relations.Add(new GraphRelation(nodeId, targetId, 2));
+                        AddRelation(nodeId, targetId, 2, relationKeys, relations);
                     }
                 }
             }
         }
 
         return relations;
+    }
+
+    private static void AddRelation(
+        string parentId,
+        string childId,
+        int priority,
+        HashSet<string> relationKeys,
+        List<GraphRelation> relations)
+    {
+        var key = $"{parentId}|{childId}|{priority}";
+        if (relationKeys.Add(key))
+        {
+            relations.Add(new GraphRelation(parentId, childId, priority));
+        }
+    }
+
+    private static void AddAttributeBasedRelation(
+        GraphNodeDefinition? node,
+        string nodeId,
+        GraphNodeType nodeType,
+        HashSet<string> relationKeys,
+        List<GraphRelation> relations)
+    {
+        if (node is null)
+        {
+            return;
+        }
+
+        if (nodeType == GraphNodeType.Building && TryGetAttribute(node.Attributes, "SiteUri", out var siteUri))
+        {
+            AddRelation(siteUri!, nodeId, 1, relationKeys, relations);
+        }
+        else if (nodeType == GraphNodeType.Level && TryGetAttribute(node.Attributes, "BuildingUri", out var buildingUri))
+        {
+            AddRelation(buildingUri!, nodeId, 1, relationKeys, relations);
+        }
+        else if (nodeType == GraphNodeType.Area && TryGetAttribute(node.Attributes, "LevelUri", out var levelUri))
+        {
+            AddRelation(levelUri!, nodeId, 1, relationKeys, relations);
+        }
+        else if (nodeType == GraphNodeType.Equipment && TryGetAttribute(node.Attributes, "AreaUri", out var areaUri))
+        {
+            AddRelation(areaUri!, nodeId, 2, relationKeys, relations);
+        }
+    }
+
+    private static string NormalizePredicate(string predicate)
+    {
+        if (string.IsNullOrWhiteSpace(predicate))
+        {
+            return string.Empty;
+        }
+
+        var hashIndex = predicate.LastIndexOf('#');
+        var slashIndex = predicate.LastIndexOf('/');
+        var index = Math.Max(hashIndex, slashIndex);
+        return index >= 0 && index < predicate.Length - 1 ? predicate[(index + 1)..] : predicate;
     }
 
     private static GraphTreeNode BuildTreeNode(
@@ -553,7 +813,7 @@ internal sealed class AdminMetricsService
         }
 
         visited.Remove(nodeId);
-        return new GraphTreeNode(snapshot.Node.NodeId, displayName, NormalizeNodeType(snapshot.Node.NodeType), children);
+        return new GraphTreeNode(snapshot.Node.NodeId, displayName, snapshot.Node.NodeType, children);
     }
 
     private static GraphNodeType NormalizeNodeType(GraphNodeType nodeType)
@@ -567,6 +827,18 @@ internal sealed class AdminMetricsService
     private static bool IsLocationPair(GraphNodeType areaType, GraphNodeType equipmentType)
         => areaType == GraphNodeType.Area
            && equipmentType == GraphNodeType.Equipment;
+
+    private static bool TryGetAttribute(IReadOnlyDictionary<string, string> attributes, string key, out string? value)
+    {
+        if (attributes.TryGetValue(key, out var found) && !string.IsNullOrWhiteSpace(found))
+        {
+            value = found;
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
 
     private sealed record GraphRelation(string ParentId, string ChildId, int Priority);
 }

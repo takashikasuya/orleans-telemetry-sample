@@ -1,4 +1,4 @@
-@page "/"
+﻿@page "/"
 @inject AdminMetricsService Metrics
 @using System.Collections.Generic
 
@@ -20,342 +20,391 @@ else if (_error is not null)
 }
 else
 {
-    <section class="overview">
-        <article>
-            <h2>Ingest</h2>
-            <p>Batch size: @_ingest?.BatchSize</p>
-            <p>Channel capacity: @_ingest?.ChannelCapacity</p>
-            <div class="tag-row">
-                <strong>Connectors</strong>
-                @if (_ingest?.EnabledConnectors.Length > 0)
-                {
-                    @foreach (var connector in _ingest.EnabledConnectors)
+    <main class="layout-content">
+        <section class="overview">
+            <article>
+                <h2>Ingest</h2>
+                <p>Batch size: @_ingest?.BatchSize</p>
+                <p>Channel capacity: @_ingest?.ChannelCapacity</p>
+                <div class="tag-row">
+                    <strong>Connectors</strong>
+                    @if (_ingest?.EnabledConnectors.Length > 0)
                     {
-                        <span class="tag">@connector</span>
-                    }
-                }
-                else
-                {
-                    <span class="tag muted">None</span>
-                }
-            </div>
-            <div class="tag-row">
-                <strong>Event sinks</strong>
-                @if (_ingest?.EnabledSinks.Length > 0)
-                {
-                    @foreach (var sink in _ingest.EnabledSinks)
-                    {
-                        <span class="tag">@sink</span>
-                    }
-                }
-                else
-                {
-                    <span class="tag muted">None</span>
-                }
-            </div>
-        </article>
-        <article>
-            <h2>Storage</h2>
-            @if (_storage is not null)
-            {
-                <p>Stage: @_storage.Stage.FileCount files</p>
-                <p>Parquet: @_storage.Parquet.FileCount files</p>
-                <p>Index: @_storage.Index.FileCount files</p>
-            }
-            else
-            {
-                <p>Storage stats unavailable.</p>
-            }
-        </article>
-        <article>
-            <h2>Clients</h2>
-            <p>Silos: @_silos.Length</p>
-            <p>Total clients: @(_silos.Sum(s => s.ClientCount))</p>
-        </article>
-    </section>
-
-    <section>
-        <h2>Activation Explorer (@_grains.Length types)</h2>
-        @if (_grains.Length == 0)
-        {
-            <p class="status muted">No grain activations yet.</p>
-        }
-        else
-        {
-            <div class="table-scroll">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Grain Type</th>
-                            <th>Activations</th>
-                            <th>Silos</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var grain in _grains)
+                        @foreach (var connector in _ingest.EnabledConnectors)
                         {
-                            <tr>
-                                <td>@grain.GrainType</td>
-                                <td class="numeric">@grain.ActivationCount</td>
-                                <td>@string.Join(", ", grain.Silos)</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </section>
-
-    <section>
-        <h2>Client Connections</h2>
-        @if (_silos.Length == 0)
-        {
-            <p class="status muted">No active silos detected.</p>
-        }
-        else
-        {
-            <div class="table-scroll">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Silo</th>
-                            <th>Status</th>
-                            <th>Clients</th>
-                            <th>Activations</th>
-                            <th>CPU (%)</th>
-                            <th>Memory (used / max)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var silo in _silos)
-                        {
-                            <tr>
-                                <td>@silo.SiloAddress</td>
-                                <td>@silo.Status</td>
-                                <td class="numeric">@silo.ClientCount</td>
-                                <td class="numeric">@silo.ActivationCount</td>
-                                <td>@FormatPercent(silo.CpuUsagePercentage)</td>
-                                <td>@FormatMemoryUsage(silo.MemoryUsageBytes, silo.MaximumAvailableMemoryBytes)</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </section>
-
-    <section>
-        <h2>Storage Buckets</h2>
-        <div class="tier-grid">
-            @if (_storage is not null)
-            {
-                @foreach (var tier in new[] { _storage.Stage, _storage.Parquet, _storage.Index })
-                {
-                    <article>
-                        <h3>@tier.Tier</h3>
-                        <p>@FormatBytes(tier.TotalBytes) · @tier.FileCount files</p>
-                        <p class="muted">Root: @tier.RootPath</p>
-                        <ul>
-                            @if (tier.Tenants.Count == 0)
-                            {
-                                <li class="muted">No active tenants.</li>
-                            }
-                            else
-                            {
-                                @foreach (var tenant in tier.Tenants)
-                                {
-                                    <li>@tenant.TenantId · @tenant.FileCount files · @FormatBytes(tenant.TotalBytes)</li>
-                                }
-                            }
-                        </ul>
-                    </article>
-                }
-            }
-            else
-            {
-                <p class="status muted">Storage stats failed to load.</p>
-            }
-        </div>
-    </section>
-
-    <section>
-        <h2>Graph Statistics</h2>
-        <div class="graph-tenant-selector">
-            @if (_graphTenants.Length > 0)
-            {
-                <label>
-                    Tenant
-                    <select class="graph-input" value="@_selectedGraphTenant" @onchange="OnGraphTenantSelectionChanged">
-                        @foreach (var tenant in _graphTenants)
-                        {
-                            <option value="@tenant">@tenant</option>
-                        }
-                    </select>
-                </label>
-            }
-            else
-            {
-                <p class="status muted">Import RDF to register tenant IDs.</p>
-            }
-        </div>
-        @if (_graphStats is not null && !string.IsNullOrWhiteSpace(_selectedGraphTenant))
-        {
-            <p class="muted">Tenant: @_selectedGraphTenant</p>
-            <table class="graph-stats-table">
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Count</th>
-                        <th>Samples (ID · Class)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var type in GraphStatOrder)
-                    {
-                        var samples = _graphStats.NodeSamples.TryGetValue(type, out var list) ? list : Array.Empty<GraphNodeDetail>();
-                        <tr>
-                            <td>@type</td>
-                            <td class="numeric">@GetGraphStatCount(_graphStats, type)</td>
-                            <td>
-                                @if (samples.Count == 0)
-                                {
-                                    <span class="muted">No registered nodes</span>
-                                }
-                                else
-                                {
-                                    <ul>
-                                        @foreach (var sample in samples)
-                                        {
-                                            <li>
-                                                <strong>@sample.DisplayName</strong><br />
-                                                <small>@sample.NodeId · @sample.NodeType</small>
-                                            </li>
-                                        }
-                                    </ul>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-        else
-        {
-            <p class="status muted">Graph statistics unavailable.</p>
-        }
-    </section>
-
-    <section>
-        <h2>Graph Hierarchy</h2>
-        <button class="refresh-button" @onclick="LoadGraphHierarchyAsync" disabled="@string.IsNullOrWhiteSpace(_selectedGraphTenant)">Load Hierarchy</button>
-        @if (string.IsNullOrWhiteSpace(_selectedGraphTenant))
-        {
-            <p class="status muted">Select a tenant.</p>
-        }
-        else if (_graphTreeNodes.Count > 0)
-        {
-            <div class="graph-tree-layout">
-                <MudPaper Class="pa-3 graph-tree-panel">
-                    <MudText Typo="Typo.subtitle1">Hierarchy Tree</MudText>
-                    <MudTreeView T="GraphTreeNode" Hover="true" Class="graph-tree-view">
-                        @RenderGraphTree(_graphTreeNodes)
-                    </MudTreeView>
-                </MudPaper>
-                <MudPaper Class="pa-3 graph-tree-details">
-                    <MudText Typo="Typo.subtitle1">Node Details</MudText>
-                    @if (_selectedGraphNode is not null)
-                    {
-                        <MudText Typo="Typo.h6">@GetNodeLabel(_selectedGraphNode)</MudText>
-                        <MudText Typo="Typo.body2"><strong>ID:</strong> @_selectedGraphNode.Node?.NodeId</MudText>
-                        <MudText Typo="Typo.body2"><strong>Class:</strong> @NormalizeNodeType(_selectedGraphNode.Node?.NodeType ?? GraphNodeType.Unknown)</MudText>
-                        <MudText Typo="Typo.subtitle2" Class="mt-2">Attributes</MudText>
-                        @if ((_selectedGraphNode.Node?.Attributes?.Count ?? 0) == 0)
-                        {
-                            <MudText Typo="Typo.body2" Class="muted">No attributes.</MudText>
-                        }
-                        else
-                        {
-                            <MudList T="string" Dense="true">
-                                @foreach (var attr in _selectedGraphNode.Node?.Attributes ?? new Dictionary<string, string>())
-                                {
-                                    <MudListItem T="string">@attr.Key: @attr.Value</MudListItem>
-                                }
-                            </MudList>
+                            <span class="tag">@connector</span>
                         }
                     }
                     else
                     {
-                        <MudText Typo="Typo.body2" Class="muted">Select a node to view details.</MudText>
+                        <span class="tag muted">None</span>
                     }
-                </MudPaper>
-            </div>
-        }
-        else if (_loadingHierarchy)
-        {
-            <p class="status">Loading hierarchy...</p>
-        }
-        else
-        {
-            <p class="status muted">No hierarchy data available.</p>
-        }
-    </section>
-
-    <section>
-        <h2>Graph RDF Import</h2>
-        <div class="graph-import-grid">
-            <div class="graph-import">
-                <label>
-                    RDF path
-                    <input class="graph-input" @bind="_graphPath" />
-                </label>
-                <label>
-                    Tenant
-                    <input class="graph-input" @bind="_graphTenant" />
-                </label>
-                <button class="refresh-button" @onclick="TriggerGraphSeedAsync" disabled="@_isImporting">
-                    @_isImporting ? "Importing..." : "Run import"
-                </button>
-            </div>
-            <div class="graph-status-card">
-                <div class="graph-status-header">
-                    <span>Last execution</span>
-                    <span class="@GetGraphStatusBadgeClass(_graphStatus)">@GetGraphStatusLabel(_graphStatus)</span>
                 </div>
-                @if (_graphStatus is not null)
-                {
-                    <p class="graph-status-line">Path: @_graphStatus.Path</p>
-                    <p class="graph-status-line">Tenant: @_graphStatus.TenantId</p>
-                    <p class="graph-status-line">@_graphStatus.StartedAt:u · @_graphStatus.CompletedAt:u</p>
-                    <p class="graph-status-line">Nodes: @_graphStatus.NodeCount · Edges: @_graphStatus.EdgeCount</p>
-                    @if (!string.IsNullOrWhiteSpace(_graphStatus.Message))
+                <div class="tag-row">
+                    <strong>Event sinks</strong>
+                    @if (_ingest?.EnabledSinks.Length > 0)
                     {
-                        <p class="graph-status-line status muted">Message: @_graphStatus.Message</p>
+                        @foreach (var sink in _ingest.EnabledSinks)
+                        {
+                            <span class="tag">@sink</span>
+                        }
+                    }
+                    else
+                    {
+                        <span class="tag muted">None</span>
+                    }
+                </div>
+            </article>
+            <article>
+                <h2>Storage</h2>
+                @if (_storage is not null)
+                {
+                    <p>Stage: @_storage.Stage.FileCount files</p>
+                    <p>Parquet: @_storage.Parquet.FileCount files</p>
+                    <p>Index: @_storage.Index.FileCount files</p>
+                }
+                else
+                {
+                    <p>Storage stats unavailable.</p>
+                }
+            </article>
+            <article>
+                <h2>Clients</h2>
+                <p>Silos: @_silos.Length</p>
+                <p>Total clients: @(_silos.Sum(s => s.ClientCount))</p>
+            </article>
+        </section>
+
+        <section>
+            <h2>Activation Explorer (@_grains.Length types)</h2>
+            @if (_grains.Length == 0)
+            {
+                <p class="status muted">No grain activations yet.</p>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Grain Type</th>
+                                <th>Activations</th>
+                                <th>Silos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var grain in _grains)
+                            {
+                                <tr>
+                                    <td>@grain.GrainType</td>
+                                    <td class="numeric">@grain.ActivationCount</td>
+                                    <td>@string.Join(", ", grain.Silos)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section>
+            <h2>Client Connections</h2>
+            @if (_silos.Length == 0)
+            {
+                <p class="status muted">No active silos detected.</p>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Silo</th>
+                                <th>Status</th>
+                                <th>Clients</th>
+                                <th>Activations</th>
+                                <th>CPU (%)</th>
+                                <th>Memory (used / max)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var silo in _silos)
+                            {
+                                <tr>
+                                    <td>@silo.SiloAddress</td>
+                                    <td>@silo.Status</td>
+                                    <td class="numeric">@silo.ClientCount</td>
+                                    <td class="numeric">@silo.ActivationCount</td>
+                                    <td>@FormatPercent(silo.CpuUsagePercentage)</td>
+                                    <td>@FormatMemoryUsage(silo.MemoryUsageBytes, silo.MaximumAvailableMemoryBytes)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section>
+            <h2>Storage Buckets</h2>
+            <div class="tier-grid">
+                @if (_storage is not null)
+                {
+                    @foreach (var tier in new[] { _storage.Stage, _storage.Parquet, _storage.Index })
+                    {
+                        <article>
+                            <h3>@tier.Tier</h3>
+                            <p>@FormatBytes(tier.TotalBytes) / @tier.FileCount files</p>
+                            <p class="muted">Root: @tier.RootPath</p>
+                            <ul>
+                                @if (tier.Tenants.Count == 0)
+                                {
+                                    <li class="muted">No active tenants.</li>
+                                }
+                                else
+                                {
+                                    @foreach (var tenant in tier.Tenants)
+                                    {
+                                        <li>@tenant.TenantId / @tenant.FileCount files / @FormatBytes(tenant.TotalBytes)</li>
+                                    }
+                                }
+                            </ul>
+                        </article>
                     }
                 }
                 else
                 {
-                    <p class="graph-status-line muted">No graph seed history.</p>
+                    <p class="status muted">Storage stats failed to load.</p>
                 }
             </div>
-        </div>
-        @if (!string.IsNullOrWhiteSpace(_graphFeedback))
-        {
-            <p class="status">@_graphFeedback</p>
-        }
-    </section>
+        </section>
+
+        <section class="graph-card">
+            <div class="graph-card-header">
+                <h2>Spatial Hierarchy</h2>
+                <button class="refresh-button button-ghost" @onclick="LoadSpatialHierarchyAsync" disabled="@string.IsNullOrWhiteSpace(_selectedGraphTenant)">Load Hierarchy</button>
+            </div>
+            <div class="graph-tenant-selector">
+                @if (_graphTenants.Length > 0)
+                {
+                    <label>
+                        Tenant
+                        <select class="graph-input" value="@_selectedGraphTenant" @onchange="OnGraphTenantSelectionChanged">
+                            @foreach (var tenant in _graphTenants)
+                            {
+                                <option value="@tenant">@tenant</option>
+                            }
+                        </select>
+                    </label>
+                }
+                else
+                {
+                    <p class="status muted">Import RDF to register tenant IDs.</p>
+                }
+            </div>
+            @if (string.IsNullOrWhiteSpace(_selectedGraphTenant))
+            {
+                <p class="status muted">Select a tenant.</p>
+            }
+            else if (_loadingHierarchy)
+            {
+                <p class="status">Loading hierarchy...</p>
+            }
+            else if (!string.IsNullOrWhiteSpace(_hierarchyError))
+            {
+                <p class="status error">@_hierarchyError</p>
+            }
+            else if (_graphTreeNodes.Count == 0)
+            {
+                <p class="status muted">No hierarchy data available.</p>
+            }
+            else
+            {
+                <div class="graph-tree-layout">
+                    <MudPaper Class="pa-3 graph-tree-panel">
+                        <MudText Typo="Typo.subtitle1">Hierarchy Tree</MudText>
+                        <MudTreeView T="GraphTreeNode" Hover="true" Class="graph-tree-view">
+                            @RenderGraphTree(_graphTreeNodes)
+                        </MudTreeView>
+                    </MudPaper>
+                    <MudPaper Class="pa-3 graph-tree-details">
+                        <MudText Typo="Typo.subtitle1">Node Details</MudText>
+                        @if (_selectedGraphNodeDetails is not null)
+                        {
+                            <MudText Typo="Typo.h6">@GetNodeLabel(_selectedGraphNodeDetails.Snapshot)</MudText>
+                            <table class="details-table">
+                                <tbody>
+                                    <tr>
+                                        <th>ID</th>
+                                        <td>@_selectedGraphNodeDetails.Snapshot.Node.NodeId</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Type</th>
+                                        <td>@_selectedGraphNodeDetails.Snapshot.Node.NodeType</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <MudText Typo="Typo.subtitle2" Class="mt-2">Attributes</MudText>
+                            @if (_selectedGraphNodeDetails.Snapshot.Node.Attributes.Count == 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="muted">No attributes.</MudText>
+                            }
+                            else
+                            {
+                                <table class="details-table">
+                                    <tbody>
+                                        @foreach (var attr in _selectedGraphNodeDetails.Snapshot.Node.Attributes.OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase))
+                                        {
+                                            <tr>
+                                                <th>@attr.Key</th>
+                                                <td>@attr.Value</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+
+                            <MudText Typo="Typo.subtitle2" Class="mt-2">Outgoing Edges</MudText>
+                            @if (_selectedGraphNodeDetails.Snapshot.OutgoingEdges.Count == 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="muted">No outgoing edges.</MudText>
+                            }
+                            else
+                            {
+                                <table class="details-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Predicate</th>
+                                            <th>Target</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var edge in _selectedGraphNodeDetails.Snapshot.OutgoingEdges)
+                                        {
+                                            <tr>
+                                                <td>@edge.Predicate</td>
+                                                <td>@edge.TargetNodeId</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+
+                            <MudText Typo="Typo.subtitle2" Class="mt-2">Incoming Edges</MudText>
+                            @if (_selectedGraphNodeDetails.Snapshot.IncomingEdges.Count == 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="muted">No incoming edges.</MudText>
+                            }
+                            else
+                            {
+                                <table class="details-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Predicate</th>
+                                            <th>Source</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var edge in _selectedGraphNodeDetails.Snapshot.IncomingEdges)
+                                        {
+                                            <tr>
+                                                <td>@edge.Predicate</td>
+                                                <td>@edge.TargetNodeId</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+
+                            @if (_selectedGraphNodeDetails.Snapshot.Node.NodeType == GraphNodeType.Point)
+                            {
+                                <MudText Typo="Typo.subtitle2" Class="mt-2">Point Snapshot</MudText>
+                                @if (_selectedGraphNodeDetails.PointSnapshot is null)
+                                {
+                                    <MudText Typo="Typo.body2" Class="muted">Point snapshot unavailable.</MudText>
+                                }
+                                else
+                                {
+                                    <table class="details-table">
+                                        <tbody>
+                                            <tr>
+                                                <th>Key</th>
+                                                <td>@_selectedGraphNodeDetails.PointGrainKey</td>
+                                            </tr>
+                                            <tr>
+                                                <th>Sequence</th>
+                                                <td>@_selectedGraphNodeDetails.PointSnapshot.LastSequence</td>
+                                            </tr>
+                                            <tr>
+                                                <th>Value</th>
+                                                <td>@_selectedGraphNodeDetails.PointSnapshot.LatestValue</td>
+                                            </tr>
+                                            <tr>
+                                                <th>Updated</th>
+                                                <td>@_selectedGraphNodeDetails.PointSnapshot.UpdatedAt:u</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                }
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="muted">Select a node to view details.</MudText>
+                        }
+                    </MudPaper>
+                </div>
+            }
+        </section>
+
+        <section>
+            <h2>Graph RDF Import</h2>
+            <div class="graph-import-grid">
+                <div class="graph-import">
+                    <label>
+                        RDF path
+                        <input class="graph-input" @bind="_graphPath" />
+                    </label>
+                    <label>
+                        Tenant
+                        <input class="graph-input" @bind="_graphTenant" />
+                    </label>
+                    <button class="refresh-button" @onclick="TriggerGraphSeedAsync" disabled="@_isImporting">
+                        @_isImporting ? "Importing..." : "Run import"
+                    </button>
+                </div>
+                <div class="graph-status-card">
+                    <div class="graph-status-header">
+                        <span>Last execution</span>
+                        <span class="@GetGraphStatusBadgeClass(_graphStatus)">@GetGraphStatusLabel(_graphStatus)</span>
+                    </div>
+                    @if (_graphStatus is not null)
+                    {
+                        <p class="graph-status-line">Path: @_graphStatus.Path</p>
+                        <p class="graph-status-line">Tenant: @_graphStatus.TenantId</p>
+                        <p class="graph-status-line">@_graphStatus.StartedAt:u / @_graphStatus.CompletedAt:u</p>
+                        <p class="graph-status-line">Nodes: @_graphStatus.NodeCount / Edges: @_graphStatus.EdgeCount</p>
+                        @if (!string.IsNullOrWhiteSpace(_graphStatus.Message))
+                        {
+                            <p class="graph-status-line status muted">Message: @_graphStatus.Message</p>
+                        }
+                    }
+                    else
+                    {
+                        <p class="graph-status-line muted">No graph seed history.</p>
+                    }
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_graphFeedback))
+            {
+                <p class="status">@_graphFeedback</p>
+            }
+        </section>
+
+    </main>
 }
 
 @code {
-    private static readonly GraphNodeType[] GraphStatOrder = new[]
-    {
-        GraphNodeType.Site,
-        GraphNodeType.Building,
-        GraphNodeType.Level,
-        GraphNodeType.Area,
-        GraphNodeType.Equipment,
-        GraphNodeType.Point
-    };
-
     private GrainActivationSummary[] _grains = Array.Empty<GrainActivationSummary>();
     private SiloSummary[] _silos = Array.Empty<SiloSummary>();
     private StorageOverview? _storage;
@@ -369,10 +418,10 @@ else
     private string? _graphFeedback;
     private string[] _graphTenants = Array.Empty<string>();
     private string? _selectedGraphTenant;
-    private GraphStatisticsSummary? _graphStats;
     private List<GraphTreeNode> _graphTreeNodes = new();
-    private GraphNodeSnapshot? _selectedGraphNode;
+    private GraphNodeDetailView? _selectedGraphNodeDetails;
     private bool _loadingHierarchy;
+    private string? _hierarchyError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -391,7 +440,7 @@ else
             _ingest = Metrics.GetIngestSummary();
             _graphStatus = await Metrics.GetLastGraphSeedStatusAsync();
             await LoadGraphTenantOptionsAsync();
-            await LoadGraphStatisticsAsync();
+            await LoadSpatialHierarchyAsync();
         }
         catch (Exception ex)
         {
@@ -404,24 +453,25 @@ else
         }
     }
 
-    private async Task LoadGraphHierarchyAsync()
+    private async Task LoadSpatialHierarchyAsync()
     {
         if (string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             _graphTreeNodes.Clear();
-            _selectedGraphNode = null;
+            _selectedGraphNodeDetails = null;
             return;
         }
 
         _loadingHierarchy = true;
+        _hierarchyError = null;
         try
         {
             _graphTreeNodes = (await Metrics.GetGraphTreeAsync(_selectedGraphTenant)).ToList();
-            _selectedGraphNode = null;
+            _selectedGraphNodeDetails = null;
         }
         catch (Exception ex)
         {
-            _error = $"Failed to load hierarchy: {ex.Message}";
+            _hierarchyError = $"Failed to load hierarchy: {ex.Message}";
         }
         finally
         {
@@ -454,17 +504,6 @@ else
         }
     }
 
-    private async Task LoadGraphStatisticsAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_selectedGraphTenant))
-        {
-            _graphStats = null;
-            return;
-        }
-
-        _graphStats = await Metrics.GetGraphStatisticsAsync(_selectedGraphTenant);
-    }
-
     private async Task OnGraphTenantSelectionChanged(ChangeEventArgs args)
     {
         if (args?.Value is not string tenant || string.IsNullOrWhiteSpace(tenant))
@@ -473,23 +512,10 @@ else
         }
 
         _selectedGraphTenant = tenant;
-        await LoadGraphStatisticsAsync();
-        _graphTreeNodes.Clear();
-        _selectedGraphNode = null;
+        _selectedGraphNodeDetails = null;
+        await LoadSpatialHierarchyAsync();
         StateHasChanged();
     }
-
-    private static int GetGraphStatCount(GraphStatisticsSummary stats, GraphNodeType type)
-        => type switch
-        {
-            GraphNodeType.Site => stats.SiteCount,
-            GraphNodeType.Building => stats.BuildingCount,
-            GraphNodeType.Level => stats.LevelCount,
-            GraphNodeType.Area => stats.AreaCount,
-            GraphNodeType.Equipment => stats.EquipmentCount,
-            GraphNodeType.Point => stats.PointCount,
-            _ => 0
-        };
 
     private RenderFragment RenderGraphTree(IReadOnlyList<GraphTreeNode> nodes) => builder =>
     {
@@ -514,11 +540,11 @@ else
     {
         if (string.IsNullOrWhiteSpace(nodeId) || string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
-            _selectedGraphNode = null;
+            _selectedGraphNodeDetails = null;
             return;
         }
 
-        _selectedGraphNode = await Metrics.GetGraphNodeAsync(_selectedGraphTenant, nodeId);
+        _selectedGraphNodeDetails = await Metrics.GetGraphNodeDetailsAsync(_selectedGraphTenant, nodeId);
         StateHasChanged();
     }
 
@@ -535,16 +561,9 @@ else
             _ => Icons.Material.Filled.DeviceHub
         };
 
-    private static GraphNodeType NormalizeNodeType(GraphNodeType type)
-        => type == GraphNodeType.Device ? GraphNodeType.Equipment : type;
-
-    private static string GetNodeLabel(GraphNodeSnapshot? snapshot)
+    private static string GetNodeLabel(GraphNodeSnapshot snapshot)
     {
-        if (snapshot?.Node is not { } node)
-        {
-            return "(unknown)";
-        }
-
+        var node = snapshot.Node;
         return !string.IsNullOrWhiteSpace(node.DisplayName) ? node.DisplayName : node.NodeId;
     }
 

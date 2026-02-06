@@ -121,6 +121,35 @@ public class RdfAnalyzerServiceShaclTests
             p => p.Name == "Incubator Chamber Temperature",
             p => p.Name == "Chiller Discharge Temperature"
         );
+
+        var site = model.Sites.Single(s => s.Name == "Tokyo Technology Center");
+        var mainBuilding = model.Buildings.Single(b => b.Name == "Main Office Building");
+        var labBuilding = model.Buildings.Single(b => b.Name == "Research Lab Building");
+        mainBuilding.SiteUri.Should().Be(site.Uri);
+        labBuilding.SiteUri.Should().Be(site.Uri);
+
+        var groundFloor = model.Levels.Single(l => l.Name == "Ground Floor");
+        var secondFloor = model.Levels.Single(l => l.Name == "Second Floor");
+        var labFloor = model.Levels.Single(l => l.Name == "Lab Floor 1");
+        groundFloor.BuildingUri.Should().Be(mainBuilding.Uri);
+        secondFloor.BuildingUri.Should().Be(mainBuilding.Uri);
+        labFloor.BuildingUri.Should().Be(labBuilding.Uri);
+
+        var lobby = model.Areas.Single(a => a.Name == "Main Lobby");
+        var serverRoom = model.Areas.Single(a => a.Name == "Server Room");
+        var labRoom = model.Areas.Single(a => a.Name == "Experiment Room A");
+        lobby.LevelUri.Should().Be(groundFloor.Uri);
+        serverRoom.LevelUri.Should().Be(secondFloor.Uri);
+        labRoom.LevelUri.Should().Be(labFloor.Uri);
+
+        var hvac = model.Equipment.Single(e => e.Name == "HVAC Unit F1");
+        var serverRack = model.Equipment.Single(e => e.Name == "Server Rack A");
+        var incubator = model.Equipment.Single(e => e.Name == "Temperature Incubator");
+        var chiller = model.Equipment.Single(e => e.Name == "Lab Chiller Unit");
+        hvac.AreaUri.Should().Be(lobby.Uri);
+        serverRack.AreaUri.Should().Be(serverRoom.Uri);
+        incubator.AreaUri.Should().Be(labRoom.Uri);
+        chiller.AreaUri.Should().Be(labRoom.Uri);
     }
 
     private static RdfAnalyzerService CreateService() => new(NullLogger<RdfAnalyzerService>.Instance);
