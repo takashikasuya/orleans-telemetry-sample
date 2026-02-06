@@ -1,3 +1,15 @@
+# Orleans Telemetry Sample - Docker Compose Configuration
+#
+# IMPORTANT: RDF Seed File Synchronization
+# ----------------------------------------
+# Both 'silo' and 'publisher' services use the same RDF seed file (seed-complex.ttl)
+# to ensure that:
+#   1. SiloHost initializes the building graph structure with device/point definitions
+#   2. Publisher generates telemetry for devices that match those definitions
+#
+# If you modify or replace the RDF seed file, UPDATE BOTH SERVICE CONFIGURATIONS
+# in this file to maintain consistency between the data model and telemetry data.
+
 services:
   mq:
     image: rabbitmq:3-management
@@ -19,12 +31,16 @@ services:
       - mq
     environment:
       RABBITMQ_HOST: mq
+      RDF_SEED_PATH: /seed/seed.ttl
+      TENANT_ID: t1
       Orleans__AdvertisedIPAddress: silo
       Orleans__SiloPort: "11111"
       Orleans__GatewayPort: "30000"
     ports:
       - "11111:11111"
       - "30000:30000"
+    volumes:
+      - ./src/Telemetry.E2E.Tests/seed-complex.ttl:/seed/seed.ttl:ro
 
   api:
     build:
@@ -85,6 +101,9 @@ services:
     environment:
       RABBITMQ_HOST: mq
       TENANT: t1
+      RDF_SEED_PATH: /seed/seed.ttl
+    volumes:
+      - ./src/Telemetry.E2E.Tests/seed-complex.ttl:/seed/seed.ttl:ro
 
   # Mock OIDC provider for local development
   mock-oidc:

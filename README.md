@@ -12,6 +12,24 @@ persist events to Parquet, and expose real-time and historical state via REST AP
 docker compose up --build
 ```
 
+#### Services Started
+
+The base `docker-compose.yml` starts the following services:
+
+- **mq** (RabbitMQ): Message broker for telemetry ingestion (ports 5672, 15672)
+- **silo** (SiloHost): Orleans cluster with RabbitMQ consumer and grain logic (ports 11111, 30000)
+  - Initializes building graph from `seed-complex.ttl` via `RDF_SEED_PATH`
+  - Tenant: `t1`
+- **api** (ApiGateway): REST/gRPC API gateway (port 8080)
+- **admin** (AdminGateway): Admin web UI (port 8082)
+- **telemetry-client** (TelemetryClient): Telemetry client web UI (port 8083)
+- **publisher** (Publisher): Sample telemetry publisher
+  - Publishes telemetry based on `seed-complex.ttl` device definitions
+  - Uses same RDF seed as silo for data consistency
+- **mock-oidc**: Mock OIDC provider for authentication (port 8081)
+
+> **⚠️ Important**: The `publisher` and `silo` services both use the same RDF seed file (`seed-complex.ttl`) to ensure telemetry data matches the initialized grain structure. If you modify the RDF seed file or use a different file, **update both service configurations** in `docker-compose.yml`.
+
 Once running:
 - REST Swagger: `http://localhost:8080/swagger`
 - Mock OIDC (for tokens): `http://localhost:8081/default`
@@ -50,13 +68,21 @@ docker compose up --build
 
 ### Helper scripts (Docker + simulator seed)
 
-- Start stack with the same simulator/Parquet/RDF seed settings used by the E2E script: [scripts/start-system.sh](scripts/start-system.sh)
-- Stop stack with matching override teardown and cleanup: [scripts/stop-system.sh](scripts/stop-system.sh)
+- Start stack with the same simulator/Parquet/RDF seed settings used by the E2E script: [scripts/start-system.sh](scripts/start-system.sh) (Unix) / [scripts/start-system.ps1](scripts/start-system.ps1) (Windows)
+- Stop stack with matching override teardown and cleanup: [scripts/stop-system.sh](scripts/stop-system.sh) (Unix) / [scripts/stop-system.ps1](scripts/stop-system.ps1) (Windows)
 
+**Linux/macOS:**
 ```bash
 ./scripts/start-system.sh
 # ... interact with the API, admin, etc.
 ./scripts/stop-system.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\start-system.ps1
+# ... interact with the API, admin, etc.
+.\scripts\stop-system.ps1
 ```
 
 Notes:
@@ -92,6 +118,7 @@ dotnet run --project src/Publisher
 - **Graph Seeding**
   - `RDF_SEED_PATH`: path to RDF file for graph initialization
   - `TENANT_ID`: tenant identifier (default: `default`)
+  - **⚠️ Note**: When using `docker-compose.yml`, both `silo` and `publisher` services must reference the **same RDF seed file** to ensure telemetry publishers generate data that matches the initialized grain structure. If you change the seed file in one service, update both configurations.
 - **Publisher Control**
   - `CONTROL_QUEUE`: RabbitMQ queue name listened to by the publisher for control commands (default: `telemetry-control`).
   - Send a JSON payload such as:
@@ -610,6 +637,32 @@ dotnet test src/Telemetry.Ingest.Tests
 dotnet test src/Telemetry.Storage.Tests
 dotnet test src/Publisher.Tests
 dotnet test src/Telemetry.E2E.Tests --filter RdfPublisherTelemetry_IsVisibleThroughApi
+```
+
+Alternatively, use the helper scripts:
+
+**Linux/macOS:**
+```bash
+# Run all tests
+./scripts/run-all-tests.sh
+
+# Run E2E tests (starts Docker Compose, runs tests, stops stack)
+./scripts/run-e2e.sh
+
+# Run load tests
+./scripts/run-loadtest.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+# Run all tests
+.\scripts\run-all-tests.ps1
+
+# Run E2E tests (starts Docker Compose, runs tests, stops stack)
+.\scripts\run-e2e.ps1
+
+# Run load tests
+.\scripts\run-loadtest.ps1
 ```
 
 The publisher test suite covers RDF-aware telemetry generation, while the targeted E2E check seeds the Orleans graph, routes RDF-based telemetry through the router, and ensures `_pointMetadata` survives all the way to the API response.

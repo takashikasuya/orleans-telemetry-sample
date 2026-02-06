@@ -82,8 +82,44 @@ services:
 YML
 
 echo "Starting system..."
-$COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" down --remove-orphans
-$COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up --build -d mq silo api admin mock-oidc
+
+# Retry logic with sequential builds to avoid Docker daemon overload
+MAX_RETRIES=3
+RETRY_COUNT=0
+SUCCESS=false
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if {
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" down --remove-orphans 2>/dev/null || true
+    
+    # Build services sequentially to avoid Docker daemon overload
+    echo "Building silo..."
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build --no-cache silo
+    
+    echo "Building api..."
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build --no-cache api
+    
+    echo "Building admin..."
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build --no-cache admin
+    
+    echo "Starting services..."
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo api admin mock-oidc
+  }; then
+    SUCCESS=true
+    break
+  else
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+      echo "Build failed (attempt $RETRY_COUNT/$MAX_RETRIES), retrying in 5 seconds..."
+      sleep 5
+    fi
+  fi
+done
+
+if [ "$SUCCESS" = false ]; then
+  echo "Failed to start system after $MAX_RETRIES attempts" >&2
+  exit 1
+fi
 
 cat > "$STATE_FILE" <<EOF
 TEMP_DIR=$TEMP_DIR

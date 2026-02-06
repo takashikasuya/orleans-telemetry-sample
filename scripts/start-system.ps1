@@ -89,8 +89,44 @@ services:
 "@ | Set-Content -Path $overrideFile -Encoding UTF8
 
 Write-Host "Starting system..."
-& docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile down --remove-orphans
-& docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up --build -d mq silo api admin mock-oidc
+$MaxRetries = 3
+$RetryCount = 0
+$Success = $false
+
+while ($RetryCount -lt $MaxRetries) {
+  try {
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile down --remove-orphans 2>$null
+    
+    # Build services sequentially to avoid Docker daemon overload
+    Write-Host "Building silo..."
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build --no-cache silo
+    
+    Write-Host "Building api..."
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build --no-cache api
+    
+    Write-Host "Building admin..."
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build --no-cache admin
+    
+    Write-Host "Starting services..."
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d mq silo api admin mock-oidc
+    
+    $Success = $true
+    break
+  }
+  catch {
+    $RetryCount++
+    Write-Warning "Build failed (attempt $RetryCount/$MaxRetries): $_"
+    if ($RetryCount -lt $MaxRetries) {
+      Write-Host "Retrying in 5 seconds..."
+      Start-Sleep -Seconds 5
+    }
+  }
+}
+
+if (-not $Success) {
+  Write-Error "Failed to start system after $MaxRetries attempts"
+  exit 1
+}
 
 @"
 TEMP_DIR=$tempDir
