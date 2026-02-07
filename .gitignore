@@ -4,6 +4,7 @@ obj/
 out/
 reports/
 storage/
+data/graph-uploads/
 *.user
 *.suo
 *.userosscache

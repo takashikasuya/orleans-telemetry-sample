@@ -6,7 +6,7 @@ REPORT_DIR="${TELEMETRY_E2E_REPORT_DIR:-$ROOT/reports}"
 RUN_ID="telemetry-e2e-docker-$(date -u +%Y%m%d-%H%M%S)"
 REPORT_MD="$REPORT_DIR/$RUN_ID.md"
 REPORT_JSON="$REPORT_DIR/$RUN_ID.json"
-SEED_FILE="$ROOT/src/Telemetry.E2E.Tests/seed.ttl"
+SEED_FILE="$ROOT/data/seed.ttl"
 STORAGE_DIR="$ROOT/storage"
 COMPOSE="docker compose"
 TEMP_DIR=""
@@ -84,7 +84,7 @@ services:
       TelemetryStorage__CompactionIntervalSeconds: "2"
     volumes:
       - ./storage:/storage
-      - ./src/Telemetry.E2E.Tests/seed.ttl:/seed/seed.ttl:ro
+      - ./data/seed.ttl:/seed/seed.ttl:ro
   api:
     build:
       context: .

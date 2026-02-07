@@ -18,17 +18,17 @@ The base `docker-compose.yml` starts the following services:
 
 - **mq** (RabbitMQ): Message broker for telemetry ingestion (ports 5672, 15672)
 - **silo** (SiloHost): Orleans cluster with RabbitMQ consumer and grain logic (ports 11111, 30000)
-  - Initializes building graph from `seed-complex.ttl` via `RDF_SEED_PATH`
+  - Initializes building graph from `data/seed-complex.ttl` via `RDF_SEED_PATH`
   - Tenant: `t1`
 - **api** (ApiGateway): REST/gRPC API gateway (port 8080)
 - **admin** (AdminGateway): Admin web UI (port 8082)
 - **telemetry-client** (TelemetryClient): Telemetry client web UI (port 8083)
 - **publisher** (Publisher): Sample telemetry publisher
-  - Publishes telemetry based on `seed-complex.ttl` device definitions
+  - Publishes telemetry based on `data/seed-complex.ttl` device definitions
   - Uses same RDF seed as silo for data consistency
 - **mock-oidc**: Mock OIDC provider for authentication (port 8081)
 
-> **⚠️ Important**: The `publisher` and `silo` services both use the same RDF seed file (`seed-complex.ttl`) to ensure telemetry data matches the initialized grain structure. If you modify the RDF seed file or use a different file, **update both service configurations** in `docker-compose.yml`.
+> **⚠️ Important**: The `publisher` and `silo` services both use the same RDF seed file (`data/seed-complex.ttl`) to ensure telemetry data matches the initialized grain structure. If you modify the RDF seed file or use a different file, **update both service configurations** in `docker-compose.yml`.
 
 Once running:
 - REST Swagger: `http://localhost:8080/swagger`
@@ -86,7 +86,7 @@ docker compose up --build
 ```
 
 Notes:
-- Uses [src/Telemetry.E2E.Tests/seed.ttl](src/Telemetry.E2E.Tests/seed.ttl) with `TENANT_ID=t1`, simulator ingest (1 device × 1 point, 500 ms interval), and Parquet storage mounted to [storage](storage).
+- Uses [data/seed.ttl](data/seed.ttl) with `TENANT_ID=t1`, simulator ingest (1 device × 1 point, 500 ms interval), and Parquet storage mounted to [storage](storage).
 - Persists reports under [reports](reports) (override with `TELEMETRY_E2E_REPORT_DIR`) and records the generated compose override at [scripts/.system-state](scripts/.system-state) for the stop script.
 - Exposes Swagger at http://localhost:8080/swagger (enabled via `ASPNETCORE_ENVIRONMENT=Development` in the helper override), admin UI at http://localhost:8082/, and mock OIDC at http://localhost:8081/default once running.
 
@@ -456,7 +456,7 @@ POST /admin/graph/import          → Trigger RDF seeding (body: `GraphSeedReque
 
 The Blazor UI (served from `/`) delegates to `AdminMetricsService` to render those summaries, and the endpoints can be called from other tools if automation is needed. Authentication relies on the same OIDC configuration (`OIDC_AUTHORITY` / `OIDC_AUDIENCE`) as the API gateway, so the admin console can be locked down with the same tokens.
 
-The “Graph RDF Import” card uses the same RDF parsing pipeline that seeds the graph at silo startup; it shows the last run’s node/edge counts and lets operators re-run the seed against any accessible RDF file/tenant without touching environment variables.
+The “Graph RDF Import” card uses the same RDF parsing pipeline that seeds the graph at silo startup; it shows the last run’s node/edge counts and lets operators re-run the seed by uploading an RDF file and choosing a tenant without touching environment variables. For Docker deployments, mount the same upload directory into both the `admin` and `silo` containers so the Orleans silo can access the uploaded file.
 
 ### Key Grain Types
 

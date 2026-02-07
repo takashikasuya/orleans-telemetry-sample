@@ -11,7 +11,7 @@ $storageDirPosix = $storageDir -replace "\\", "/"
 $stateFile = Join-Path $Root "scripts/.system-state"
 $dockerfile = Join-Path $Root "Dockerfile.dotnet"
 $dockerfilePosix = $dockerfile -replace "\\", "/"
-$seedFile = Join-Path $Root "src/Telemetry.E2E.Tests/seed-complex.ttl"
+$seedFile = Join-Path $Root "data/seed-complex.ttl"
 $seedFilePosix = $seedFile -replace "\\", "/"
 
 New-Item -ItemType Directory -Force -Path $reportDir | Out-Null

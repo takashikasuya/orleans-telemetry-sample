@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using AdminGateway.Models;
 using AdminGateway.Pages;
@@ -8,13 +9,13 @@ using Bunit;
 using Grains.Abstractions;
 using System.Reflection;
 using Bunit.JSInterop;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using MudBlazor.Services;
 using Orleans;
-using Orleans.Runtime;
 using Telemetry.Ingest;
 using Telemetry.Storage;
 
@@ -48,9 +49,7 @@ public sealed class AdminPageTests : TestContext
                 ["point-1"] = Snapshot("point-1", "Supply Temp", GraphNodeType.Point)
             });
 
-        Services.AddMudServices();
-        JSInterop.Mode = JSRuntimeMode.Loose;
-        Services.AddSingleton(metrics);
+        ConfigureServices(metrics);
 
         var cut = RenderComponent<Admin>();
 
@@ -63,6 +62,27 @@ public sealed class AdminPageTests : TestContext
             Assert.Contains("AHU-1", cut.Markup);
             Assert.Contains("Supply Temp", cut.Markup);
         });
+    }
+
+    [Fact]
+    public void GraphImport_ShowsFilePicker()
+    {
+        var metrics = CreateMetricsService(
+            tenants: new[] { "t1" },
+            idsByType: new Dictionary<GraphNodeType, IReadOnlyList<string>>(),
+            snapshots: new Dictionary<string, GraphNodeSnapshot>(StringComparer.OrdinalIgnoreCase));
+
+        ConfigureServices(metrics);
+
+        var cut = RenderComponent<Admin>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var input = cut.Find("input[type=file]");
+            Assert.NotNull(input);
+        });
+
+        Assert.Contains("RDF file", cut.Markup);
     }
 
     [Fact]
@@ -93,9 +113,7 @@ public sealed class AdminPageTests : TestContext
                 [pointKey] = new PointSnapshot(12, 22.5, new DateTimeOffset(2026, 2, 6, 1, 2, 3, TimeSpan.Zero))
             });
 
-        Services.AddMudServices();
-        JSInterop.Mode = JSRuntimeMode.Loose;
-        Services.AddSingleton(metrics);
+        ConfigureServices(metrics);
 
         var cut = RenderComponent<Admin>();
 
@@ -106,11 +124,15 @@ public sealed class AdminPageTests : TestContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("ID:</strong> point-1", cut.Markup);
-            Assert.Contains("Unit: C", cut.Markup);
+            Assert.Contains("<th>ID</th>", cut.Markup);
+            Assert.Contains("<td>point-1</td>", cut.Markup);
+            Assert.Contains("<th>Unit</th>", cut.Markup);
+            Assert.Contains("<td>C</td>", cut.Markup);
             Assert.Contains("Point Snapshot", cut.Markup);
-            Assert.Contains("Sequence:</strong> 12", cut.Markup);
-            Assert.Contains("Value:</strong> 22.5", cut.Markup);
+            Assert.Contains("<th>Sequence</th>", cut.Markup);
+            Assert.Contains("<td>12</td>", cut.Markup);
+            Assert.Contains("<th>Value</th>", cut.Markup);
+            Assert.Contains("<td>22.5</td>", cut.Markup);
         });
     }
 
@@ -135,6 +157,27 @@ public sealed class AdminPageTests : TestContext
         var button = cut.FindAll("button")
             .First(b => b.TextContent.Contains(text, StringComparison.Ordinal));
         button.Click();
+    }
+
+    private void ConfigureServices(AdminMetricsService metrics)
+    {
+        Services.AddMudServices();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddSingleton(metrics);
+        Services.AddSingleton<IConfiguration>(BuildConfiguration());
+    }
+
+    private static IConfiguration BuildConfiguration()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["ADMIN_GRAPH_UPLOAD_DIR"] = Path.Combine(Path.GetTempPath(), "orleans-telemetry-test-uploads"),
+            ["ADMIN_GRAPH_UPLOAD_MAX_BYTES"] = "1048576"
+        };
+
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
     }
 
     private static GraphNodeSnapshot Snapshot(string id, string displayName, GraphNodeType type, params GraphEdge[] outgoingEdges)

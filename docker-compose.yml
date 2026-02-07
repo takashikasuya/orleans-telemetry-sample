@@ -2,7 +2,7 @@
 #
 # IMPORTANT: RDF Seed File Synchronization
 # ----------------------------------------
-# Both 'silo' and 'publisher' services use the same RDF seed file (seed-complex.ttl)
+# Both 'silo' and 'publisher' services use the same RDF seed file (data/seed-complex.ttl)
 # to ensure that:
 #   1. SiloHost initializes the building graph structure with device/point definitions
 #   2. Publisher generates telemetry for devices that match those definitions
@@ -40,7 +40,8 @@ services:
       - "11111:11111"
       - "30000:30000"
     volumes:
-      - ./src/Telemetry.E2E.Tests/seed-complex.ttl:/seed/seed.ttl:ro
+      - ./data/seed-complex.ttl:/seed/seed.ttl:ro
+      - ./data/graph-uploads:/uploads
 
   api:
     build:
@@ -73,8 +74,11 @@ services:
       Orleans__GatewayHost: silo
       Orleans__GatewayPort: "30000"
       ASPNETCORE_URLS: http://+:80
+      ADMIN_GRAPH_UPLOAD_DIR: /uploads
     ports:
       - "8082:80"
+    volumes:
+      - ./data/graph-uploads:/uploads
 
   telemetry-client:
     build:
@@ -103,7 +107,7 @@ services:
       TENANT: t1
       RDF_SEED_PATH: /seed/seed.ttl
     volumes:
-      - ./src/Telemetry.E2E.Tests/seed-complex.ttl:/seed/seed.ttl:ro
+      - ./data/seed-complex.ttl:/seed/seed.ttl:ro
 
   # Mock OIDC provider for local development
   mock-oidc:

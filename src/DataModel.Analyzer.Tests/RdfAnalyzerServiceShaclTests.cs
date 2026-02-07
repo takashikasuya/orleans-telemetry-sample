@@ -84,8 +84,8 @@ public class RdfAnalyzerServiceShaclTests
         // seed-complex.ttl を読み込んでデータが正しく解析されることを検証
         var testFilePath = Path.Combine(
             AppContext.BaseDirectory,
-            "..", "..", "..", "..",
-            "Telemetry.E2E.Tests",
+            "..", "..", "..", "..", "..",
+            "data",
             "seed-complex.ttl"
         );
         

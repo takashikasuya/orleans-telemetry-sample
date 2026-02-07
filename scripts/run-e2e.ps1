@@ -10,7 +10,7 @@ $reportDir = if ($env:TELEMETRY_E2E_REPORT_DIR) { $env:TELEMETRY_E2E_REPORT_DIR 
 $runId = "telemetry-e2e-docker-" + (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 $reportMd = Join-Path $reportDir "$runId.md"
 $reportJson = Join-Path $reportDir "$runId.json"
-$seedFile = Join-Path $Root "src/Telemetry.E2E.Tests/seed.ttl"
+$seedFile = Join-Path $Root "data/seed.ttl"
 $storageDir = Join-Path $Root "storage"
 $mockOidcPort = if ($env:MOCK_OIDC_PORT) { $env:MOCK_OIDC_PORT } else { "8081" }
 $apiWaitSeconds = if ($env:API_WAIT_SECONDS) { [int]$env:API_WAIT_SECONDS } else { 120 }
@@ -87,7 +87,7 @@ services:
       TelemetryStorage__CompactionIntervalSeconds: "2"
     volumes:
       - ./storage:/storage
-      - ./src/Telemetry.E2E.Tests/seed.ttl:/seed/seed.ttl:ro
+      - ./data/seed.ttl:/seed/seed.ttl:ro
   api:
     build:
       context: .

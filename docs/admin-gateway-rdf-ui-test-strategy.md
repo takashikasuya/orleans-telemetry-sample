@@ -99,7 +99,7 @@ AdminGateway (`src/AdminGateway`) に対して、RDF を入力に Orleans の Gr
 - `Telemetry.E2E.Tests` と並列に `AdminGateway.E2E.Tests`（または同プロジェクト内分類）
 - 手順:
   1. `docker compose up --build`
-  2. `/admin/graph/import` へ seed-complex.ttl を指定して投入
+  2. `/admin/graph/import` へ data/seed-complex.ttl を指定して投入
   3. `http://localhost:8082/` を Playwright で開く
   4. ツリー展開し、期待ノード（例: Lobby, HVAC 等）をアサート
 
@@ -109,7 +109,7 @@ E2E は実行コストが高いため、CI では nightly/手動トリガー、P
 
 ### 基本方針
 
-- `src/Telemetry.E2E.Tests/seed-complex.ttl` を「実運用相当 fixture」として再利用
+- `data/seed-complex.ttl` を「実運用相当 fixture」として再利用
 - UI テスト用に **最小RDF fixture** を別途追加（例: `seed-admin-minimal.ttl`）
   - Site 1 / Building 1 / Level 1 / Area 1 / Equipment 1 / Point 1
   - `isPartOf`, `locatedIn` の片方向だけ持つバリエーションも作る

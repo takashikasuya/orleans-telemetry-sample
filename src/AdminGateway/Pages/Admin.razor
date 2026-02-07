@@ -1,6 +1,9 @@
 ﻿@page "/"
 @inject AdminMetricsService Metrics
+@inject IConfiguration Configuration
 @using System.Collections.Generic
+@using System.IO
+@using Microsoft.AspNetCore.Components.Forms
 
 <section class="admin-header">
     <div>
@@ -362,16 +365,24 @@ else
             <div class="graph-import-grid">
                 <div class="graph-import">
                     <label>
-                        RDF path
-                        <input class="graph-input" @bind="_graphPath" />
+                        RDF file
+                        <InputFile OnChange="HandleGraphFileSelected" class="graph-input" accept=".ttl,.rdf,.nt,.nq,.jsonld" />
                     </label>
                     <label>
                         Tenant
                         <input class="graph-input" @bind="_graphTenant" />
                     </label>
-                    <button class="refresh-button" @onclick="TriggerGraphSeedAsync" disabled="@_isImporting">
-                        @_isImporting ? "Importing..." : "Run import"
-                    </button>
+                    <div class="graph-import-actions">
+                        <button class="refresh-button" @onclick="TriggerGraphSeedAsync" disabled="@_isImporting">
+                            @(_isImporting ? "Importing..." : "Run import")
+                        </button>
+                        @if (!string.IsNullOrWhiteSpace(_uploadedGraphPath))
+                        {
+                            <button class="refresh-button button-ghost" @onclick="ClearUploadedGraphAsync" disabled="@_isImporting">
+                                Clear upload
+                            </button>
+                        }
+                    </div>
                 </div>
                 <div class="graph-status-card">
                     <div class="graph-status-header">
@@ -395,6 +406,14 @@ else
                     }
                 </div>
             </div>
+            @if (!string.IsNullOrWhiteSpace(_graphUploadMessage))
+            {
+                <p class="status muted">@_graphUploadMessage</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_graphUploadError))
+            {
+                <p class="status error">@_graphUploadError</p>
+            }
             @if (!string.IsNullOrWhiteSpace(_graphFeedback))
             {
                 <p class="status">@_graphFeedback</p>
@@ -411,7 +430,6 @@ else
     private IngestSummary? _ingest;
     private bool _loading = true;
     private string? _error;
-    private string _graphPath = "/seed/seed.ttl";
     private string _graphTenant = "default";
     private GraphSeedStatus? _graphStatus;
     private bool _isImporting;
@@ -422,6 +440,11 @@ else
     private GraphNodeDetailView? _selectedGraphNodeDetails;
     private bool _loadingHierarchy;
     private string? _hierarchyError;
+    private string? _uploadedGraphPath;
+    private string? _uploadedGraphFileName;
+    private string? _graphUploadMessage;
+    private string? _graphUploadError;
+    private const long DefaultGraphUploadLimitBytes = 10 * 1024 * 1024;
 
     protected override async Task OnInitializedAsync()
     {
@@ -613,13 +636,80 @@ else
     private static string GetGraphStatusBadgeClass(GraphSeedStatus? status)
         => status is null ? "status-badge muted" : status.Success ? "status-badge success" : "status-badge failure";
 
+    private async Task HandleGraphFileSelected(InputFileChangeEventArgs args)
+    {
+        _graphUploadError = null;
+        _graphUploadMessage = null;
+
+        var file = args.File;
+        if (file is null)
+        {
+            _graphUploadError = "No file selected.";
+            return;
+        }
+
+        var maxBytes = GetGraphUploadMaxBytes();
+        if (file.Size > maxBytes)
+        {
+            _graphUploadError = $"File too large. Max {FormatBytes(maxBytes)}.";
+            return;
+        }
+
+        var uploadDir = GetGraphUploadDirectory();
+        Directory.CreateDirectory(uploadDir);
+
+        if (!string.IsNullOrWhiteSpace(_uploadedGraphPath))
+        {
+            TryDeleteFile(_uploadedGraphPath);
+        }
+
+        var safeFileName = Path.GetFileName(file.Name);
+        var uniqueName = $"{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}_{safeFileName}";
+        var targetPath = Path.Combine(uploadDir, uniqueName);
+
+        await using var input = file.OpenReadStream(maxBytes);
+        await using var output = File.Create(targetPath);
+        await input.CopyToAsync(output);
+
+        _uploadedGraphPath = targetPath;
+        _uploadedGraphFileName = safeFileName;
+        _graphUploadMessage = $"Uploaded {_uploadedGraphFileName}. Using uploaded file for import.";
+    }
+
+    private Task ClearUploadedGraphAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_uploadedGraphPath))
+        {
+            TryDeleteFile(_uploadedGraphPath);
+        }
+
+        _uploadedGraphPath = null;
+        _uploadedGraphFileName = null;
+        _graphUploadMessage = "Upload cleared.";
+        _graphUploadError = null;
+        return Task.CompletedTask;
+    }
+
     private async Task TriggerGraphSeedAsync()
     {
         _isImporting = true;
         _graphFeedback = null;
         try
         {
-            var request = new GraphSeedRequest(_graphPath, _graphTenant);
+            var seedPath = _uploadedGraphPath;
+            if (string.IsNullOrWhiteSpace(seedPath))
+            {
+                _graphFeedback = "Upload an RDF file before running import.";
+                return;
+            }
+
+            if (_uploadedGraphPath is not null && !File.Exists(_uploadedGraphPath))
+            {
+                _graphFeedback = "Uploaded file was not found on disk. Please upload again.";
+                return;
+            }
+
+            var request = new GraphSeedRequest(seedPath, _graphTenant);
             var result = await Metrics.TriggerGraphSeedAsync(request);
             _graphStatus = result;
             _graphFeedback = result.Success
@@ -633,6 +723,40 @@ else
         finally
         {
             _isImporting = false;
+        }
+    }
+
+    private string GetGraphUploadDirectory()
+    {
+        var configured = Configuration["ADMIN_GRAPH_UPLOAD_DIR"]
+            ?? Configuration["Admin:GraphUploadDirectory"];
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured;
+        }
+
+        return Path.Combine(Path.GetTempPath(), "orleans-telemetry-uploads");
+    }
+
+    private long GetGraphUploadMaxBytes()
+    {
+        var configured = Configuration["ADMIN_GRAPH_UPLOAD_MAX_BYTES"]
+            ?? Configuration["Admin:GraphUploadMaxBytes"];
+        return long.TryParse(configured, out var maxBytes) ? maxBytes : DefaultGraphUploadLimitBytes;
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Best effort cleanup of temporary uploads.
         }
     }
 }

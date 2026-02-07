@@ -29,7 +29,8 @@
 
   <ItemGroup>
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="seed.ttl" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\data\seed.ttl" Link="seed.ttl" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\data\seed-complex.ttl" Link="seed-complex.ttl" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\DataModel.Analyzer\Schema\*.ttl" Link="Schema\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -2,24 +2,57 @@
 
 ---
 
+# plans.md: Move RDF seed fixtures to data
+
+## Purpose
+Move `seed.ttl` and `seed-complex.ttl` out of `Telemetry.E2E.Tests` into the top-level `data` folder, then update all references (docker compose, scripts, docs, tests) to use the new locations.
+
+## Success Criteria
+1. `data/seed.ttl` and `data/seed-complex.ttl` exist and `src/Telemetry.E2E.Tests/seed*.ttl` are removed.
+2. Docker compose, helper scripts, tests, and docs reference the new `data` locations.
+3. `dotnet test src/Telemetry.E2E.Tests` passes.
+
+## Steps
+1. Move the seed files into `data`.
+2. Update references in docker-compose, scripts, tests, and docs.
+3. Run the E2E test project.
+
+## Progress
+- [x] Step 1: Move seed files
+- [x] Step 2: Update references
+- [x] Step 3: Run tests
+
+## Observations
+- `runTests` ran the full suite; 3 failures in `AdminGateway.Tests` due to missing `IConfiguration` registration for `AdminGateway.Pages.Admin`.
+- Added a test helper in `AdminGateway.Tests` to register `IConfiguration` in the bUnit service container (re-run tests needed).
+- `runTests` now passes (64 tests).
+
+## Decisions
+- TBD
+
+## Retrospective
+- TBD
+
+---
+
 # plans.md: Admin Console Spatial Hierarchy + Metadata Details
 
 ## Purpose
-Admin Console の階層ビューめEGraphNodeGrain/PointGrain のメタチE�Eタに基づく空間�EチE��イス・ポイント構造へ置き換え、ノード選択時に GraphStore / GraphIndexStore のメタチE�Eタを詳細表示する、E
+Admin Console の階層ビューめEGraphNodeGrain/PointGrain のメタチE�Eタに基づく空間�EチE��イス・ポイント構造へ置き換え、ノード選択時に GraphStore / GraphIndexStore のメタチE�Eタを詳細表示する、E
 ## Success Criteria
-1. 階層チE��ーは Site/Building/Level/Area/Equipment/Point のみ表示し、他�E Grain は除外、E2. 関係性は GraphNodeGrain の `hasPoint`�E�およ�E既存�E空閁E配置エチE���E�で構築、E3. ノ�Eド選択時に GraphStore の Node 定義�E�Ettributes�E�と Incoming/Outgoing エチE��を表示、E4. Point ノ�Eドでは PointGrain の最新値/更新時刻を追加表示、E5. Graph Statistics は UI から除外、E
+1. 階層チE��ーは Site/Building/Level/Area/Equipment/Point のみ表示し、他�E Grain は除外、E2. 関係性は GraphNodeGrain の `hasPoint`�E�およ�E既存�E空閁E配置エチE���E�で構築、E3. ノ�Eド選択時に GraphStore の Node 定義�E�Ettributes�E�と Incoming/Outgoing エチE��を表示、E4. Point ノ�Eドでは PointGrain の最新値/更新時刻を追加表示、E5. Graph Statistics は UI から除外、E
 ## Steps
-1. Graph 階層用の取得ロジチE��と詳細 DTO を追加、E2. Admin UI めEHierarchy + Details 構�Eに更新ぁEGraph Statistics を削除、E3. AdminGateway.Tests を新 UI に合わせて更新、E4. 記録更新、E
+1. Graph 階層用の取得ロジチE��と詳細 DTO を追加、E2. Admin UI めEHierarchy + Details 構�Eに更新ぁEGraph Statistics を削除、E3. AdminGateway.Tests を新 UI に合わせて更新、E4. 記録更新、E
 ## Progress
-- [x] Step 1: 階層/詳細 DTO + 取得ロジチE��
+- [x] Step 1: 階層/詳細 DTO + 取得ロジチE��
 - [x] Step 2: UI 更新 (Hierarchy + Details)
-- [x] Step 3: チE��ト更新
+- [x] Step 3: チE��ト更新
 - [x] Step 4: 記録更新
 
 ## Observations
-- Graph Statistics は UI から削除し、空閁EチE��イス/ポイント�E階層チE��ー + 詳細パネルに置き換え、E- Point ノ�Eド選択時に PointGrain の最新スナップショチE��を追加表示、E- `brick:isPointOf` を含むポイント関係をチE��ーに反映するため、`isPointOf` のエチE��解決を追加、E- Storage Buckets の区刁E��表示を修正、E
+- Graph Statistics は UI から削除し、空閁EチE��イス/ポイント�E階層チE��ー + 詳細パネルに置き換え、E- Point ノ�Eド選択時に PointGrain の最新スナップショチE��を追加表示、E- `brick:isPointOf` を含むポイント関係をチE��ーに反映するため、`isPointOf` のエチE��解決を追加、E- Storage Buckets の区刁E��表示を修正、E
 ## Decisions
-- 階層構築�E GraphNodeGrain の `hasPoint` を含むエチE��を利用し、Device ノ�Eド�E除外、E- 詳細表示は GraphStore の Attributes + Incoming/Outgoing エチE��をすべて表示、E
+- 階層構築�E GraphNodeGrain の `hasPoint` を含むエチE��を利用し、Device ノ�Eド�E除外、E- 詳細表示は GraphStore の Attributes + Incoming/Outgoing エチE��をすべて表示、E
 ## Retrospective
 - `dotnet build` と `dotnet test src/AdminGateway.Tests` を実行済み、E
 ---
@@ -27,42 +60,42 @@ Admin Console の階層ビューめEGraphNodeGrain/PointGrain のメタチE�Eタ
 # plans.md: Admin Console Grain Hierarchy + Graph Layout
 
 ## Purpose
-Admin Console の Graph Hierarchy を実際の SiloHost の Grain 活性化情報に置き換え、Graph Statistics と 2 列レイアウトで表示整琁E��る、E
+Admin Console の Graph Hierarchy を実際の SiloHost の Grain 活性化情報に置き換え、Graph Statistics と 2 列レイアウトで表示整琁E��る、E
 ## Success Criteria
-1. Grain Hierarchy ぁESiloHost の実際の Grain 活性化情報をツリー表示する、E2. Graph Statistics と Grain Hierarchy ぁE2 列レイアウトで並ぶ�E�狭ぁE��面は縦並び�E�、E3. 既存�E管琁E���EめEAPI への影響がなぁE��E
+1. Grain Hierarchy ぁESiloHost の実際の Grain 活性化情報をツリー表示する、E2. Graph Statistics と Grain Hierarchy ぁE2 列レイアウトで並ぶ�E�狭ぁE��面は縦並び�E�、E3. 既存�E管琁E���EめEAPI への影響がなぁE��E
 ## Steps
-1. Grain Hierarchy 用の DTO とチE��ー構築ロジチE��を追加、E2. Admin UI めE2 列レイアウトに変更し、Grain Hierarchy を表示、E3. ドキュメントと計画を更新、E
+1. Grain Hierarchy 用の DTO とチE��ー構築ロジチE��を追加、E2. Admin UI めE2 列レイアウトに変更し、Grain Hierarchy を表示、E3. ドキュメントと計画を更新、E
 ## Progress
-- [x] Step 1: Grain Hierarchy の DTO / ロジチE��追加
-- [x] Step 2: UI 2 列レイアウチE+ チE��ー表示
+- [x] Step 1: Grain Hierarchy の DTO / ロジチE��追加
+- [x] Step 2: UI 2 列レイアウチE+ チE��ー表示
 - [x] Step 3: 記録更新
 
 ## Observations
-- Grain Hierarchy は Orleans 管琁E��レインの詳細統計から構築し、Silo -> GrainType -> GrainId の構�Eで表示、E- Graph Statistics と Grain Hierarchy めE2 列�Eカードレイアウトに整琁E��E
+- Grain Hierarchy は Orleans 管琁E��レインの詳細統計から構築し、Silo -> GrainType -> GrainId の構�Eで表示、E- Graph Statistics と Grain Hierarchy めE2 列�Eカードレイアウトに整琁E��E
 ## Decisions
 - Grain Hierarchy は `GetDetailedGrainStatistics` を使用し、表示件数を抑えるため type / grain id を上限付きで列挙、E
 ## Retrospective
-- 実裁E�E完亁E��`dotnet build` / `dotnet test` は未実行�Eため忁E��に応じてローカルで確認する、E
+- 実裁E�E完亁E��`dotnet build` / `dotnet test` は未実行�Eため忁E��に応じてローカルで確認する、E
 ---
 
 # plans.md: Admin Console UI Refresh (Light/Dark + Spacing Scale)
 
 ## Purpose
-AdminGateway の UI を最新の軽量なダチE��ュボ�Eドスタイルに整え、ライトテーマを既定、ダークチE�Eマを任意で選択できるようにし、スペ�Eシングと色のスケールを統一する、E
+AdminGateway の UI を最新の軽量なダチE��ュボ�Eドスタイルに整え、ライトテーマを既定、ダークチE�Eマを任意で選択できるようにし、スペ�Eシングと色のスケールを統一する、E
 ## Success Criteria
-1. チE��ォルトでライトテーマが適用される、E2. UI からダークチE�Eマに刁E��替えでき、同一の惁E��構造のまま視認性が保たれる、E3. CSS にスペ�Eシング/カラー/角丸のスケールが定義され、主要レイアウトがそ�Eト�Eクンに準拠する、E4. 既存�E Admin 機�E・API への影響はなぁE��E
+1. チE��ォルトでライトテーマが適用される、E2. UI からダークチE�Eマに刁E��替えでき、同一の惁E��構造のまま視認性が保たれる、E3. CSS にスペ�Eシング/カラー/角丸のスケールが定義され、主要レイアウトがそ�Eト�Eクンに準拠する、E4. 既存�E Admin 機�E・API への影響はなぁE��E
 ## Steps
-1. AdminGateway のレイアウトにライチEダーク刁E�� UI を追加、E2. `app.css` にチE��イン・ト�Eクン�E�色/スペ�Eス/角丸�E�を定義し、既存スタイルをトークン参�Eに置換、E3. Admin 画面の主要セクションの余白・チE�Eブル・カード類を整琁E��て視認性を向上、E4. 変更点と未実施の検証を記録、E
+1. AdminGateway のレイアウトにライチEダーク刁E�� UI を追加、E2. `app.css` にチE��イン・ト�Eクン�E�色/スペ�Eス/角丸�E�を定義し、既存スタイルをトークン参�Eに置換、E3. Admin 画面の主要セクションの余白・チE�Eブル・カード類を整琁E��て視認性を向上、E4. 変更点と未実施の検証を記録、E
 ## Progress
-- [x] Step 1: ライチEダーク刁E�� UI 追加
-- [x] Step 2: チE��イント�Eクン匁E- [x] Step 3: 主要セクションの余白・カード整琁E- [x] Step 4: 記録更新
+- [x] Step 1: ライチEダーク刁E�� UI 追加
+- [x] Step 2: チE��イント�Eクン匁E- [x] Step 3: 主要セクションの余白・カード整琁E- [x] Step 4: 記録更新
 
 ## Observations
-- AdminGateway のレイアウトに MudSwitch を追加し、ライチEダーク刁E��ぁEUI から可能、E- `app.css` を色/スペ�Eス/角丸のト�Eクンで再構�Eし、各セクションがトークン参�Eに統一、E- `docs/admin-console.md` にチE�Eマ�E替の補足を追加、E
+- AdminGateway のレイアウトに MudSwitch を追加し、ライチEダーク刁E��ぁEUI から可能、E- `app.css` を色/スペ�Eス/角丸のト�Eクンで再構�Eし、各セクションがトークン参�Eに統一、E- `docs/admin-console.md` にチE�Eマ�E替の補足を追加、E
 ## Decisions
-- チE�Eマ�E替は MudBlazor の `MudThemeProvider` + レイアウチECSS 変数で実裁E��、既存構造を維持、E
+- チE�Eマ�E替は MudBlazor の `MudThemeProvider` + レイアウチECSS 変数で実裁E��、既存構造を維持、E
 ## Retrospective
-- 実裁E��スタイル更新は完亁E��`dotnet build` / `dotnet test` は未実行�Eため、忁E��に応じてローカルで確認する、E
+- 実裁E��スタイル更新は完亁E��`dotnet build` / `dotnet test` は未実行�Eため、忁E��に応じてローカルで確認する、E
 ---
 
 # plans.md: AdminGateway Graph Tree (MudBlazor)
@@ -96,7 +129,7 @@ Replace the AdminGateway SVG graph view with a MudBlazor-based tree view that ex
 - Build/test not run in this environment.
 
 ## Decisions
-- �T���v�� RDF �� namespace �𐳂��A�e�X�g�ŊK�w�֌W�����؂��čĔ��h�~����B
+- �T���v�� RDF �� namespace �𐳂��A�e�X�g�ŊK�w�֌W�����؂��čĔ��h�~����B
 
 ## Retrospective
 *To be updated after completion.*
@@ -144,42 +177,42 @@ Provide PowerShell command files for the existing `scripts/*.sh` utilities so th
 # plans.md: Graph Reverse Edges for Location/Part Relations
 
 ## Purpose
-RDF の `rec:locatedIn` / `rec:hasPart` などの親子関係が Graph ノ�Eド�E `incomingEdges` に現れず、`/api/nodes/{nodeId}` で関係性を辿れなぁE��題を解消する、E 
-`isLocationOf` / `hasPart` の送E��照として、ノード間の関係性めEGraphSeedData に追加できるようにする、E
+RDF の `rec:locatedIn` / `rec:hasPart` などの親子関係が Graph ノ�Eド�E `incomingEdges` に現れず、`/api/nodes/{nodeId}` で関係性を辿れなぁE��題を解消する、E 
+`isLocationOf` / `hasPart` の送E��照として、ノード間の関係性めEGraphSeedData に追加できるようにする、E
 
 ## Success Criteria
-1. `OrleansIntegrationService.CreateGraphSeedData` が以下�E関係を**追加で**出力すめE
-   - `locatedIn` と `isLocationOf` の双方向エチE�� (Equipment ↁEArea)
-   - `hasPart` と `isPartOf` の双方向エチE�� (Site/Building/Level/Area 階層)
-2. 既存�E `hasBuilding` / `hasLevel` / `hasArea` / `hasEquipment` / `hasPoint` / `feeds` / `isFedBy` は保持される、E
+1. `OrleansIntegrationService.CreateGraphSeedData` が以下�E関係を**追加で**出力すめE
+   - `locatedIn` と `isLocationOf` の双方向エチE�� (Equipment ↁEArea)
+   - `hasPart` と `isPartOf` の双方向エチE�� (Site/Building/Level/Area 階層)
+2. 既存�E `hasBuilding` / `hasLevel` / `hasArea` / `hasEquipment` / `hasPoint` / `feeds` / `isFedBy` は保持される、E
 3. `seed-complex.ttl` の `urn:equipment-hvac-f1` ぁE`incomingEdges` に `isLocationOf` (source: `urn:area-main-f1-lobby`) を持つこと、E
-4. `DataModel.Analyzer.Tests` に送E��照エチE��を検証するチE��トを追加し、`dotnet test src/DataModel.Analyzer.Tests` が通る、E
+4. `DataModel.Analyzer.Tests` に送E��照エチE��を検証するチE��トを追加し、`dotnet test src/DataModel.Analyzer.Tests` が通る、E
 
 ## Steps
-1. `OrleansIntegrationService.CreateGraphSeedData` のエチE��生�E箁E��を整琁E��、E��E��照のマッピング方針を確定する、E
-2. 送E��照エチE��生�Eを追加する (重褁E�E排除し、既存�E正方向エチE��は維持E、E
-3. `OrleansIntegrationServiceBindingTests` に以下�EチE��トを追加する:
+1. `OrleansIntegrationService.CreateGraphSeedData` のエチE��生�E箁E��を整琁E��、E��E��照のマッピング方針を確定する、E
+2. 送E��照エチE��生�Eを追加する (重褁E�E排除し、既存�E正方向エチE��は維持E、E
+3. `OrleansIntegrationServiceBindingTests` に以下�EチE��トを追加する:
    - `locatedIn` と `isLocationOf` ぁEEquipment/Area 間で出力される
    - `hasPart` / `isPartOf` ぁESite/Building/Level/Area で出力される
-4. 既存�E `seed-complex.ttl` を使っぁEE2E 検証の手頁E��整琁E��めE(忁E��なめE`Telemetry.E2E.Tests` の追加チE��トを検訁E、E
+4. 既存�E `seed-complex.ttl` を使っぁEE2E 検証の手頁E��整琁E��めE(忁E��なめE`Telemetry.E2E.Tests` の追加チE��トを検訁E、E
 5. 検証: `dotnet build` と `dotnet test src/DataModel.Analyzer.Tests` を実行する、E
 
 ## Progress
-- [x] 送E��照エチE��の設計を確宁E
-- [x] `CreateGraphSeedData` に送E��照エチE��生�Eを追加
-- [x] `DataModel.Analyzer.Tests` に送E��照の検証を追加
-- [x] 検証コマンド�E実行記録を残す
+- [x] 送E��照エチE��の設計を確宁E
+- [x] `CreateGraphSeedData` に送E��照エチE��生�Eを追加
+- [x] `DataModel.Analyzer.Tests` に送E��照の検証を追加
+- [x] 検証コマンド�E実行記録を残す
 
 ## Observations
-- 現状は `locatedIn` ぁE`Equipment.AreaUri` にのみ反映され、GraphSeed では `hasEquipment` に正規化されてぁE��、E
-- `incomingEdges` は GraphSeed で追加されたエチE��の「送E��き同 predicate」を保存してぁE��ため、E��E��照 predicate (`isLocationOf`, `isPartOf`) は別途追加が忁E��、E
-- GraphSeed に追加するエチE��の重褁E��避けるため、seed 冁E��一意キーを使って追加制御した、E
-- `dotnet build` は成功 (警呁E MudBlazor 7.6.1 ↁE7.7.0 の近似解決、Moq 4.20.0 の低重大度脁E��性)、E
+- 現状は `locatedIn` ぁE`Equipment.AreaUri` にのみ反映され、GraphSeed では `hasEquipment` に正規化されてぁE��、E
+- `incomingEdges` は GraphSeed で追加されたエチE��の「送E��き同 predicate」を保存してぁE��ため、E��E��照 predicate (`isLocationOf`, `isPartOf`) は別途追加が忁E��、E
+- GraphSeed に追加するエチE��の重褁E��避けるため、seed 冁E��一意キーを使って追加制御した、E
+- `dotnet build` は成功 (警呁E MudBlazor 7.6.1 ↁE7.7.0 の近似解決、Moq 4.20.0 の低重大度脁E��性)、E
 - `dotnet test src/DataModel.Analyzer.Tests` は成功 (20 tests, 0 failed)、E
 
 ## Decisions
-- 既存�E正規化 predicate (`hasBuilding` / `hasLevel` / `hasArea` / `hasEquipment`) は維持し、RDF 由来の predicate (`hasPart`, `isPartOf`, `locatedIn`, `isLocationOf`) めE*追加**する方針とする、E
-- 送E��照の追加によって GraphTraversal の結果が増える可能性があるため、テストでは predicate 持E��あめEなし�E挙動を確認する、E
+- 既存�E正規化 predicate (`hasBuilding` / `hasLevel` / `hasArea` / `hasEquipment`) は維持し、RDF 由来の predicate (`hasPart`, `isPartOf`, `locatedIn`, `isLocationOf`) めE*追加**する方針とする、E
+- 送E��照の追加によって GraphTraversal の結果が増える可能性があるため、テストでは predicate 持E��あめEなし�E挙動を確認する、E
 
 ## Retrospective
 *To be updated after completion.*
@@ -195,8 +228,8 @@ Create a clear Japanese description of the API Gateway REST/gRPC surface and doc
 - New documentation file describes each API Gateway endpoint, request/response shape, and key behaviors (auth, tenant, export modes).
 - Documentation explains how to generate or fetch OpenAPI (Swagger) output from the running API.
 - README references the new documentation.
-- gRPC の計画仕様！EEST 等価�E�と公閁Eproto 案がドキュメントに追記される、E
-- gRPC 検証に忁E��な手頁E��本計画に明記される、E
+- gRPC の計画仕様！EEST 等価�E�と公閁Eproto 案がドキュメントに追記される、E
+- gRPC 検証に忁E��な手頁E��本計画に明記される、E
 
 ## Steps
 1. Enumerate ApiGateway endpoints and behaviors from `src/ApiGateway/Program.cs` and related services.
@@ -216,31 +249,31 @@ Create a clear Japanese description of the API Gateway REST/gRPC surface and doc
 
 ## Observations
 
-- ApiGateway の Swagger は Development 環墁E�Eみ有効、E
+- ApiGateway の Swagger は Development 環墁E�Eみ有効、E
 - gRPC DeviceService は現在コメントアウトされており REST のみ実運用、E
 
 ## Decisions
 
-- gRPC は REST 等価を前提に設計し、エクスポ�Eト系は server-streaming でダウンロードできる案とする、E
+- gRPC は REST 等価を前提に設計し、エクスポ�Eト系は server-streaming でダウンロードできる案とする、E
 
 ## gRPC Verification (Draft)
 
-1. 実裁E��備
-2. `DeviceService` の gRPC 実裁E��帰�E�EDeviceServiceBase` 継承と実裁E��帰�E�、E
+1. 実裁E��備
+2. `DeviceService` の gRPC 実裁E��帰�E�EDeviceServiceBase` 継承と実裁E��帰�E�、E
 3. `Program.cs` の `MapGrpcService` と認証ミドルウェアが動作することを確認、E
-4. gRPC クライアント検証�E�ローカル�E�E
-5. `grpcurl` また�E `grpcui` を利用し、JWT をメタチE�Eタに付与して呼び出す、E
+4. gRPC クライアント検証�E�ローカル�E�E
+5. `grpcurl` また�E `grpcui` を利用し、JWT をメタチE�Eタに付与して呼び出す、E
 6. `GetSnapshot` / `StreamUpdates` の疎通を確認、E
-7. Graph / Registry / Telemetry / Control の吁ERPC で REST と同等�E応答�E容を確認、E
-8. Docker Compose 環墁E��の検証
-9. `api` サービスに gRPC ポ�Eト�E開を追加�E�忁E��に応じて�E�、E
+7. Graph / Registry / Telemetry / Control の吁ERPC で REST と同等�E応答�E容を確認、E
+8. Docker Compose 環墁E��の検証
+9. `api` サービスに gRPC ポ�Eト�E開を追加�E�忁E��に応じて�E�、E
 10. ローカルと Docker の両方で `grpcurl` による疎通確認を記録、E
 
 ## Decisions
 
 ## Retrospective
 
-- 新規ドキュメンチE`docs/api-gateway-apis.md` を追加し、README から参�Eした、E
+- 新規ドキュメンチE`docs/api-gateway-apis.md` を追加し、README から参�Eした、E
 
 ## Purpose
 Add tests that verify RDF-derived spatial nodes and relationships are exported into GraphSeedData (space grains and edges) so we can confirm where space grains and their relationships are generated.
@@ -963,34 +996,34 @@ Ran locally:
 # plans.md: Point Properties on Node/Device APIs
 
 ## Purpose
-GraphNodeGrain と PointGrain の関連めEAPI で活用し、`/api/nodes/{nodeId}` と `/api/devices/{deviceId}` の取得結果にポイント情報を「�Eロパティ」として含める。�Eロパティ名�E `pointType` を用ぁE��API 利用時にポイント情報をノーチEチE��イスの属性として一括取得できるようにする。�Eロパティとして返す値は **ポイント�E value と updated timestamp のみ** とし、他�EメタチE�Eタは別 API で取得する、E
+GraphNodeGrain と PointGrain の関連めEAPI で活用し、`/api/nodes/{nodeId}` と `/api/devices/{deviceId}` の取得結果にポイント情報を「�Eロパティ」として含める。�Eロパティ名�E `pointType` を用ぁE��API 利用時にポイント情報をノーチEチE��イスの属性として一括取得できるようにする。�Eロパティとして返す値は **ポイント�E value と updated timestamp のみ** とし、他�EメタチE�Eタは別 API で取得する、E
 
 ## Success Criteria
-1. `/api/nodes/{nodeId}` のレスポンスに `pointType` キーで **`value` と `updatedAt` のみ** が取得できる�E�EraphNodeSnapshot に追加フィールドを付与する形で後方互換�E�、E
-2. `/api/devices/{deviceId}` のレスポンスに `pointType` キーで **`value` と `updatedAt` のみ** が取得できる�E�既孁E`Properties` は保持し、�Eイント情報は追加フィールド）、E
-3. `pointType` が未設宁E空の場合�Eフォールバック規紁E��明確�E�侁E `PointId` また�E `Unknown`�E�、E
-4. チE��トで以下を検証:
+1. `/api/nodes/{nodeId}` のレスポンスに `pointType` キーで **`value` と `updatedAt` のみ** が取得できる�E�EraphNodeSnapshot に追加フィールドを付与する形で後方互換�E�、E
+2. `/api/devices/{deviceId}` のレスポンスに `pointType` キーで **`value` と `updatedAt` のみ** が取得できる�E�既孁E`Properties` は保持し、�Eイント情報は追加フィールド）、E
+3. `pointType` が未設宁E空の場合�Eフォールバック規紁E��明確�E�侁E `PointId` また�E `Unknown`�E�、E
+4. チE��トで以下を検証:
    - GraphNode 取得で `pointType` ↁE`{ value, updatedAt }` が含まれる
    - Device 取得で `pointType` ↁE`{ value, updatedAt }` が含まれる
-5. `dotnet build` と対象チE��トが通る�E�ローカル検証前提�E�、E
+5. `dotnet build` と対象チE��トが通る�E�ローカル検証前提�E�、E
 
 ## Steps
 1. **Point 付与ルールの整琁E*
-   - `pointType` の採用允E��EraphNodeDefinition.Attributes の `PointType`�E�を確定、E
-   - `pointType` 重褁E��の扱ぁE���E列化 or suffix 付与）を決定、E
-   - API レスポンスの追加フィールド名�E�侁E `pointProperties`�E�を確定、E
-2. **Graph から Point 解決の実裁E��釁E*
-   - ノ�Eド取得時: `GraphNodeSnapshot.OutgoingEdges` から `hasPoint` を辿り、Point ノ�Eド�E `PointType`/`PointId` を解決、E
-   - チE��イス取得時: `Equipment` ノ�Eド！EDeviceId` 属性一致�E�を解決 ↁE`hasPoint` から Point を�E挙、E
+   - `pointType` の採用允E��EraphNodeDefinition.Attributes の `PointType`�E�を確定、E
+   - `pointType` 重褁E��の扱ぁE���E列化 or suffix 付与）を決定、E
+   - API レスポンスの追加フィールド名�E�侁E `pointProperties`�E�を確定、E
+2. **Graph から Point 解決の実裁E��釁E*
+   - ノ�Eド取得時: `GraphNodeSnapshot.OutgoingEdges` から `hasPoint` を辿り、Point ノ�Eド�E `PointType`/`PointId` を解決、E
+   - チE��イス取得時: `Equipment` ノ�Eド！EDeviceId` 属性一致�E�を解決 ↁE`hasPoint` から Point を�E挙、E
 3. **ApiGateway 実裁E*
-   - `/api/nodes/{nodeId}`: GraphNodeSnapshot を取得し、PointGrain の最新値めE`pointType` キーで付与（返却するのは `value` と `updatedAt` のみ�E�、E
-   - `/api/devices/{deviceId}`: DeviceGrain snapshot に加えて、Graph 経由で同一 device のポイントを雁E��E�� `pointType` で返却�E�返却するのは `value` と `updatedAt` のみ�E�、E
-   - 共通ロジチE��は `GraphPointResolver` などの helper/service に雁E��E��E
+   - `/api/nodes/{nodeId}`: GraphNodeSnapshot を取得し、PointGrain の最新値めE`pointType` キーで付与（返却するのは `value` と `updatedAt` のみ�E�、E
+   - `/api/devices/{deviceId}`: DeviceGrain snapshot に加えて、Graph 経由で同一 device のポイントを雁E��E�� `pointType` で返却�E�返却するのは `value` と `updatedAt` のみ�E�、E
+   - 共通ロジチE��は `GraphPointResolver` などの helper/service に雁E��E��E
 4. **DataModel / Graph 属性整傁E*
-   - `OrleansIntegrationService.CreateGraphSeedData` の `PointType`/`PointId` 属性を前提に、忁E��なら不足時�E補完を追加、E
-5. **チE��ト追加/更新**
+   - `OrleansIntegrationService.CreateGraphSeedData` の `PointType`/`PointId` 属性を前提に、忁E��なら不足時�E補完を追加、E
+5. **チE��ト追加/更新**
    - `ApiGateway.Tests` に `GraphNodePointPropertiesTests` と `DevicePointPropertiesTests` を追加、E
-   - モチE�� GraphNode/PointGrain を用意し、`pointType` キーで値が返ることを検証、E
+   - モチE�� GraphNode/PointGrain を用意し、`pointType` キーで値が返ることを検証、E
 6. **検証**
    - `dotnet build`
    - `dotnet test src/ApiGateway.Tests`
@@ -1000,103 +1033,116 @@ GraphNodeGrain と PointGrain の関連めEAPI で活用し、`/api/nodes/{nodeI
 - [x] Step 2: Graph から Point 解決の設訁E
 - [x] Step 3: ApiGateway 実裁E
 - [ ] Step 4: DataModel/Graph 属性整傁E
-- [x] Step 5: チE��ト追加/更新
+- [x] Step 5: チE��ト追加/更新
 - [ ] Step 6: 検証
 
 ## Observations
-- Graph 側では `PointType` / `PointId` ぁE`GraphNodeDefinition.Attributes` に登録済みで、`hasPoint` edge で Equipment→Point が張られてぁE��、E
-- `/api/nodes/{nodeId}` は現在 GraphNodeSnapshot をそのまま返却してぁE��ため、追加フィールド�E後方互換で付与可能、E
-- `/api/devices/{deviceId}` は DeviceGrain の `LatestProps` のみ返却しており、�Eイント情報が別取得になってぁE��、E
-- 返却するポイント情報は **value と updatedAt のみ** に限定する！EointId/Unit/Meta は別 API�E�、E
- - `points` フィールドで `pointType` をキーに `{ value, updatedAt }` を返す実裁E��追加、E
- - `ApiGateway.Tests` にノ�EチEチE��イスの points 返却を検証するチE��トを追加、E
+- Graph 側では `PointType` / `PointId` ぁE`GraphNodeDefinition.Attributes` に登録済みで、`hasPoint` edge で Equipment→Point が張られてぁE��、E
+- `/api/nodes/{nodeId}` は現在 GraphNodeSnapshot をそのまま返却してぁE��ため、追加フィールド�E後方互換で付与可能、E
+- `/api/devices/{deviceId}` は DeviceGrain の `LatestProps` のみ返却しており、�Eイント情報が別取得になってぁE��、E
+- 返却するポイント情報は **value と updatedAt のみ** に限定する！EointId/Unit/Meta は別 API�E�、E
+ - `points` フィールドで `pointType` をキーに `{ value, updatedAt }` を返す実裁E��追加、E
+ - `ApiGateway.Tests` にノ�EチEチE��イスの points 返却を検証するチE��トを追加、E
 
 ## Decisions
-- API 互換性を維持するため、既存レスポンス構造は保持し、�Eイント情報は追加フィールチE`points` として返す、E
-- `pointType` が空/未設定�E場合�E `PointId` をキーにする�E�忁E��なめE`"Unknown:{PointId}"` の形式で衝突を回避�E�、E
+- API 互換性を維持するため、既存レスポンス構造は保持し、�Eイント情報は追加フィールチE`points` として返す、E
+- `pointType` が空/未設定�E場合�E `PointId` をキーにする�E�忁E��なめE`"Unknown:{PointId}"` の形式で衝突を回避�E�、E
 - ポイント情報の値は `{ value, updatedAt }` のみに限定する、E
- - `pointType` が重褁E��る場合�E suffix 付与！E_2`, `_3`�E�で区別する、E
+ - `pointType` が重褁E��る場合�E suffix 付与！E_2`, `_3`�E�で区別する、E
 
 ## Retrospective
 *To be updated after completion.*
 
 ---
 
-# plans.md: AdminGateway RDF起点 UIチE��ト設訁E
+# plans.md: AdminGateway RDF起点 UIチE��ト設訁E
 
 ## Purpose
-AdminGateway につぁE��、RDF を�E力として grain を生成し、ツリー UI の動作を継続検証できるチE��ト戦略を定義する、E
+AdminGateway につぁE��、RDF を�E力として grain を生成し、ツリー UI の動作を継続検証できるチE��ト戦略を定義する、E
 
 ### 現在フェーズ
-- **Phase 2: Blazor UI チE��トを追加する** を完亁E��次は Phase 3�E�E2E UI チE��ト）に進む、E
+- **Phase 2: Blazor UI チE��トを追加する** を完亁E��次は Phase 3�E�E2E UI チE��ト）に進む、E
+
+### 現在フェーズ
+- **Phase 2: Blazor UI テストを追加する** を完了。次は Phase 3（E2E UI テスト）に進む。
 
 ## Success Criteria
-1. AdminGateway の現行フロー�E�EDF→GraphSeed→AdminMetricsService→MudTreeView�E�を前提に、層別チE��ト方針（データ/サービス/UI/E2E�E�を斁E��化する、E
-2. 最小実行単位（最初�Eスプリント）で着手できるチE��ト導�EスチE��プを明示する、E
+1. AdminGateway の現行フロー�E�EDF→GraphSeed→AdminMetricsService→MudTreeView�E�を前提に、層別チE��ト方針（データ/サービス/UI/E2E�E�を斁E��化する、E
+2. 最小実行単位（最初�Eスプリント）で着手できるチE��ト導�EスチE��プを明示する、E
 3. README のドキュメント一覧から本方針に辿れるようにする、E
 
 ## Steps
-1. AdminGateway と RDF/grain 関連実裁E��確認し、テスト設計上�E論点を抽出する、E
+<<<<<<< ours
+1. AdminGateway と RDF/grain 関連実裁E��確認し、テスト設計上�E論点を抽出する、E
 2. 設計方針ドキュメントを `docs/` に追加する、E
 3. README の Documentation セクションにリンクを追加する、E
 4. `dotnet build` / `dotnet test` で回帰確認する、E
-5. Phase 2 として `AdminGateway.Tests` に bUnit を導�Eし、`Admin.razor` の表示/選抁EUI チE��トを追加する、E
-6. `dotnet test src/AdminGateway.Tests` を実行し、Phase 2 の追加チE��トが通ることを確認する、E
+5. Phase 2 として `AdminGateway.Tests` に bUnit を導�Eし、`Admin.razor` の表示/選抁EUI チE��トを追加する、E
+6. `dotnet test src/AdminGateway.Tests` を実行し、Phase 2 の追加チE��トが通ることを確認する、E
+=======
+1. AdminGateway と RDF/grain 関連実装を確認し、テスト設計上の論点を抽出する。
+2. 設計方針ドキュメントを `docs/` に追加する。
+3. README の Documentation セクションにリンクを追加する。
+4. `dotnet build` / `dotnet test` で回帰確認する。
+5. Phase 2 として `AdminGateway.Tests` に bUnit を導入し、`Admin.razor` の表示/選択 UI テストを追加する。
+6. `dotnet test src/AdminGateway.Tests` を実行し、Phase 2 の追加テストが通ることを確認する。
+>>>>>>> theirs
 
 ## Progress
 - [x] AdminGateway の構造と既存ドキュメントを確誁E
 - [x] 設計方針ドキュメントを追加
 - [x] README へのリンク追加
-- [x] ビルチEチE��ト�E実行結果を記録
-- [x] Phase 1 (サービス層チE��ト方針�E確宁E
-- [x] Phase 2 (bUnit UI チE��ト実裁E
-- [x] Phase 2 のチE��ト実行確誁E(`dotnet test src/AdminGateway.Tests`)
+<<<<<<< ours
+- [x] ビルチEチE��ト�E実行結果を記録
+- [x] Phase 1 (サービス層チE��ト方針�E確宁E
+- [x] Phase 2 (bUnit UI チE��ト実裁E
+- [x] Phase 2 のチE��ト実行確誁E(`dotnet test src/AdminGateway.Tests`)
 
 ## Observations
-- `src/AdminGateway.Tests` を新設し、bUnit + xUnit + Moq で `Admin.razor` の UI チE��ト実行基盤を追加した、E
-- チE��ー構築ロジチE��は `AdminMetricsService` 冁E��雁E��E��れており、E��係解釈！EhasPart`/`isPartOf`/`locatedIn`/`isLocationOf`�E�と `Device` 正規化が主要なチE��ト対象、E
-- `dotnet test src/AdminGateway.Tests` で Phase 2 の 2 チE��ト（ツリー表示 / ノ�Eド選択詳細表示�E�を追加し通過した、E
-- `AdminMetricsService` ぁEconcrete + internal のため、`AdminGateway` 側に `InternalsVisibleTo("AdminGateway.Tests")` を追加してチE��トかめEDI 構�Eできるようにした、E
+- `src/AdminGateway.Tests` を新設し、bUnit + xUnit + Moq で `Admin.razor` の UI チE��ト実行基盤を追加した、E
+- チE��ー構築ロジチE��は `AdminMetricsService` 冁E��雁E��E��れており、E��係解釈！EhasPart`/`isPartOf`/`locatedIn`/`isLocationOf`�E�と `Device` 正規化が主要なチE��ト対象、E
+- `dotnet test src/AdminGateway.Tests` で Phase 2 の 2 チE��ト（ツリー表示 / ノ�Eド選択詳細表示�E�を追加し通過した、E
+- `AdminMetricsService` ぁEconcrete + internal のため、`AdminGateway` 側に `InternalsVisibleTo("AdminGateway.Tests")` を追加してチE��トかめEDI 構�Eできるようにした、E
 
 ## Decisions
-- 今回はコード実裁E��り�Eに、導�E頁E��が明確なチE��ト設計方針をドキュメント化する、E
-- 層A�E�EDF解析！E層B�E�サービス�E�E層C�E�EUnit UI�E�E統吁E�E�Elaywright E2E�E��E 4 区刁E��段階導�Eする、E
-- Phase 2 はまぁE`Admin.razor` の最封E2 ケース�E�階層表示 / ノ�Eド選択）で固定し、壊れめE��ぁE��示ロジチE��めEPR ごとに検知できる形にする、E
+- 今回はコード実裁E��り�Eに、導�E頁E��が明確なチE��ト設計方針をドキュメント化する、E
+- 層A�E�EDF解析！E層B�E�サービス�E�E層C�E�EUnit UI�E�E統吁E�E�Elaywright E2E�E��E 4 区刁E��段階導�Eする、E
+- Phase 2 はまぁE`Admin.razor` の最封E2 ケース�E�階層表示 / ノ�Eド選択）で固定し、壊れめE��ぁE��示ロジチE��めEPR ごとに検知できる形にする、E
 
 ## Retrospective
-- Phase 2 の最小スコープ（表示 + ノ�Eド選択）を実裁E��きたため、次は Phase 3 の Playwright E2E へ接続しめE��ぁE��台が整った、E
-- `dotnet build` / `dotnet test` は成功したが、既孁Ewarning�E�EudBlazor 近似解決、Moq 脁E��性通知、XML コメント警告）�E継続してぁE��ため別タスクでの解消が忁E��、E
+- Phase 2 の最小スコープ（表示 + ノ�Eド選択）を実裁E��きたため、次は Phase 3 の Playwright E2E へ接続しめE��ぁE��台が整った、E
+- `dotnet build` / `dotnet test` は成功したが、既孁Ewarning�E�EudBlazor 近似解決、Moq 脁E��性通知、XML コメント警告）�E継続してぁE��ため別タスクでの解消が忁E��、E
 
 ---
 
 # plans.md: Fix Spatial Relationships in seed-complex.ttl
 
 ## Purpose
-seed-complex.ttl �� REC namespace ������Ă���ASite/Building/Level/Area �� hasPart/locatedIn �֌W����͂��ꂸ GraphNodeGrain �̃G�b�W����ɂȂ�B������C�����ċ�ԊK�w�����������f�����悤�ɂ���B
+seed-complex.ttl �� REC namespace ������Ă���ASite/Building/Level/Area �� hasPart/locatedIn �֌W����͂��ꂸ GraphNodeGrain �̃G�b�W����ɂȂ�B������C�����ċ�ԊK�w�����������f�����悤�ɂ���B
 
 ## Success Criteria
-1. `src/Telemetry.E2E.Tests/seed-complex.ttl` �� REC namespace �� `https://w3id.org/rec/` �ɂȂ��Ă���B
-2. `RdfAnalyzerServiceShaclTests.AnalyzeRdfContent_WithComplexHierarchy_ParsesSuccessfully` �ŊK�w�֌W�� URI�iSiteUri/BuildingUri/LevelUri/AreaUri�j���ݒ肳��邱�Ƃ����؂���B
-3. `dotnet test src/DataModel.Analyzer.Tests` ����������B
+1. `src/Telemetry.E2E.Tests/seed-complex.ttl` �� REC namespace �� `https://w3id.org/rec/` �ɂȂ��Ă���B
+2. `RdfAnalyzerServiceShaclTests.AnalyzeRdfContent_WithComplexHierarchy_ParsesSuccessfully` �ŊK�w�֌W�� URI�iSiteUri/BuildingUri/LevelUri/AreaUri�j���ݒ肳��邱�Ƃ����؂���B
+3. `dotnet test src/DataModel.Analyzer.Tests` ����������B
 
 ## Steps
-1. seed-complex.ttl �� `rec:` namespace ���C������B
-2. `RdfAnalyzerServiceShaclTests` �ɊK�w�֌W�̃A�T�[�V������ǉ�����B
-3. `dotnet test src/DataModel.Analyzer.Tests` �����s����B
+1. seed-complex.ttl �� `rec:` namespace ���C������B
+2. `RdfAnalyzerServiceShaclTests` �ɊK�w�֌W�̃A�T�[�V������ǉ�����B
+3. `dotnet test src/DataModel.Analyzer.Tests` �����s����B
 
 ## Progress
-- [x] Step 1: seed-complex.ttl namespace �C��
-- [x] Step 2: hierarchy assertions �ǉ�
-- [x] Step 3: DataModel.Analyzer.Tests ���s
+- [x] Step 1: seed-complex.ttl namespace �C��
+- [x] Step 2: hierarchy assertions �ǉ�
+- [x] Step 3: DataModel.Analyzer.Tests ���s
 
 ## Observations
-- seed-complex.ttl �� REC namespace ������Ă���AREC �n�� hasPart/locatedIn ����͂��ꂸ�K�w�G�b�W���������Ă����B
+- seed-complex.ttl �� REC namespace ������Ă���AREC �n�� hasPart/locatedIn ����͂��ꂸ�K�w�G�b�W���������Ă����B
 
 ## Decisions
-- �T���v�� RDF �� namespace �𐳂��A�e�X�g�ŊK�w�֌W�����؂��čĔ��h�~����B
+- �T���v�� RDF �� namespace �𐳂��A�e�X�g�ŊK�w�֌W�����؂��čĔ��h�~����B
 
 ## Retrospective
-- dotnet test src/DataModel.Analyzer.Tests ������ (20 tests)�B
+- dotnet test src/DataModel.Analyzer.Tests ������ (20 tests)�B
 
 
 
@@ -1105,25 +1151,159 @@ seed-complex.ttl �� REC namespace ������Ă���ASite/Building/Level/Area �� hasP
 # plans.md: Admin Console Node Details Table
 
 ## Purpose
-Node Details �̕\����\�`���ɂ��ăL�[�ƒl�̗񑵂������P����B
+Node Details �̕\����\�`���ɂ��ăL�[�ƒl�̗񑵂������P����B
 
 ## Success Criteria
-1. Node Details �� ID/Type/Attributes/Edges/Point Snapshot ���e�[�u���\���ɂȂ�B
-2. ��ʏ�ō��ڂ������Č��₷���Ȃ�B
+1. Node Details �� ID/Type/Attributes/Edges/Point Snapshot ���e�[�u���\���ɂȂ�B
+2. ��ʏ�ō��ڂ������Č��₷���Ȃ�B
 
 ## Steps
-1. Admin.razor �� Node Details ���e�[�u���ɒu������B
-2. app.css �� details-table �X�^�C����ǉ�����B
+1. Admin.razor �� Node Details ���e�[�u���ɒu������B
+2. app.css �� details-table �X�^�C����ǉ�����B
 
 ## Progress
-- [x] Step 1: Node Details ���e�[�u����
-- [x] Step 2: details-table �X�^�C���ǉ�
+- [x] Step 1: Node Details ���e�[�u����
+- [x] Step 2: details-table �X�^�C���ǉ�
 
 ## Observations
-- MudList �x�[�X���� key/value �̍s����������邽�߁A�e�[�u�����ŉǐ������P�B
+- MudList �x�[�X���� key/value �̍s����������邽�߁A�e�[�u�����ŉǐ������P�B
 
 ## Decisions
-- MudTable �ł͂Ȃ��y�ʂ� HTML table + CSS �œ��ꊴ���o���B
+- MudTable �ł͂Ȃ��y�ʂ� HTML table + CSS �œ��ꊴ���o���B
 
 ## Retrospective
 *To be updated after verification.*
+=======
+- [x] ビルド/テストの実行結果を記録
+- [x] Phase 1 (サービス層テスト方針の確定)
+- [x] Phase 2 (bUnit UI テスト実装)
+- [x] Phase 2 のテスト実行確認 (`dotnet test src/AdminGateway.Tests`)
+
+## Observations
+- `src/AdminGateway.Tests` を新設し、bUnit + xUnit + Moq で `Admin.razor` の UI テスト実行基盤を追加した。
+- ツリー構築ロジックは `AdminMetricsService` 内に集約されており、関係解釈（`hasPart`/`isPartOf`/`locatedIn`/`isLocationOf`）と `Device` 正規化が主要なテスト対象。
+- `dotnet test src/AdminGateway.Tests` で Phase 2 の 2 テスト（ツリー表示 / ノード選択詳細表示）を追加し通過した。
+- `AdminMetricsService` が concrete + internal のため、`AdminGateway` 側に `InternalsVisibleTo("AdminGateway.Tests")` を追加してテストから DI 構成できるようにした。
+
+## Decisions
+- 今回はコード実装より先に、導入順序が明確なテスト設計方針をドキュメント化する。
+- 層A（RDF解析）/層B（サービス）/層C（bUnit UI）/統合D（Playwright E2E）の 4 区分で段階導入する。
+- Phase 2 はまず `Admin.razor` の最小 2 ケース（階層表示 / ノード選択）で固定し、壊れやすい表示ロジックを PR ごとに検知できる形にする。
+
+## Retrospective
+- Phase 2 の最小スコープ（表示 + ノード選択）を実装できたため、次は Phase 3 の Playwright E2E へ接続しやすい土台が整った。
+- `dotnet build` / `dotnet test` は成功したが、既存 warning（MudBlazor 近似解決、Moq 脆弱性通知、XML コメント警告）は継続しているため別タスクでの解消が必要。
+>>>>>>> theirs
+
+---
+
+# plans.md: Fix AdminGateway.Tests.csproj Merge Conflict
+
+## Purpose
+Resolve the XML merge conflict in `src/AdminGateway.Tests/AdminGateway.Tests.csproj` that breaks `dotnet build`.
+
+## Success Criteria
+1. `AdminGateway.Tests.csproj` contains valid XML with no conflict markers.
+2. Moq package version aligns with the rest of the solution (`4.20.72`).
+
+## Steps
+1. Remove conflict markers and keep the desired Moq package reference.
+2. Record the change and any follow-up verification.
+
+## Progress
+- [x] Remove conflict markers and keep Moq `4.20.72`.
+- [ ] Verify with `dotnet build`.
+
+## Observations
+- Build failed because the project file had Git conflict markers at line 12.
+
+## Decisions
+- Kept Moq `4.20.72` to match `src/ApiGateway.Tests`.
+
+## Retrospective
+- `dotnet build` not run yet in this environment.
+
+## Update
+- Removed merge conflict markers in `src/AdminGateway.Tests/AdminPageTests.cs` based on `dotnet build` failure logs.
+
+---
+
+# plans.md: Admin UI Graph RDF Import File Picker
+
+## Purpose
+Allow the Admin UI Graph RDF Import to accept a user-selected RDF file from the browser, so operators can import arbitrary RDF without typing a server path.
+
+## Success Criteria
+1. Admin UI shows a file picker for RDF files alongside the existing path input.
+2. Selected file is uploaded to the server (size-limited) and stored in a temporary/shared directory.
+3. Import uses the uploaded file path when present; falls back to the manual RDF path otherwise.
+4. Upload status and errors are visible in the UI.
+
+## Steps
+1. Add file input handling in `Admin.razor` using `InputFile` and store uploads on the server.
+2. Prefer uploaded file path in `TriggerGraphSeedAsync` and keep manual path as fallback.
+3. Add configuration for upload directory and size limit (with reasonable defaults).
+4. Update docs to describe the new file picker and the shared volume requirement for Docker.
+
+## Progress
+- [ ] Add file input + upload handling.
+- [ ] Wire import to uploaded file path fallback.
+- [ ] Add config defaults and docs note.
+- [ ] Verify build.
+
+## Observations
+- The current Graph RDF Import only supports manual path input.
+
+## Decisions
+- Keep the manual path input to support existing workflows.
+
+## Verification
+- `dotnet build`
+
+## Retrospective
+- TBD
+
+---
+
+# plans.md: Fix Graph RDF Upload Path + Remove Manual Path Input
+
+## Purpose
+Fix Graph RDF Import upload failures ("Could not find a part of the path '/tmp/orleans-telemetry-uploads/...'") by saving uploads to a directory shared by Admin and Silo, and remove the manual RDF path input so import is driven by file selection only.
+
+## Success Criteria
+1. Graph RDF Import UI no longer shows the manual `RDF path` input; only file selection and tenant remain.
+2. Uploaded RDF path is readable by Silo and `POST /admin/graph/import` completes without the missing-path error.
+3. `ADMIN_GRAPH_UPLOAD_DIR` (or `Admin:GraphUploadDirectory`) is used consistently by Admin and Silo.
+4. `docker-compose.yml` mounts a shared upload volume for both Admin and Silo.
+
+## Steps
+1. Remove manual RDF path input from `src/AdminGateway/Pages/Admin.razor` and require upload for import.
+2. Update import logic to error when no upload is present.
+3. Add shared upload volume and env var to `docker-compose.yml` for Admin and Silo.
+4. Update docs/README if needed.
+
+## Progress
+- [ ] Remove manual RDF path input
+- [ ] Require uploaded file path for import
+- [ ] Add shared upload volume to docker-compose
+- [ ] Update docs/README if needed
+
+## Observations
+- Uploading to `/tmp/orleans-telemetry-uploads` inside the Admin container is not accessible to the Silo container, causing import to fail.
+
+## Decisions
+- Standardize the upload directory via `ADMIN_GRAPH_UPLOAD_DIR` and mount the same host directory into Admin and Silo.
+
+## Retrospective
+*To be updated after verification.*
+
+## Update (2026-02-06)
+- [x] Remove manual RDF path input
+- [x] Require uploaded file path for import
+- [x] Add shared upload volume to docker-compose
+- [x] Update docs/README
+
+## Update (2026-02-06)
+- [x] Fix Graph RDF Import button label ternary rendering
+- [x] Balance Hierarchy/Details panes to ~50/50
+- [x] Wrap long Node Details metadata values within pane
