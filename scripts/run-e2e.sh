@@ -55,7 +55,6 @@ run_docker() {
   OVERRIDE_FILE="$TEMP_DIR/docker-compose.override.yml"
 
   cat <<'YML' > "$OVERRIDE_FILE"
-version: "3.9"
 services:
   silo:
     build:
@@ -116,6 +115,14 @@ YML
     exit 1
   fi
 
+  log "Waiting for mock OIDC"
+  if ! wait_for_url "http://localhost:8081/default/.well-known/openid-configuration" 60; then
+    echo "Mock OIDC did not become ready in time" >&2
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" ps >&2 || true
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" logs --no-color mock-oidc >&2 || true
+    exit 1
+  fi
+
   local token token_response
   token=""
   token_response=""
@@ -125,10 +132,16 @@ YML
       -u "test-client:test-secret" \
       -H "Content-Type: application/x-www-form-urlencoded" \
       -d "grant_type=client_credentials" 2>/dev/null || true)
-    token=$(python3 -c 'import json,sys; \
-raw=sys.stdin.read(); \
-data=json.loads(raw) if raw else {}; \
-print((data if isinstance(data, dict) else {}).get("access_token", ""))' <<< "$token_response")
+    token=$(TOKEN_RESPONSE="$token_response" python3 - <<'PY'
+import json, os
+raw = os.environ.get("TOKEN_RESPONSE", "")
+try:
+    data = json.loads(raw) if raw.strip() else {}
+except:
+    data = {}
+print((data if isinstance(data, dict) else {}).get("access_token", ""))
+PY
+)
     if [[ -n "$token" ]]; then
       break
     fi

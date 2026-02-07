@@ -2,6 +2,37 @@
 
 ---
 
+# plans.md: Document SiloHost Connector Configuration
+
+## Purpose
+SiloHost におけるコネクタ設定方法（有効化・設定ソース・環境変数の優先関係）を明確にし、必要であればドキュメントへ追記する。
+
+## Success Criteria
+1. `docs/telemetry-connector-ingest.md` に SiloHost のコネクタ設定手順（`TelemetryIngest:Enabled` と各コネクタ設定）を追記する。
+2. RabbitMQ/Kafka/Simulator の設定例と、SiloHost が参照する構成場所（`appsettings.json`/環境変数）の関係が説明されている。
+3. 変更点が plans.md に記録される。
+
+## Steps
+1. 既存ドキュメントでの不足点を確認する。
+2. `docs/telemetry-connector-ingest.md` に SiloHost 設定セクションを追加する。
+3. 記録を更新する。
+
+## Progress
+- [x] Step 1: 既存ドキュメント確認
+- [x] Step 2: ドキュメント追記
+- [x] Step 3: 記録更新
+
+## Observations
+- `docs/telemetry-connector-ingest.md` に SiloHost の設定方法が明示されていなかったため、DI 登録と `TelemetryIngest` 設定の関係を追記した。
+
+## Decisions
+- 既存ドキュメント内に「SiloHost でのコネクタ設定」セクションを追加し、README は変更しない（既存リンクで到達可能）。
+
+## Retrospective
+- 追加した設定例は既存コードの既定値と環境変数フォールバックに合わせた。
+
+---
+
 # plans.md: Move RDF seed fixtures to data
 
 ## Purpose

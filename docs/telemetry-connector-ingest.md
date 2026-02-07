@@ -109,6 +109,44 @@ PointId をベースにした逆引きが難しい場合は、コネクタ自身
 > 例: `appsettings.json` では `BatchSize=100`、`ChannelCapacity=10000`、`Enabled` と `EventSinks:Enabled` を設定しています。【F:src/SiloHost/appsettings.json†L1-L20】
 > 既定値は `TelemetryIngestOptions` に定義されています。【F:src/Telemetry.Ingest/TelemetryIngestOptions.cs†L1-L17】
 
+## SiloHost でのコネクタ設定
+
+SiloHost は起動時にコネクタを DI に登録し、どのコネクタを起動するかは `TelemetryIngest:Enabled` で制御します。【F:src/SiloHost/Program.cs†L17-L44】【F:src/Telemetry.Ingest/TelemetryIngestCoordinator.cs†L39-L70】
+登録されているコネクタ名は `RabbitMq` / `Kafka` / `Simulator` です。【F:src/Telemetry.Ingest/RabbitMqIngestConnector.cs†L24-L33】【F:src/Telemetry.Ingest/KafkaIngestConnector.cs†L20-L29】【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L20-L30】
+
+設定の流れは次の通りです。
+
+1. `TelemetryIngest:Enabled` に起動したいコネクタ名を列挙します（空の場合は登録済みの全コネクタが起動します）。
+2. `TelemetryIngest:RabbitMq` / `TelemetryIngest:Kafka` / `TelemetryIngest:Simulator` に各コネクタの詳細設定を記述します。
+3. SiloHost の `appsettings.json` や環境変数で構成を上書きします。
+
+例: RabbitMQ を有効化する `appsettings.json` の抜粋です。
+
+```json
+{
+  "TelemetryIngest": {
+    "Enabled": [ "RabbitMq" ],
+    "BatchSize": 100,
+    "ChannelCapacity": 10000,
+    "RabbitMq": {
+      "HostName": "mq",
+      "Port": 5672,
+      "UserName": "guest",
+      "Password": "guest",
+      "QueueName": "telemetry",
+      "PrefetchCount": 100
+    }
+  }
+}
+```
+
+RabbitMQ/Kafka は環境変数でのフォールバックも行います。
+
+1. RabbitMQ: `RABBITMQ_HOST` / `RABBITMQ_PORT` / `RABBITMQ_USER` / `RABBITMQ_PASS`（未設定時の既定は `mq:5672` / `user` / `password` です）。【F:src/Telemetry.Ingest/RabbitMqIngestConnector.cs†L93-L146】
+2. Kafka: `KAFKA_BOOTSTRAP_SERVERS` / `KAFKA_GROUP_ID` / `KAFKA_TOPIC` / `KAFKA_AUTO_OFFSET_RESET`（未設定時の既定は `localhost:9092` / `telemetry-ingest` / `telemetry` / `Latest` です）。【F:src/Telemetry.Ingest/KafkaIngestConnector.cs†L106-L163】
+
+Simulator は環境変数のフォールバックを持たないため、必要に応じて `TelemetryIngest:Simulator` を `appsettings.json` 等で明示的に設定してください。【F:src/Telemetry.Ingest/SimulatorIngestOptions.cs†L1-L19】
+
 ## Publisher 制御コマンド
 
 - Publisher は `CONTROL_QUEUE`（既定: `telemetry-control`）を監視し、RabbitMQ 経由で JSON 制御コマンドを受け取ります。
