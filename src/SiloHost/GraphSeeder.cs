@@ -31,6 +31,62 @@ internal sealed class GraphSeeder
         try
         {
             var seed = await _integration.ExtractGraphSeedDataAsync(path);
+            return await ApplySeedAsync(seed, path, tenantId, start, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var failedTime = DateTimeOffset.UtcNow;
+            _logger.LogError(ex, "Graph seed failed for {Path} (tenant: {Tenant})", path, tenantId);
+            return new GraphSeedStatus
+            {
+                Success = false,
+                TenantId = tenantId,
+                Path = path,
+                StartedAt = start,
+                CompletedAt = failedTime,
+                NodeCount = 0,
+                EdgeCount = 0,
+                Message = ex.Message
+            };
+        }
+    }
+
+    public async Task<GraphSeedStatus> SeedFromContentAsync(string content, string sourceName, string tenantId, CancellationToken cancellationToken)
+    {
+        tenantId = string.IsNullOrWhiteSpace(tenantId) ? "default" : tenantId;
+        var start = DateTimeOffset.UtcNow;
+        try
+        {
+            var seed = await _integration.ExtractGraphSeedDataFromContentAsync(content, sourceName);
+            return await ApplySeedAsync(seed, sourceName, tenantId, start, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var failedTime = DateTimeOffset.UtcNow;
+            _logger.LogError(ex, "Graph seed failed for {Path} (tenant: {Tenant})", sourceName, tenantId);
+            return new GraphSeedStatus
+            {
+                Success = false,
+                TenantId = tenantId,
+                Path = sourceName,
+                StartedAt = start,
+                CompletedAt = failedTime,
+                NodeCount = 0,
+                EdgeCount = 0,
+                Message = ex.Message
+            };
+        }
+    }
+
+    private async Task<GraphSeedStatus> ApplySeedAsync(
+        GraphSeedData seed,
+        string sourceName,
+        string tenantId,
+        DateTimeOffset start,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
             var nodeCounts = seed.Nodes.GroupBy(n => n.NodeType)
                 .ToDictionary(g => g.Key, g => g.Count());
             _logger.LogInformation("Graph seed nodes by type: {NodeCounts}", nodeCounts);
@@ -67,7 +123,7 @@ internal sealed class GraphSeeder
             var completed = DateTimeOffset.UtcNow;
             await registry.RegisterTenantAsync(tenantId);
             _logger.LogInformation("Graph seed completed. Path={Path} Tenant={Tenant} Nodes={NodeCount} Edges={EdgeCount}",
-                path,
+                sourceName,
                 tenantId,
                 seed.Nodes.Count,
                 seed.Edges.Count);
@@ -76,7 +132,7 @@ internal sealed class GraphSeeder
             {
                 Success = true,
                 TenantId = tenantId,
-                Path = path,
+                Path = sourceName,
                 StartedAt = start,
                 CompletedAt = completed,
                 NodeCount = seed.Nodes.Count,
@@ -86,12 +142,12 @@ internal sealed class GraphSeeder
         catch (Exception ex)
         {
             var failedTime = DateTimeOffset.UtcNow;
-            _logger.LogError(ex, "Graph seed failed for {Path} (tenant: {Tenant})", path, tenantId);
+            _logger.LogError(ex, "Graph seed failed for {Path} (tenant: {Tenant})", sourceName, tenantId);
             return new GraphSeedStatus
             {
                 Success = false,
                 TenantId = tenantId,
-                Path = path,
+                Path = sourceName,
                 StartedAt = start,
                 CompletedAt = failedTime,
                 NodeCount = 0,

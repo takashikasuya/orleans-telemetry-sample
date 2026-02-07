@@ -147,6 +147,65 @@ RabbitMQ/Kafka は環境変数でのフォールバックも行います。
 
 Simulator は環境変数のフォールバックを持たないため、必要に応じて `TelemetryIngest:Simulator` を `appsettings.json` 等で明示的に設定してください。【F:src/Telemetry.Ingest/SimulatorIngestOptions.cs†L1-L19】
 
+## Simulator コネクタの動作原理
+
+Simulator は一定間隔で擬似テレメトリを生成し、`TelemetryPointMsg` をチャネルに書き込みます。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L15-L72】
+
+動作概要:
+
+1. `DeviceCount` 件のデバイスを想定し、`DeviceIdPrefix` に 1 始まりの連番を付けた `deviceId` を生成します（例: `sim-1`, `sim-2`）。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L32-L48】
+2. 各デバイスに対して `PointsPerDevice` 個のポイントを作り、`p1`, `p2` ... の `pointId` を付けます。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L40-L49】
+3. 値は `0.0`〜`100.0` の乱数（小数第 3 位で丸め）を生成します。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L49-L50】
+4. デバイスごとに `Sequence` を単調増加で更新します（ポイントごとではなくデバイス単位）。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L40-L56】
+5. `IntervalMilliseconds` 間隔で同じ処理を繰り返します（最小 10ms に丸め込み）。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L35-L63】
+
+そのため、Simulator の出力は **デバイス数 × ポイント数** のメッセージが 1 サイクルで発生し、`TenantId` / `BuildingName` / `SpaceId` は固定値で送られます。
+
+## Simulator 設定
+
+`TelemetryIngest:Simulator` の設定項目は以下の通りです。【F:src/Telemetry.Ingest/SimulatorIngestOptions.cs†L1-L19】
+
+| 設定キー | 既定値 | 役割 |
+| --- | --- | --- |
+| TenantId | `tenant` | 送信するテナント ID |
+| BuildingName | `building` | 送信する建物名 |
+| SpaceId | `space` | 送信する空間/ゾーン ID |
+| DeviceIdPrefix | `device` | デバイス ID の先頭文字列 |
+| DeviceCount | `1` | 生成するデバイス数（最小 1） |
+| PointsPerDevice | `1` | 1 デバイスあたりのポイント数（最小 1） |
+| IntervalMilliseconds | `2000` | 生成間隔 (ms、最小 10ms) |
+
+設定例:
+
+```json
+{
+  "TelemetryIngest": {
+    "Enabled": [ "Simulator" ],
+    "BatchSize": 100,
+    "ChannelCapacity": 10000,
+    "Simulator": {
+      "TenantId": "t1",
+      "BuildingName": "building-a",
+      "SpaceId": "floor-1",
+      "DeviceIdPrefix": "sim-",
+      "DeviceCount": 2,
+      "PointsPerDevice": 3,
+      "IntervalMilliseconds": 500
+    }
+  }
+}
+```
+
+### Simulator の Graph Seed 生成
+
+Simulator が有効な場合、SiloHost は **既存の RDF シードとは別に** Simulator 用の RDF を動的に生成し、GraphSeed に追加します。
+これにより Admin UI / API で Simulator 由来の Site/Building/Level/Area/Equipment/Point を確認できます。
+
+- 生成される Site/Building/Level/Area の名称は `Simulator-Site` / `Simulator-Building` / `Simulator-Level` / `Simulator-Area` です。
+- 既存の `RDF_SEED_PATH` が設定されている場合も、**同一テナント内に追加**されます（結果的に 2 サイト以上になります）。
+- 追加のシードは `TENANT_ID` があればそれを使い、未設定の場合は `TelemetryIngest:Simulator:TenantId` が使用されます。
+- Point Snapshot を確認するため、`TelemetryIngest:Simulator:BuildingName` と `SpaceId` は Simulator シードの名称（`Simulator-Building` / `Simulator-Area`）と一致させてください。
+
 ## Publisher 制御コマンド
 
 - Publisher は `CONTROL_QUEUE`（既定: `telemetry-control`）を監視し、RabbitMQ 経由で JSON 制御コマンドを受け取ります。

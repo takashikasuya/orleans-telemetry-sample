@@ -122,6 +122,17 @@ public class OrleansIntegrationService
     }
 
     /// <summary>
+    /// RDFコンテンツからグラフシードデータを抽出
+    /// </summary>
+    public async Task<GraphSeedData> ExtractGraphSeedDataFromContentAsync(string content, string sourceName)
+    {
+        _logger.LogInformation("RDFコンテンツからグラフシードを抽出開始: {SourceName}", sourceName);
+
+        var model = await _analyzer.AnalyzeFromContentAsync(content, sourceName);
+        return CreateGraphSeedData(model);
+    }
+
+    /// <summary>
     /// BuildingDataModelからグラフシードデータを生成
     /// </summary>
     public GraphSeedData CreateGraphSeedData(BuildingDataModel model)

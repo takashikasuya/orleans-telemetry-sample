@@ -35,8 +35,8 @@ services:
       TelemetryIngest__Enabled__0: Simulator
       TelemetryIngest__EventSinks__Enabled__0: ParquetStorage
       TelemetryIngest__Simulator__TenantId: t1
-      TelemetryIngest__Simulator__BuildingName: building
-      TelemetryIngest__Simulator__SpaceId: space
+      TelemetryIngest__Simulator__BuildingName: Simulator-Building
+      TelemetryIngest__Simulator__SpaceId: Simulator-Area
       TelemetryIngest__Simulator__DeviceIdPrefix: device
       TelemetryIngest__Simulator__DeviceCount: "1"
       TelemetryIngest__Simulator__PointsPerDevice: "1"

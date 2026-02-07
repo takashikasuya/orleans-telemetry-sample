@@ -33,6 +33,102 @@ SiloHost におけるコネクタ設定方法（有効化・設定ソース・�
 
 ---
 
+# plans.md: Document Simulator Connector Behavior and Settings
+
+## Purpose
+Simulator コネクタの動作原理と設定項目を明文化し、ドキュメントに追記する。
+
+## Success Criteria
+1. `docs/telemetry-connector-ingest.md` に Simulator の動作（生成ループ、値、ID ルール）を説明する節がある。
+2. `TelemetryIngest:Simulator` の設定項目と既定値が説明されている。
+3. 変更点が plans.md に記録される。
+
+## Steps
+1. Simulator の実装を確認して動作と設定を整理する。
+2. ドキュメントに Simulator 節を追加する。
+3. 記録を更新する。
+
+## Progress
+- [x] Step 1: 実装確認
+- [x] Step 2: ドキュメント追記
+- [x] Step 3: 記録更新
+
+## Observations
+- Simulator はデバイス単位で `Sequence` を増やし、ポイント ID は `p1...` で固定生成される。
+
+## Decisions
+- 既存のコネクタドキュメントに Simulator 節を追加し、他ドキュメントへのリンク追加は行わない。
+
+## Retrospective
+- 既定値と最小値（10ms）を明記して、運用時の負荷調整ポイントを示した。
+
+---
+
+# plans.md: Simulator-Driven Graph Seed
+
+## Purpose
+Simulator 設定時に、既存の RDF シードとは別に Simulator 用の RDF を動的生成し、GraphSeed を追加して Admin UI / API から確認できるようにする。
+
+## Success Criteria
+1. Simulator 設定が有効なときに、`Simulator-Site` などの明示的な名称で Site/Building/Level/Area/Equipment/Point が Graph に追加される。
+2. 既存の `RDF_SEED_PATH` がある場合も、同一テナント内に Simulator 由来のサイトが追加される（2 サイト以上になる）。
+3. 既存の RDF 解析/GraphSeed 生成の流れを維持し、Simulator は RDF 文字列生成 + 既存パイプラインで処理される。
+4. 変更点がドキュメントに反映される。
+
+## Steps
+1. Simulator 用 RDF 生成ユーティリティを追加する。
+2. `OrleansIntegrationService` と `GraphSeeder` に RDF 文字列入力経路を追加する。
+3. `GraphSeedService` を更新し、RDF_SEED_PATH とは別に Simulator Seed を追加する。
+4. ドキュメントに Simulator Seed 追加動作を追記する。
+
+## Progress
+- [x] Step 1: Simulator RDF 生成ユーティリティ
+- [x] Step 2: RDF 文字列入力のシード経路追加
+- [x] Step 3: GraphSeedService 更新
+- [x] Step 4: ドキュメント追記
+
+## Observations
+- Simulator Seed は既存 RDF に追加で投入するため、同一テナント内に複数サイトが生成される。
+
+## Decisions
+- TENANT_ID が設定されている場合はそれを優先し、未設定時は Simulator の TenantId を使用する。
+
+## Retrospective
+- Simulator 用の RDF 生成は既存の DataModel.Analyzer パイプラインに通す形で最小変更とした。
+
+---
+
+# plans.md: Fix Simulator Point Snapshot Mismatch
+
+## Purpose
+start-system.sh で Simulator を使ったときに、Graph の Point ノードと PointGrain のキーが一致せず、Point Snapshot が更新されない問題を解消する。
+
+## Success Criteria
+1. start-system.sh の設定で Simulator の BuildingName/SpaceId が Simulator seed の名称と一致する。
+2. Simulator 由来の Point を Admin UI の Point Snapshot で確認できる。
+3. 変更点が plans.md に記録される。
+
+## Steps
+1. start-system.sh と appsettings の Simulator 設定を Simulator seed 名称に合わせる。
+2. ドキュメントに注意点を追記する（必要なら）。
+3. 記録を更新する。
+
+## Progress
+- [x] Step 1: 設定の整合
+- [x] Step 2: ドキュメント追記
+- [x] Step 3: 記録更新
+
+## Observations
+- Simulator の Graph seed 名称と Simulator 設定の BuildingName/SpaceId が一致しないと PointGrainKey が一致せず、Point Snapshot が取得できない。
+
+## Decisions
+- start-system.sh と appsettings の Simulator 設定を Simulator seed 名称に合わせて統一した。
+
+## Retrospective
+- ドキュメントに BuildingName/SpaceId の一致条件を追記した。
+
+---
+
 # plans.md: Move RDF seed fixtures to data
 
 ## Purpose
