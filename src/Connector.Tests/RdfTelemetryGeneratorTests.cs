@@ -2,10 +2,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using DataModel.Analyzer.Models;
-using Publisher;
+using Connector;
 using Xunit;
 
-namespace Publisher.Tests;
+namespace Connector.Tests;
 
 public class RdfTelemetryGeneratorTests
 {

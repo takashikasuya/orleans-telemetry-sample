@@ -1,11 +1,11 @@
-# Orleans Telemetry Sample - Docker Compose Configuration
+# Orleans Telemetry Connector Sample - Docker Compose Configuration
 #
 # IMPORTANT: RDF Seed File Synchronization
 # ----------------------------------------
-# Both 'silo' and 'publisher' services use the same RDF seed file (data/seed-complex.ttl)
+# Both 'silo' and 'connector' services use the same RDF seed file (data/seed-complex.ttl)
 # to ensure that:
 #   1. SiloHost initializes the building graph structure with device/point definitions
-#   2. Publisher generates telemetry for devices that match those definitions
+#   2. Connector generates telemetry for devices that match those definitions
 #
 # If you modify or replace the RDF seed file, UPDATE BOTH SERVICE CONFIGURATIONS
 # in this file to maintain consistency between the data model and telemetry data.
@@ -94,17 +94,17 @@ services:
     ports:
       - "8083:80"
 
-  publisher:
+  connector:
     build:
-      context: ./src/Publisher
+      context: ./src/Connector
       dockerfile: ../../Dockerfile.dotnet
       args:
-        PROJECT: Publisher
+        PROJECT: Connector
     depends_on:
       - mq
     environment:
       RABBITMQ_HOST: mq
-      TENANT: t1
+      TENANT_ID: t1
       RDF_SEED_PATH: /seed/seed.ttl
     volumes:
       - ./data/seed-complex.ttl:/seed/seed.ttl:ro

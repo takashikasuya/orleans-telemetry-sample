@@ -10,7 +10,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Tests", "src\Api
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grains.Abstractions", "src\Grains.Abstractions\Grains.Abstractions.csproj", "{FA32BC97-A445-BD9B-F584-EB484F4CF15B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Publisher", "src\Publisher\Publisher.csproj", "{B53A3F93-644F-077D-263C-2A9461829575}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Connector", "src\Connector\Connector.csproj", "{B53A3F93-644F-077D-263C-2A9461829575}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SiloHost", "src\SiloHost\SiloHost.csproj", "{8A1336E3-097A-5471-6249-8B0FC8040AC7}"
 EndProject
@@ -34,7 +34,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminGateway", "src\AdminGa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Orleans.MemoryLoadTest", "src\Telemetry.Orleans.MemoryLoadTest\Telemetry.Orleans.MemoryLoadTest.csproj", "{1F27D0A0-74E8-48C3-979A-408201FA38A2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Publisher.Tests", "src\Publisher.Tests\Publisher.Tests.csproj", "{157F67B7-E62F-4B9F-8681-321C1AC17743}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Connector.Tests", "src\Connector.Tests\Connector.Tests.csproj", "{157F67B7-E62F-4B9F-8681-321C1AC17743}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Contracts", "src\ApiGateway.Contracts\ApiGateway.Contracts.csproj", "{D493AF95-161C-4EAC-B9D2-946C2C927C36}"
 EndProject

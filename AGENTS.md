@@ -12,7 +12,7 @@ Services include:
 - `mq`: RabbitMQ broker for incoming telemetry.
 - `silo`: Orleans host with RabbitMQ consumer and grain logic.
 - `api`: ASP.NET Core application providing REST and gRPC APIs.
-- `publisher`: .NET console app publishing sample telemetry. [oai_citation:1‡GitHub](https://github.com/takashikasuya/orleans-telemetry-sample)
+- `connector`: .NET console app publishing sample telemetry. [oai_citation:1‡GitHub](https://github.com/takashikasuya/orleans-telemetry-sample)
 
 The sample is intended for **local development and experimentation**, not production. [oai_citation:2‡GitHub](https://github.com/takashikasuya/orleans-telemetry-sample)
 

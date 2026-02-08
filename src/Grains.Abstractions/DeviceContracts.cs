@@ -5,7 +5,7 @@ namespace Grains.Abstractions;
 
 /// <summary>
 /// Immutable data transfer object representing a telemetry message consumed
-/// from the message queue.  The upstream publisher must guarantee that
+/// from the message queue.  The upstream connector must guarantee that
 /// sequences are monotonic for a given device; otherwise the grain will
 /// ignore out‑of‑order events.
 /// </summary>

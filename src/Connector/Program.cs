@@ -1,4 +1,4 @@
-namespace Publisher;
+namespace Connector;
 
 using System;
 using System.Collections.Concurrent;
@@ -45,7 +45,7 @@ internal static class Program
 
         var rdfPath = Environment.GetEnvironmentVariable("RDF_SEED_PATH");
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddSimpleConsole());
-        var logger = loggerFactory.CreateLogger("Publisher");
+        var logger = loggerFactory.CreateLogger("Connector");
         var rdfGenerator = await TryCreateRdfGeneratorAsync(rdfPath, logger, loggerFactory);
         var useRdf = rdfGenerator is not null && rdfGenerator.DeviceCount > 0;
         var rdfDevices = rdfGenerator?.Devices ?? Array.Empty<RdfTelemetryGenerator.RdfDeviceDefinition>();

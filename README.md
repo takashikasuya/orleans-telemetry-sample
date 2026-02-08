@@ -1,4 +1,4 @@
-# Orleans Telemetry Sample
+# Orleans Telemetry Connector Sample
 
 A minimal .NET 8 sample demonstrating telemetry ingestion, storage, and graph-based querying using Orleans.
 This solution shows how to ingest telemetry from RabbitMQ/Kafka/Simulator, map messages to Orleans grains,
@@ -23,12 +23,12 @@ The base `docker-compose.yml` starts the following services:
 - **api** (ApiGateway): REST/gRPC API gateway (port 8080)
 - **admin** (AdminGateway): Admin web UI (port 8082)
 - **telemetry-client** (TelemetryClient): Telemetry client web UI (port 8083)
-- **publisher** (Publisher): Sample telemetry publisher
+- **connector** (Connector): Sample telemetry connector
   - Publishes telemetry based on `data/seed-complex.ttl` device definitions
   - Uses same RDF seed as silo for data consistency
 - **mock-oidc**: Mock OIDC provider for authentication (port 8081)
 
-> **⚠️ Important**: The `publisher` and `silo` services both use the same RDF seed file (`data/seed-complex.ttl`) to ensure telemetry data matches the initialized grain structure. If you modify the RDF seed file or use a different file, **update both service configurations** in `docker-compose.yml`.
+> **⚠️ Important**: The `connector` and `silo` services both use the same RDF seed file (`data/seed-complex.ttl`) to ensure telemetry data matches the initialized grain structure. If you modify the RDF seed file or use a different file, **update both service configurations** in `docker-compose.yml`.
 
 Once running:
 - REST Swagger: `http://localhost:8080/swagger`
@@ -104,8 +104,8 @@ dotnet run --project src/SiloHost
 # 3. Run API gateway (in another terminal)
 dotnet run --project src/ApiGateway
 
-# 4. Run telemetry publisher (optional, in another terminal)
-dotnet run --project src/Publisher
+# 4. Run telemetry connector (optional, in another terminal)
+dotnet run --project src/Connector
 ```
 
 ### Environment Variables
@@ -118,9 +118,9 @@ dotnet run --project src/Publisher
 - **Graph Seeding**
   - `RDF_SEED_PATH`: path to RDF file for graph initialization
   - `TENANT_ID`: tenant identifier (default: `default`)
-  - **⚠️ Note**: When using `docker-compose.yml`, both `silo` and `publisher` services must reference the **same RDF seed file** to ensure telemetry publishers generate data that matches the initialized grain structure. If you change the seed file in one service, update both configurations.
-- **Publisher Control**
-  - `CONTROL_QUEUE`: RabbitMQ queue name listened to by the publisher for control commands (default: `telemetry-control`).
+  - **⚠️ Note**: When using `docker-compose.yml`, both `silo` and `connector` services must reference the **same RDF seed file** to ensure telemetry connectors generate data that matches the initialized grain structure. If you change the seed file in one service, update both configurations.
+- **Connector Control**
+  - `CONTROL_QUEUE`: RabbitMQ queue name listened to by the connector for control commands (default: `telemetry-control`).
   - Send a JSON payload such as:
 
     ```json
@@ -438,7 +438,7 @@ See [docs/telemetry-client-spec.md](docs/telemetry-client-spec.md) for detailed 
 | `api`     | REST/gRPC gateway for querying latest state and history.             |
 | `admin`   | Admin console that surfaces grain activations, client counts, ingest, and storage health. |
 | `mq`      | RabbitMQ broker for telemetry messages (optional).                   |
-| `publisher` | Demo app that publishes random telemetry (optional).               |
+| `connector` | Demo app that publishes random telemetry (optional).               |
 | `mock-oidc` | Mock OIDC issuer for local development.                            |
 
 ## Admin Console
@@ -477,7 +477,7 @@ Telemetry → Connector → `TelemetryIngestCoordinator` → Batch → `Telemetr
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Pub as Publisher
+    actor Pub as Connector
     participant MQ as RabbitMQ
     participant Ingest as TelemetryIngestCoordinator
     participant Router as TelemetryRouterGrain
@@ -635,8 +635,8 @@ dotnet test
 dotnet test src/DataModel.Analyzer.Tests
 dotnet test src/Telemetry.Ingest.Tests
 dotnet test src/Telemetry.Storage.Tests
-dotnet test src/Publisher.Tests
-dotnet test src/Telemetry.E2E.Tests --filter RdfPublisherTelemetry_IsVisibleThroughApi
+dotnet test src/Connector.Tests
+dotnet test src/Telemetry.E2E.Tests --filter RdfConnectorTelemetry_IsVisibleThroughApi
 ```
 
 Alternatively, use the helper scripts:
@@ -665,7 +665,7 @@ Alternatively, use the helper scripts:
 .\scripts\run-loadtest.ps1
 ```
 
-The publisher test suite covers RDF-aware telemetry generation, while the targeted E2E check seeds the Orleans graph, routes RDF-based telemetry through the router, and ensures `_pointMetadata` survives all the way to the API response.
+The connector test suite covers RDF-aware telemetry generation, while the targeted E2E check seeds the Orleans graph, routes RDF-based telemetry through the router, and ensures `_pointMetadata` survives all the way to the API response.
 ```
 ```
 
@@ -702,7 +702,7 @@ src/
   Telemetry.Ingest/              # Ingest connectors & coordinator
   Telemetry.Storage/             # Parquet persistence & query
   Grains.Abstractions/           # Grain interfaces & contracts
-  Publisher/                      # Demo telemetry publisher
+  Connector/                      # Demo telemetry connector
   *Tests/                         # Unit tests
 ```
 

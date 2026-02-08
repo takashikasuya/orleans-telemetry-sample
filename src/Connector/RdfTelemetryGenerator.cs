@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using DataModel.Analyzer.Models;
 using Grains.Abstractions;
 
-namespace Publisher;
+namespace Connector;
 
 internal sealed class RdfTelemetryGenerator
 {

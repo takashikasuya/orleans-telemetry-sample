@@ -2,6 +2,42 @@
 
 ---
 
+# plans.md: Rename Solution and Publisher to Connector
+
+## Purpose
+ソリューション名を更新し、Publisher の役割を反映して Connector に改称する。名称の見直しに伴う設定・ドキュメント・テスト参照を整合させる。
+
+## Success Criteria
+1. ソリューションファイル名とソリューション内表示名が新しい名称に更新される。
+2. `Publisher` プロジェクト/フォルダ/名前空間が `Connector` に置き換わり、参照・設定・ドキュメントが整合する。
+3. テスト名・フィルタ・ドキュメント内の Publisher 記述が Connector として更新される。
+4. `dotnet build` と `dotnet test` が完了する。
+
+## Steps
+1. `Publisher` プロジェクトを `Connector` へ改称し、参照/名前空間/テスト/スクリプトを更新する。
+2. ソリューションファイル名と表示名を更新する。
+3. README/PROJECT_OVERVIEW/docs などの Publisher 記述を Connector に置き換える。
+4. `dotnet build` と `dotnet test` を実行して確認する。
+
+## Progress
+- [x] Step 1: Publisher の改称
+- [x] Step 2: ソリューション名更新
+- [x] Step 3: ドキュメント更新
+- [x] Step 4: ビルド/テスト実行
+
+## Observations
+- `Publisher` を `Connector` に改称し、プロジェクト名・名前空間・テスト・Docker Compose・ドキュメントの参照を整理した。
+- Docker Compose の環境変数を `TENANT_ID` に統一し、コード側の参照と合わせた。
+
+## Decisions
+- サービス名とプロジェクト名を `Connector` に統一し、既存の機能は維持した。
+- 既存の RDF シード共有要件は `connector`/`silo` のペアで維持した。
+
+## Retrospective
+- `dotnet build` と `dotnet test` を実行し、警告は残るがビルド/テストは成功した。
+
+---
+
 # plans.md: Document SiloHost Connector Configuration
 
 ## Purpose
@@ -630,7 +666,7 @@ Design and implement a Blazor Server client application as a new solution projec
 3. **Streaming**: Polling works but adds latency; gRPC streaming or SignalR could provide sub-second updates.
 4. **Authentication**: Currently assumes open API access; JWT token handling should be integrated when OIDC is enforced.
 5. **Tree View Depth**: Arbitrary depth loading works but could benefit from virtual scrolling for large hierarchies.
-6. **Control Feedback**: Control commands are submitted but actual device write confirmation requires Publisher integration (planned separately).
+6. **Control Feedback**: Control commands are submitted but actual device write confirmation requires Connector integration (planned separately).
 7. **Accessibility**: MudBlazor provides good baseline but keyboard navigation and screen reader testing should be performed.
 
 ### Lessons Learned

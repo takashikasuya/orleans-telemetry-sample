@@ -206,9 +206,9 @@ Simulator が有効な場合、SiloHost は **既存の RDF シードとは別�
 - 追加のシードは `TENANT_ID` があればそれを使い、未設定の場合は `TelemetryIngest:Simulator:TenantId` が使用されます。
 - Point Snapshot を確認するため、`TelemetryIngest:Simulator:BuildingName` と `SpaceId` は Simulator シードの名称（`Simulator-Building` / `Simulator-Area`）と一致させてください。
 
-## Publisher 制御コマンド
+## Connector 制御コマンド
 
-- Publisher は `CONTROL_QUEUE`（既定: `telemetry-control`）を監視し、RabbitMQ 経由で JSON 制御コマンドを受け取ります。
+- Connector は `CONTROL_QUEUE`（既定: `telemetry-control`）を監視し、RabbitMQ 経由で JSON 制御コマンドを受け取ります。
 - ペイロード例:
 
 ```json

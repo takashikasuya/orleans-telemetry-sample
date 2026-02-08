@@ -18,7 +18,7 @@ using Telemetry.Ingest.Kafka;
 using Telemetry.Ingest.RabbitMq;
 using Telemetry.Ingest.Simulator;
 using Telemetry.Storage;
-using Publisher;
+using Connector;
 using SiloHost;
 using Xunit;
 
@@ -191,7 +191,7 @@ public sealed class TelemetryE2ETests
     }
 
     [Fact]
-    public async Task RdfPublisherTelemetry_IsVisibleThroughApi()
+    public async Task RdfConnectorTelemetry_IsVisibleThroughApi()
     {
         var options = LoadOptions();
         IHost? siloHost = null;

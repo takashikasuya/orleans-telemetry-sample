@@ -1,4 +1,4 @@
-# Orleans Telemetry Sample - Project Overview
+# Orleans Telemetry Connector Sample - Project Overview
 
 このリポジトリは、Orleans を用いたテレメトリ取り込みとグラフ参照のサンプルです。RabbitMQ/Kafka/シミュレータ経由のテレメトリを Orleans の Grain にマッピングし、REST API で最新状態やグラフ情報を取得できるようにしています。RDF からのグラフシードにも対応しています。
 
@@ -16,7 +16,7 @@
 - `src/Telemetry.Storage`
   - テレメトリ永続化モジュール。取り込んだイベントをステージファイル（JSONL）に書き込み、バックグラウンドで Parquet + インデックスに圧縮します。
   - クエリ API でテナント・デバイス・時間範囲によるテレメトリ検索が可能です。
-- `src/Publisher`
+- `src/Connector`
   - RabbitMQ にデモ用テレメトリを送信するコンソールアプリです。
   - RDF で定義された writable なポイントに対して `telemetry-control` キュー経由で JSON 制御コマンドを受け付け、値を上書きできます。
 - `src/DataModel.Analyzer`
@@ -71,7 +71,7 @@
 #### `SiloHost.Tests`
 - **GraphIndexGrainTests**: GraphIndexGrain がノードをタイプ別に管理し、追加/削除が正しく動作することをテスト。
 
-#### `Publisher.Tests`
+#### `Connector.Tests`
 - **RdfTelemetryGeneratorTests**: RDF モデルからテレメトリメッセージを生成する処理をテスト。Device/Point のマッピング、値範囲の尊重、メタデータの埋め込みを検証。
 
 #### `Telemetry.Storage.Tests`

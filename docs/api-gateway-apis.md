@@ -58,7 +58,7 @@ ApiGateway は Orleans の最新状態・グラフ・履歴データを REST API
     - `lastError`
 - エラー:
   - `400 BadRequest`: `deviceId` 不一致、`pointId` 不足など
-- 備考: 現状は制御要求の受付と状態記録までで、実際の機器書き込みは Publisher 側の対応に依存します。
+- 備考: 現状は制御要求の受付と状態記録までで、実際の機器書き込みは Connector 側の対応に依存します。
 
 ### ノード情報
 

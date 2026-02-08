@@ -28,7 +28,7 @@ Graph ノードにどう値がバインディングされるかをまとめた�
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Pub as Publisher
+    actor Pub as Connector
     participant Conn as Ingest Connector
     participant Coord as TelemetryIngestCoordinator
     participant Router as TelemetryRouterGrain
@@ -112,4 +112,3 @@ graph TB
 - PointGrain は **point 単位の最終値**を保持する設計です。
 - DeviceGrain は **device 単位のスナップショット取得**に利用されます（API から参照）。
 - GraphNodeGrain と PointGrain のバインディングは、**Graph ノードの属性**で表現しています。
-
