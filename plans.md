@@ -2,6 +2,35 @@
 
 ---
 
+# plans.md: Wait for Orleans Gateway Port Before Starting API in E2E
+
+## Purpose
+API 起動時に Orleans クライアントが gateway に接続できず失敗する問題を防ぐ。
+
+## Success Criteria
+1. Silo 起動後に gateway ポートが開くまで待機する。
+2. API 起動時の ConnectionRefused が再発しない。
+3. 変更点が plans.md に記録される。
+
+## Steps
+1. E2E テストに gateway ポート待機ヘルパーを追加する。
+2. API を起動する前に待機処理を挟む。
+
+## Progress
+- [x] Step 1: 待機ヘルパー追加
+- [x] Step 2: API 起動前に適用
+
+## Observations
+- API 起動時に Orleans クライアントが即時接続を試み、Silo gateway が未起動だと失敗する。
+
+## Decisions
+- 短時間の TCP 接続チェックで gateway 準備完了を確認する。
+
+## Retrospective
+- TBD
+
+---
+
 # plans.md: Shorten E2E Wait Timeout and Improve Failure Detail
 
 ## Purpose

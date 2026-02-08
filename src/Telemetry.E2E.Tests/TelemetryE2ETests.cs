@@ -85,6 +85,7 @@ public sealed class TelemetryE2ETests
             siloHost = CreateSiloHost(siloConfig);
             await siloHost.StartAsync();
             siloStarted = true;
+            await WaitForPortAsync(gatewayPort, TimeSpan.FromSeconds(5));
 
             var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot, gatewayPort);
             apiFactory = new ApiGatewayFactory(apiConfig);
@@ -237,6 +238,7 @@ public sealed class TelemetryE2ETests
             siloHost = CreateSiloHost(siloConfig);
             await siloHost.StartAsync();
             siloStarted = true;
+            await WaitForPortAsync(gatewayPort, TimeSpan.FromSeconds(5));
 
             var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot, gatewayPort);
             apiFactory = new ApiGatewayFactory(apiConfig);
@@ -473,6 +475,32 @@ public sealed class TelemetryE2ETests
         {
             listener.Stop();
         }
+    }
+
+    private static async Task WaitForPortAsync(int port, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            try
+            {
+                using var client = new System.Net.Sockets.TcpClient();
+                var connectTask = client.ConnectAsync(System.Net.IPAddress.Loopback, port);
+                var completed = await Task.WhenAny(connectTask, Task.Delay(200));
+                if (completed == connectTask)
+                {
+                    await connectTask;
+                    return;
+                }
+            }
+            catch
+            {
+            }
+
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException($"Gateway port {port} was not ready within timeout.");
     }
 
     private static async Task<GraphNodeSnapshot> WaitForNodeSnapshotAsync(HttpClient client, string nodeId, TimeSpan timeout)
