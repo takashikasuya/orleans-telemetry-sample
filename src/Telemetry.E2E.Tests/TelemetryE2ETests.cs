@@ -87,6 +87,9 @@ public sealed class TelemetryE2ETests
             siloStarted = true;
             await WaitForPortAsync(gatewayPort, TimeSpan.FromSeconds(5));
 
+            Environment.SetEnvironmentVariable("Orleans__GatewayHost", "127.0.0.1");
+            Environment.SetEnvironmentVariable("Orleans__GatewayPort", gatewayPort.ToString());
+
             var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot, gatewayPort);
             apiFactory = new ApiGatewayFactory(apiConfig);
             using var client = apiFactory.CreateClient();
@@ -195,6 +198,8 @@ public sealed class TelemetryE2ETests
 
             Environment.SetEnvironmentVariable("RDF_SEED_PATH", null);
             Environment.SetEnvironmentVariable("TENANT_ID", null);
+            Environment.SetEnvironmentVariable("Orleans__GatewayHost", null);
+            Environment.SetEnvironmentVariable("Orleans__GatewayPort", null);
         }
     }
 
@@ -239,6 +244,9 @@ public sealed class TelemetryE2ETests
             await siloHost.StartAsync();
             siloStarted = true;
             await WaitForPortAsync(gatewayPort, TimeSpan.FromSeconds(5));
+
+            Environment.SetEnvironmentVariable("Orleans__GatewayHost", "127.0.0.1");
+            Environment.SetEnvironmentVariable("Orleans__GatewayPort", gatewayPort.ToString());
 
             var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot, gatewayPort);
             apiFactory = new ApiGatewayFactory(apiConfig);
@@ -304,6 +312,8 @@ public sealed class TelemetryE2ETests
 
             Environment.SetEnvironmentVariable("RDF_SEED_PATH", null);
             Environment.SetEnvironmentVariable("TENANT_ID", null);
+            Environment.SetEnvironmentVariable("Orleans__GatewayHost", null);
+            Environment.SetEnvironmentVariable("Orleans__GatewayPort", null);
         }
     }
 
