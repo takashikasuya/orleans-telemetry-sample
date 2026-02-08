@@ -41,6 +41,7 @@ public sealed class TelemetryE2ETests
         };
 
         IHost? siloHost = null;
+        var siloStarted = false;
         ApiGatewayFactory? apiFactory = null;
 
         try
@@ -78,11 +79,14 @@ public sealed class TelemetryE2ETests
             Environment.SetEnvironmentVariable("RDF_SEED_PATH", rdfPath);
             Environment.SetEnvironmentVariable("TENANT_ID", tenantId);
 
-            var siloConfig = BuildSiloConfig(stageRoot, parquetRoot, indexRoot, report.Simulator);
+            var siloPort = GetFreeTcpPort();
+            var gatewayPort = GetFreeTcpPort();
+            var siloConfig = BuildSiloConfig(stageRoot, parquetRoot, indexRoot, report.Simulator, siloPort, gatewayPort);
             siloHost = CreateSiloHost(siloConfig);
             await siloHost.StartAsync();
+            siloStarted = true;
 
-            var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot);
+            var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot, gatewayPort);
             apiFactory = new ApiGatewayFactory(apiConfig);
             using var client = apiFactory.CreateClient();
 
@@ -181,7 +185,10 @@ public sealed class TelemetryE2ETests
 
             if (siloHost is not null)
             {
-                await siloHost.StopAsync();
+                if (siloStarted)
+                {
+                    await siloHost.StopAsync();
+                }
                 siloHost.Dispose();
             }
 
@@ -195,6 +202,7 @@ public sealed class TelemetryE2ETests
     {
         var options = LoadOptions();
         IHost? siloHost = null;
+        var siloStarted = false;
         ApiGatewayFactory? apiFactory = null;
 
         try
@@ -223,11 +231,14 @@ public sealed class TelemetryE2ETests
                 IntervalMilliseconds = 500
             };
 
-            var siloConfig = BuildSiloConfig(stageRoot, parquetRoot, indexRoot, simulatorConfig);
+            var siloPort = GetFreeTcpPort();
+            var gatewayPort = GetFreeTcpPort();
+            var siloConfig = BuildSiloConfig(stageRoot, parquetRoot, indexRoot, simulatorConfig, siloPort, gatewayPort);
             siloHost = CreateSiloHost(siloConfig);
             await siloHost.StartAsync();
+            siloStarted = true;
 
-            var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot);
+            var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot, gatewayPort);
             apiFactory = new ApiGatewayFactory(apiConfig);
             using var client = apiFactory.CreateClient();
 
@@ -282,7 +293,10 @@ public sealed class TelemetryE2ETests
 
             if (siloHost is not null)
             {
-                await siloHost.StopAsync();
+                if (siloStarted)
+                {
+                    await siloHost.StopAsync();
+                }
                 siloHost.Dispose();
             }
 
@@ -348,7 +362,9 @@ public sealed class TelemetryE2ETests
         string stageRoot,
         string parquetRoot,
         string indexRoot,
-        TelemetryE2ESimulatorConfig simulator)
+        TelemetryE2ESimulatorConfig simulator,
+        int siloPort,
+        int gatewayPort)
     {
         return new Dictionary<string, string?>
         {
@@ -368,11 +384,13 @@ public sealed class TelemetryE2ETests
             ["TelemetryStorage:IndexPath"] = indexRoot,
             ["TelemetryStorage:BucketMinutes"] = "15",
             ["TelemetryStorage:CompactionIntervalSeconds"] = "2",
-            ["TelemetryStorage:DefaultQueryLimit"] = "100"
+            ["TelemetryStorage:DefaultQueryLimit"] = "100",
+            ["Orleans:SiloPort"] = siloPort.ToString(),
+            ["Orleans:GatewayPort"] = gatewayPort.ToString()
         };
     }
 
-    private static Dictionary<string, string?> BuildApiConfig(string stageRoot, string parquetRoot, string indexRoot)
+    private static Dictionary<string, string?> BuildApiConfig(string stageRoot, string parquetRoot, string indexRoot, int gatewayPort)
     {
         return new Dictionary<string, string?>
         {
@@ -381,7 +399,7 @@ public sealed class TelemetryE2ETests
             ["TelemetryStorage:IndexPath"] = indexRoot,
             ["TelemetryStorage:DefaultQueryLimit"] = "100",
             ["Orleans:GatewayHost"] = "127.0.0.1",
-            ["Orleans:GatewayPort"] = "30000"
+            ["Orleans:GatewayPort"] = gatewayPort.ToString()
         };
     }
 
@@ -420,9 +438,11 @@ public sealed class TelemetryE2ETests
             services.AddHostedService<TestGraphSeedService>();
         });
 
-        builder.UseOrleans(siloBuilder =>
+        builder.UseOrleans((context, siloBuilder) =>
         {
-            siloBuilder.UseLocalhostClustering();
+            var siloPort = context.Configuration.GetValue("Orleans:SiloPort", 11111);
+            var gatewayPort = context.Configuration.GetValue("Orleans:GatewayPort", 30000);
+            siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
             siloBuilder.Configure<Orleans.Configuration.ClusterOptions>(options =>
             {
                 options.ClusterId = "telemetry-cluster";
@@ -439,6 +459,20 @@ public sealed class TelemetryE2ETests
         });
 
         return builder.Build();
+    }
+
+    private static int GetFreeTcpPort()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        try
+        {
+            listener.Start();
+            return ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        }
+        finally
+        {
+            listener.Stop();
+        }
     }
 
     private static async Task<GraphNodeSnapshot> WaitForNodeSnapshotAsync(HttpClient client, string nodeId, TimeSpan timeout)
@@ -525,25 +559,29 @@ public sealed class TelemetryE2ETests
     private static async Task<DeviceSnapshotResult> WaitForDeviceSnapshotAsync(HttpClient client, string deviceId, long minSequence, TimeSpan timeout)
     {
         var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        var lastSequence = -1L;
+        var lastUpdatedAt = DateTimeOffset.MinValue;
 
         while (DateTimeOffset.UtcNow < deadline)
         {
             var response = await client.GetFromJsonAsync<JsonElement>($"/api/devices/{deviceId}");
             if (response.ValueKind != JsonValueKind.Undefined)
             {
-                var lastSequence = GetPropertyCaseInsensitive(response, "lastSequence").GetInt64();
-                var updatedAt = GetPropertyCaseInsensitive(response, "updatedAt").GetDateTimeOffset();
+                lastSequence = GetPropertyCaseInsensitive(response, "lastSequence").GetInt64();
+                lastUpdatedAt = GetPropertyCaseInsensitive(response, "updatedAt").GetDateTimeOffset();
                 var props = GetPropertyCaseInsensitive(response, "properties").GetRawText();
                 if (lastSequence >= minSequence)
                 {
-                    return new DeviceSnapshotResult(lastSequence, updatedAt, props);
+                    return new DeviceSnapshotResult(lastSequence, lastUpdatedAt, props);
                 }
             }
 
             await Task.Delay(200);
         }
 
-        throw new TimeoutException("Device snapshot was not updated within the timeout.");
+        throw new TimeoutException(
+            $"Device snapshot was not updated within the timeout. " +
+            $"DeviceId={deviceId} LastSequence={lastSequence} UpdatedAt={lastUpdatedAt:O} TargetSequence={minSequence}");
     }
 
     private static async Task<List<JsonElement>> WaitForTelemetryResultsAsync(HttpClient client, TelemetryStageRecord stageRecord, TimeSpan timeout)

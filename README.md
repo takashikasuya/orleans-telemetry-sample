@@ -58,6 +58,26 @@ curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/devices/device-1"
 ```
 
+### 4. API Verification Client (OIDC + ApiGateway)
+
+The repository includes a console client that clears OIDC auth, checks registry resources, graph relationships, node properties, current telemetry, and historical telemetry, then writes a report.
+
+```bash
+dotnet run --project src/ApiGateway.Client
+```
+
+Optional overrides:
+
+```bash
+dotnet run --project src/ApiGateway.Client -- \\
+  --api-base http://localhost:8080 \\
+  --authority http://localhost:8081/default \\
+  --client-id test-client \\
+  --client-secret test-secret \\
+  --history-minutes 15 \\
+  --report-dir reports
+```
+
 ## Setup & Startup
 
 ### Docker Compose (recommended)
@@ -73,20 +93,30 @@ docker compose up --build
 
 **Linux/macOS:**
 ```bash
-./scripts/start-system.sh
+./scripts/start-system.sh --simulator
+# or
+./scripts/start-system.sh --rabbitmq
+# or both
+./scripts/start-system.sh --simulator --rabbitmq
 # ... interact with the API, admin, etc.
 ./scripts/stop-system.sh
 ```
 
 **Windows (PowerShell):**
 ```powershell
-.\scripts\start-system.ps1
+.\scripts\start-system.ps1 -Simulator
+# or
+.\scripts\start-system.ps1 -RabbitMq
+# or both
+.\scripts\start-system.ps1 -Simulator -RabbitMq
 # ... interact with the API, admin, etc.
 .\scripts\stop-system.ps1
 ```
 
 Notes:
-- Uses [data/seed.ttl](data/seed.ttl) with `TENANT_ID=t1`, simulator ingest (1 device × 1 point, 500 ms interval), and Parquet storage mounted to [storage](storage).
+- `--simulator` は [data/seed.ttl](data/seed.ttl) を使用し、`TENANT_ID=t1` で simulator ingest (1 device × 1 point, 500 ms interval) と Parquet storage を有効化します。
+- `--rabbitmq` は RabbitMq ingest を有効化し、publisher コンテナも起動します（seed は simulator と同じファイルを使用）。
+- 引数なしの場合は ingest コネクタが有効化されないため、テレメトリは流れません。
 - Persists reports under [reports](reports) (override with `TELEMETRY_E2E_REPORT_DIR`) and records the generated compose override at [scripts/.system-state](scripts/.system-state) for the stop script.
 - Exposes Swagger at http://localhost:8080/swagger (enabled via `ASPNETCORE_ENVIRONMENT=Development` in the helper override), admin UI at http://localhost:8082/, and mock OIDC at http://localhost:8081/default once running.
 

@@ -2,6 +2,156 @@
 
 ---
 
+# plans.md: Shorten E2E Wait Timeout and Improve Failure Detail
+
+## Purpose
+E2E テストが長時間ポーリングで「終了しない」ように見える問題を緩和し、タイムアウト時に原因が分かる情報を出す。
+
+## Success Criteria
+1. WaitTimeoutSeconds を短縮してテストが適切に終了する。
+2. Device snapshot タイムアウト時に最後の値を含む例外メッセージが出る。
+3. 変更点が plans.md に記録される。
+
+## Steps
+1. E2E テストのタイムアウトを短縮する。
+2. Device snapshot 待機のタイムアウトメッセージに詳細を追加する。
+
+## Progress
+- [x] Step 1: タイムアウト短縮
+- [x] Step 2: 詳細メッセージ追加
+
+## Observations
+- API からのレスポンスはあるが、期待シーケンスに到達せずポーリングが続くケースがある。
+
+## Decisions
+- 既定の WaitTimeoutSeconds を 20 秒に変更する。
+
+## Retrospective
+- TBD
+
+---
+
+# plans.md: Use Random Orleans Ports In E2E Tests
+
+## Purpose
+E2E テストが同一マシンで実行される際の Orleans ポート競合（Address already in use）を回避する。
+
+## Success Criteria
+1. 各テストがランダムな Silo/Gateway ポートを使う。
+2. AddressInUseException が再発しない。
+3. 変更点が plans.md に記録される。
+
+## Steps
+1. E2E テスト内で空きポートを取得するヘルパーを追加する。
+2. BuildSiloConfig / BuildApiConfig にポートを渡す。
+3. CreateSiloHost で設定値を使って UseLocalhostClustering を構成する。
+
+## Progress
+- [x] Step 1: 空きポート取得追加
+- [x] Step 2: 設定にポートを反映
+- [x] Step 3: UseLocalhostClustering に適用
+
+## Observations
+- 並列無効化だけでは既存のプロセスや他テストの影響でポート競合が発生する。
+
+## Decisions
+- テストごとに 0 番ポートから空きポートを取得して割り当てる。
+
+## Retrospective
+- TBD
+
+---
+
+# plans.md: Disable Parallel E2E Tests to Avoid Port Conflicts
+
+## Purpose
+Telemetry.E2E.Tests が並列実行されると Orleans のデフォルトポートが衝突するため、E2E テストの並列実行を無効化する。
+
+## Success Criteria
+1. E2E テストが並列実行されず、AddressInUseException が再現しない。
+2. 変更点が plans.md に記録される。
+
+## Steps
+1. Telemetry.E2E.Tests に assembly-level の CollectionBehavior を追加して並列実行を無効化する。
+
+## Progress
+- [x] Step 1: CollectionBehavior 追加
+
+## Observations
+- `UseLocalhostClustering()` が 11111/30000 を使用するため、並列実行でポート競合が発生する。
+
+## Decisions
+- テスト専用プロジェクトなので assembly-level で並列無効化を選択する。
+
+## Retrospective
+- TBD
+
+---
+
+# plans.md: Guard E2E Silo Stop When Not Started
+
+## Purpose
+Telemetry.E2E.Tests のクリーンアップ時に、Start に失敗した Silo へ StopAsync を呼んで例外になる問題を防ぐ。
+
+## Success Criteria
+1. Silo が起動済みのときのみ StopAsync を呼ぶ。
+2. テスト終了時に "Created state" 例外が出ない。
+3. 変更点が plans.md に記録される。
+
+## Steps
+1. テスト内で起動フラグを追加し、StartAsync 成功後に true を設定する。
+2. finally でフラグが true のときのみ StopAsync を呼ぶ。
+
+## Progress
+- [x] Step 1: 起動フラグ追加
+- [x] Step 2: StopAsync ガード追加
+
+## Observations
+- StartAsync が失敗すると、Silo は Created 状態のまま StopAsync に入り例外になる。
+
+## Decisions
+- 起動可否はローカルフラグで管理し、StopAsync 実行条件を明確化する。
+
+## Retrospective
+- TBD
+
+---
+
+# plans.md: Trace RabbitMQ Telemetry Through Ingest Pipeline
+
+## Purpose
+RabbitMQ から流れてくるテレメトリが SiloHost の ingest / ルーティング / Grain 更新まで到達しているかを可視化するため、最小限のログを追加する。
+
+## Success Criteria
+1. RabbitMQ 受信ログが出力され、`TelemetryMsg` の DeviceId/Sequence/Properties 件数が確認できる。
+2. ルーティング開始ログが出力され、`RouteBatchAsync` が呼ばれていることが分かる。
+3. 変更点が plans.md に記録される。
+
+## Steps
+1. RabbitMQ ingest connector に受信ログ（最初の数件 + 周期ログ）を追加する。
+2. TelemetryRouterGrain に batch 受信ログ（最初の数回 + 周期ログ）を追加する。
+3. TelemetryIngestCoordinator にルーティング直前ログ（最初の数回 + 周期ログ）を追加する。
+4. 再起動してログを確認し、次の切り分けを判断する。
+
+## Progress
+- [x] Step 1: Ingest 受信ログ追加
+- [x] Step 2: Router batch ログ追加
+- [x] Step 3: Coordinator ルーティングログ追加
+- [x] Step 4: ログ確認
+
+## Observations
+- RabbitMQ 受信までは到達するが、`RouteBatchAsync` が完了せず止まるケースがあった。
+- `JsonElement` が値に残るとルーティングが進まないため、受信時に `JsonElement` を素の型へ正規化する必要があった。
+
+## Decisions
+- ログは最初の数件と周期（100件ごと）に限定し、ノイズを抑える。
+ - ログは原因特定後に削除し、正規化処理のみ残す。
+
+## Retrospective
+- `JsonElement` を `Dictionary/List/primitive` に変換することで `RouteBatchAsync` が完了することを確認した。
+
+---
+
 # plans.md: Document SiloHost Connector Configuration
 
 ## Purpose
@@ -1300,6 +1450,88 @@ Node Details �̕\����\�`���ɂ��ăL�[�ƒl�̗񑵂��
 
 ## Retrospective
 *To be updated after verification.*
+
+---
+
+# plans.md: Ensure RabbitMQ Ingest Enabled in SiloHost appsettings
+
+## Purpose
+SiloHost の `appsettings.json` に RabbitMQ 設定があるか確認し、無い場合は追加して `TelemetryIngest:Enabled` に `RabbitMq` を含める。
+
+## Success Criteria
+1. `src/SiloHost/appsettings.json` に `TelemetryIngest:RabbitMq` の設定が存在する。
+2. `TelemetryIngest:Enabled` に `RabbitMq` が追加されている（既存の有効化設定は維持）。
+3. 本変更が plans.md に記録される。
+
+## Steps
+1. `src/SiloHost/appsettings.json` を確認する。
+2. RabbitMQ 設定と Enabled 追記を行う。
+3. 記録を更新する。
+
+## Progress
+- [x] Step 1: appsettings 確認
+- [x] Step 2: RabbitMQ 設定追加
+- [x] Step 3: 記録更新
+
+## Observations
+- SiloHost の `appsettings.json` には RabbitMQ 設定が無く、`Enabled` は `Simulator` のみだった。
+
+## Decisions
+- RabbitMQ は `mq:5672` の既定構成で追記し、`Enabled` に `RabbitMq` を追加して Simulator と併用可能にした。
+
+## Retrospective
+- 未検証（`dotnet build` / `dotnet test` は未実行）。
+
+---
+
+# plans.md: Start-System Script Ingest Selector
+
+## Purpose
+`scripts/start-system.sh` と `scripts/start-system.ps1` で Simulator / RabbitMq を引数で選択できるようにし、引数なしならどちらも無効にする。README に使い方を反映する。
+
+## Success Criteria
+1. `scripts/start-system.sh` が `--simulator` / `--rabbitmq` で起動コネクタを選択できる。
+2. 引数なしの場合は `TelemetryIngest:Enabled` を設定せず、Simulator/RabbitMq とも無効になる。
+3. `scripts/start-system.ps1` も同等の引数動作に対応する。
+4. README に新しい引数の使い方が記載される。
+
+## Steps
+1. Bash/PowerShell の start-system スクリプトに引数解析を追加する。
+2. 生成する override 環境変数を選択内容に合わせて切り替える。
+3. README を更新する。
+
+## Progress
+- [x] Step 1: 引数解析を追加
+- [x] Step 2: override 環境変数を切り替え
+- [x] Step 3: README 更新
+- [x] Step 4: publisher の起動安定化（depends_on/restart）を追加
+- [x] Step 5: RabbitMQ 認証の整合（mq/silo/publisher）を追加
+- [x] Step 6: mq healthcheck と publisher 起動待ちを追加
+- [x] Step 7: silo も mq 健康状態待ちで起動するように修正
+- [x] Step 8: RabbitMQ コネクタの接続リトライを追加
+- [x] Step 9: RabbitMQ メッセージのデシリアライズ失敗をログ化
+
+## Observations
+- `start-system.sh` / `.ps1` は Simulator 固定だったため、引数で有効化コネクタを選択するように変更した。
+- Publisher が RabbitMQ の起動前に接続し Abort するケースがあった。
+- Publisher は `user/password` で接続を試みる一方、RabbitMQ の既定ユーザが `guest` のため認証エラーが発生した。
+- Publisher が mq の起動完了前に接続し、connection refused で再起動ループになるケースがあった。
+- Silo の RabbitMQ コネクタが mq 起動前に接続して失敗し、その後再試行しないため consumer が立たない。
+- healthcheck だけでは接続拒否が解消しないケースがあり、コネクタ側のリトライが必要だった。
+- メッセージのデシリアライズ失敗時はログが出ず、原因特定が難しかった。
+
+## Decisions
+- `--rabbitmq`/`-RabbitMq` 選択時は publisher を同時に起動してデータが流れる状態を作る。
+- 引数なしは ingest コネクタを有効化せず、明示的な選択を求める挙動にする。
+- Publisher は `depends_on: mq` と `restart: on-failure` を付与して起動順と再試行を行う。
+- `--rabbitmq` 時は `mq` に `user/password` を設定し、Silo/Publisher も同一認証情報で接続する。
+- mq に healthcheck を追加し、publisher は `service_healthy` を待つようにする。
+- Silo も `service_healthy` を待つようにして、コネクタ初回接続失敗を防ぐ。
+- RabbitMQ コネクタで接続リトライ（最大 10 秒間隔のバックオフ）を実装する。
+- RabbitMQ コネクタのデシリアライズ失敗を警告ログに出す。
+
+## Retrospective
+- 未検証（`docker compose up --build` 等は未実行）。
 =======
 - [x] ビルド/テストの実行結果を記録
 - [x] Phase 1 (サービス層テスト方針の確定)
@@ -1434,3 +1666,41 @@ Fix Graph RDF Import upload failures ("Could not find a part of the path '/tmp/o
 - [x] Fix Graph RDF Import button label ternary rendering
 - [x] Balance Hierarchy/Details panes to ~50/50
 - [x] Wrap long Node Details metadata values within pane
+
+---
+
+# plans.md: ApiGateway Verification Client
+
+## Purpose
+OIDC 認証後に ApiGateway の REST API を通して、リソース一覧・関係性・属性・最新テレメトリ・履歴テレメトリを確認し、結果をレポートとして保存できるクライアントを追加する。
+
+## Success Criteria
+1. `src/ApiGateway.Client`（仮）に .NET 8 のコンソールクライアントが追加される。
+2. OIDC トークン取得 → Registry/Graph/Device/Telemetry API の順で取得し、レポート（Markdown/JSON）を `reports/` に出力できる。
+3. 既定設定が `start-system.sh` の mock-oidc / localhost 構成で動作する。
+4. 変更点が plans.md に記録される。
+
+## Steps
+1. 既存 API と OIDC の設定/レスポンス形式を整理する。
+2. クライアントプロジェクトと設定ファイル、レポート出力を実装する。
+3. README に実行方法を追記する。
+4. 記録を更新する。
+
+## Progress
+- [x] Step 1: 仕様整理
+- [x] Step 2: クライアント実装
+- [x] Step 3: README 追記
+- [x] Step 4: 記録更新
+
+## Observations
+- レジストリ/テレメトリは件数が多いと `mode=url` になるため、エクスポートの JSONL ダウンロードも含めて実装した。
+- Point ノードの属性（DeviceId/PointId）を使うことで現在値・履歴取得を確実化できる。
+- registry の先頭 Point に属性が無いケースがあり、クライアント側で属性付きノードを探索する必要がある。
+- レポートにポイント/デバイスの生 JSON と履歴サンプル JSON を含めて具体化した。
+
+## Decisions
+- 検証対象ノードは `registry/points` の先頭を優先し、取得できない場合のみ Site/Building にフォールバックする。
+- レポートは `reports/` に Markdown/JSON の両形式で出力する。
+
+## Retrospective
+- まだ `dotnet build` / `dotnet test` は未実行。必要に応じて実行する。

@@ -6,6 +6,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway", "src\ApiGateway\ApiGateway.csproj", "{967A9878-9005-C8B0-725C-1F34134168DB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Client", "src\ApiGateway.Client\ApiGateway.Client.csproj", "{769BC19A-284A-40AD-887E-75A8885006B1}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Tests", "src\ApiGateway.Tests\ApiGateway.Tests.csproj", "{5D88092C-6F41-447F-BCE9-EBF11FBC3824}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grains.Abstractions", "src\Grains.Abstractions\Grains.Abstractions.csproj", "{FA32BC97-A445-BD9B-F584-EB484F4CF15B}"
@@ -52,6 +54,10 @@ Global
 		{967A9878-9005-C8B0-725C-1F34134168DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{967A9878-9005-C8B0-725C-1F34134168DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{967A9878-9005-C8B0-725C-1F34134168DB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{769BC19A-284A-40AD-887E-75A8885006B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{769BC19A-284A-40AD-887E-75A8885006B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{769BC19A-284A-40AD-887E-75A8885006B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{769BC19A-284A-40AD-887E-75A8885006B1}.Release|Any CPU.Build.0 = Release|Any CPU
 		{FA32BC97-A445-BD9B-F584-EB484F4CF15B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{FA32BC97-A445-BD9B-F584-EB484F4CF15B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FA32BC97-A445-BD9B-F584-EB484F4CF15B}.Release|Any CPU.ActiveCfg = Release|Any CPU

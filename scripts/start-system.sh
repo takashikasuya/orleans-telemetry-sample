@@ -7,7 +7,43 @@ STORAGE_DIR="$ROOT/storage"
 COMPOSE="docker compose"
 STATE_FILE="$ROOT/scripts/.system-state"
 DOCKERFILE="$ROOT/Dockerfile.dotnet"
-SEED_FILE="$ROOT/data/seed-complex.ttl"
+SEED_FILE="$ROOT/data/sample.ttl"
+
+USE_SIMULATOR=false
+USE_RABBITMQ=false
+
+usage() {
+  cat <<'USAGE'
+Usage: ./scripts/start-system.sh [--simulator] [--rabbitmq]
+
+  --simulator   Enable Simulator ingest connector.
+  --rabbitmq    Enable RabbitMq ingest connector (also starts publisher).
+
+If no options are provided, no ingest connectors are enabled.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --simulator|-s)
+      USE_SIMULATOR=true
+      shift
+      ;;
+    --rabbitmq|-r)
+      USE_RABBITMQ=true
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
 
 mkdir -p "$REPORT_DIR" "$STORAGE_DIR"
 
@@ -18,9 +54,89 @@ fi
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/telemetry-system-XXXXXX")"
 OVERRIDE_FILE="$TEMP_DIR/docker-compose.override.yml"
 
+INGEST_ENABLED_LINES=""
+SIMULATOR_LINES=""
+RABBITMQ_LINES=""
+INGEST_SINK_LINES=""
+MQ_BLOCK=""
+PUBLISHER_BLOCK=""
+PUBLISHER_SERVICE=""
+
+enabled_index=0
+if $USE_SIMULATOR; then
+  INGEST_ENABLED_LINES="${INGEST_ENABLED_LINES}      TelemetryIngest__Enabled__${enabled_index}: Simulator"$'\n'
+  enabled_index=$((enabled_index + 1))
+  SIMULATOR_LINES=$(cat <<'SIM'
+      TelemetryIngest__Simulator__TenantId: t1
+      TelemetryIngest__Simulator__BuildingName: Simulator-Building
+      TelemetryIngest__Simulator__SpaceId: Simulator-Area
+      TelemetryIngest__Simulator__DeviceIdPrefix: device
+      TelemetryIngest__Simulator__DeviceCount: "1"
+      TelemetryIngest__Simulator__PointsPerDevice: "1"
+      TelemetryIngest__Simulator__IntervalMilliseconds: "500"
+SIM
+)
+fi
+
+if $USE_RABBITMQ; then
+  INGEST_ENABLED_LINES="${INGEST_ENABLED_LINES}      TelemetryIngest__Enabled__${enabled_index}: RabbitMq"$'\n'
+  enabled_index=$((enabled_index + 1))
+  RABBITMQ_LINES=$(cat <<'RMQ'
+      TelemetryIngest__RabbitMq__HostName: mq
+      TelemetryIngest__RabbitMq__Port: "5672"
+      TelemetryIngest__RabbitMq__UserName: user
+      TelemetryIngest__RabbitMq__Password: password
+      TelemetryIngest__RabbitMq__QueueName: telemetry
+      TelemetryIngest__RabbitMq__PrefetchCount: "100"
+RMQ
+)
+  MQ_BLOCK=$(cat <<'YML'
+  mq:
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+YML
+)
+  PUBLISHER_BLOCK=$(cat <<YML
+  publisher:
+    build:
+      context: $ROOT
+      dockerfile: $DOCKERFILE
+      args:
+        PROJECT: src/Publisher
+    depends_on:
+      mq:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      RABBITMQ_HOST: mq
+      RABBITMQ_USER: user
+      RABBITMQ_PASS: password
+      TENANT: t1
+      RDF_SEED_PATH: /seed/seed.ttl
+    volumes:
+      - $SEED_FILE:/seed/seed.ttl:ro
+YML
+)
+  PUBLISHER_SERVICE=" publisher"
+fi
+
+if $USE_SIMULATOR || $USE_RABBITMQ; then
+  INGEST_SINK_LINES="      TelemetryIngest__EventSinks__Enabled__0: ParquetStorage"
+fi
+
 cat <<YML > "$OVERRIDE_FILE"
 services:
+$MQ_BLOCK
   silo:
+    depends_on:
+      mq:
+        condition: service_healthy
     build:
       context: $ROOT
       dockerfile: $DOCKERFILE
@@ -32,15 +148,9 @@ services:
       Orleans__AdvertisedIPAddress: silo
       Orleans__SiloPort: "11111"
       Orleans__GatewayPort: "30000"
-      TelemetryIngest__Enabled__0: Simulator
-      TelemetryIngest__EventSinks__Enabled__0: ParquetStorage
-      TelemetryIngest__Simulator__TenantId: t1
-      TelemetryIngest__Simulator__BuildingName: Simulator-Building
-      TelemetryIngest__Simulator__SpaceId: Simulator-Area
-      TelemetryIngest__Simulator__DeviceIdPrefix: device
-      TelemetryIngest__Simulator__DeviceCount: "1"
-      TelemetryIngest__Simulator__PointsPerDevice: "1"
-      TelemetryIngest__Simulator__IntervalMilliseconds: "500"
+$INGEST_ENABLED_LINES$INGEST_SINK_LINES
+$RABBITMQ_LINES
+$SIMULATOR_LINES
       TelemetryStorage__StagePath: /storage/stage
       TelemetryStorage__ParquetPath: /storage/parquet
       TelemetryStorage__IndexPath: /storage/index
@@ -79,6 +189,7 @@ services:
       OIDC_AUDIENCE: default
     extra_hosts:
       - "localhost:host-gateway"
+$PUBLISHER_BLOCK
 YML
 
 echo "Starting system..."
@@ -103,7 +214,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build --no-cache admin
     
     echo "Starting services..."
-    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo api admin mock-oidc
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo api admin mock-oidc$PUBLISHER_SERVICE
   }; then
     SUCCESS=true
     break

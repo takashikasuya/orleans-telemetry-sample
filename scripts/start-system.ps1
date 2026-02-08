@@ -1,4 +1,8 @@
-param()
+param(
+  [switch]$Simulator,
+  [switch]$RabbitMq,
+  [switch]$Help
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -14,6 +18,18 @@ $dockerfilePosix = $dockerfile -replace "\\", "/"
 $seedFile = Join-Path $Root "data/seed-complex.ttl"
 $seedFilePosix = $seedFile -replace "\\", "/"
 
+if ($Help) {
+  @"
+Usage: .\scripts\start-system.ps1 [-Simulator] [-RabbitMq]
+
+  -Simulator   Enable Simulator ingest connector.
+  -RabbitMq    Enable RabbitMq ingest connector (also starts publisher).
+
+If no options are provided, no ingest connectors are enabled.
+"@ | Write-Host
+  exit 0
+}
+
 New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 New-Item -ItemType Directory -Force -Path $storageDir | Out-Null
 
@@ -25,9 +41,87 @@ $tempDir = Join-Path ([IO.Path]::GetTempPath()) ("telemetry-system-" + [guid]::N
 New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
 $overrideFile = Join-Path $tempDir "docker-compose.override.yml"
 
+$ingestEnabledLines = New-Object System.Collections.Generic.List[string]
+$simulatorLines = ""
+$rabbitMqLines = ""
+$ingestSinkLine = ""
+$mqBlock = ""
+$publisherBlock = ""
+$publisherService = ""
+
+if ($Simulator) {
+  $ingestEnabledLines.Add("      TelemetryIngest__Enabled__{0}: Simulator" -f $ingestEnabledLines.Count)
+  $simulatorLines = @"
+      TelemetryIngest__Simulator__TenantId: t1
+      TelemetryIngest__Simulator__BuildingName: building
+      TelemetryIngest__Simulator__SpaceId: space
+      TelemetryIngest__Simulator__DeviceIdPrefix: device
+      TelemetryIngest__Simulator__DeviceCount: "1"
+      TelemetryIngest__Simulator__PointsPerDevice: "1"
+      TelemetryIngest__Simulator__IntervalMilliseconds: "500"
+"@
+}
+
+if ($RabbitMq) {
+  $ingestEnabledLines.Add("      TelemetryIngest__Enabled__{0}: RabbitMq" -f $ingestEnabledLines.Count)
+  $rabbitMqLines = @"
+      TelemetryIngest__RabbitMq__HostName: mq
+      TelemetryIngest__RabbitMq__Port: "5672"
+      TelemetryIngest__RabbitMq__UserName: user
+      TelemetryIngest__RabbitMq__Password: password
+      TelemetryIngest__RabbitMq__QueueName: telemetry
+      TelemetryIngest__RabbitMq__PrefetchCount: "100"
+"@
+  $mqBlock = @"
+  mq:
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+"@
+  $publisherBlock = @"
+  publisher:
+    build:
+      context: $RootPosix
+      dockerfile: $dockerfilePosix
+      args:
+        PROJECT: src/Publisher
+    depends_on:
+      mq:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      RABBITMQ_HOST: mq
+      RABBITMQ_USER: user
+      RABBITMQ_PASS: password
+      TENANT: t1
+      RDF_SEED_PATH: /seed/seed.ttl
+    volumes:
+      - "${seedFilePosix}:/seed/seed.ttl:ro"
+"@
+  $publisherService = " publisher"
+}
+
+if ($Simulator -or $RabbitMq) {
+  $ingestSinkLine = "      TelemetryIngest__EventSinks__Enabled__0: ParquetStorage"
+}
+
+$ingestEnabledText = if ($ingestEnabledLines.Count -gt 0) { ($ingestEnabledLines -join "`n") + "`n" } else { "" }
+$simulatorText = if ($simulatorLines) { "$simulatorLines`n" } else { "" }
+$rabbitMqText = if ($rabbitMqLines) { "$rabbitMqLines`n" } else { "" }
+$ingestSinkText = if ($ingestSinkLine) { "$ingestSinkLine`n" } else { "" }
+
 @"
 services:
+$mqBlock
   silo:
+    depends_on:
+      mq:
+        condition: service_healthy
     build:
       context: $RootPosix
       dockerfile: $dockerfilePosix
@@ -39,15 +133,7 @@ services:
       Orleans__AdvertisedIPAddress: silo
       Orleans__SiloPort: "11111"
       Orleans__GatewayPort: "30000"
-      TelemetryIngest__Enabled__0: Simulator
-      TelemetryIngest__EventSinks__Enabled__0: ParquetStorage
-      TelemetryIngest__Simulator__TenantId: t1
-      TelemetryIngest__Simulator__BuildingName: building
-      TelemetryIngest__Simulator__SpaceId: space
-      TelemetryIngest__Simulator__DeviceIdPrefix: device
-      TelemetryIngest__Simulator__DeviceCount: "1"
-      TelemetryIngest__Simulator__PointsPerDevice: "1"
-      TelemetryIngest__Simulator__IntervalMilliseconds: "500"
+$ingestEnabledText$ingestSinkText$rabbitMqText$simulatorText
       TelemetryStorage__StagePath: /storage/stage
       TelemetryStorage__ParquetPath: /storage/parquet
       TelemetryStorage__IndexPath: /storage/index
@@ -86,6 +172,7 @@ services:
       OIDC_AUDIENCE: default
     extra_hosts:
       - "localhost:host-gateway"
+$publisherBlock
 "@ | Set-Content -Path $overrideFile -Encoding UTF8
 
 Write-Host "Starting system..."
@@ -108,7 +195,7 @@ while ($RetryCount -lt $MaxRetries) {
     & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build --no-cache admin
     
     Write-Host "Starting services..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d mq silo api admin mock-oidc
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d mq silo api admin mock-oidc$publisherService
     
     $Success = $true
     break

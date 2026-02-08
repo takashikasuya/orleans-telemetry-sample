@@ -28,7 +28,7 @@ public sealed class RabbitMqIngestConnector : ITelemetryIngestConnector, IAsyncD
 
     public async Task StartAsync(ChannelWriter<TelemetryPointMsg> writer, CancellationToken ct)
     {
-        EnsureConnection();
+        await EnsureConnectionWithRetryAsync(ct);
         var queueName = ResolveQueueName();
 
         var consumer = new AsyncEventingBasicConsumer(_model);
@@ -37,15 +37,30 @@ public sealed class RabbitMqIngestConnector : ITelemetryIngestConnector, IAsyncD
             try
             {
                 var body = ea.Body.ToArray();
-                var msg = JsonSerializer.Deserialize<TelemetryMsg>(body);
+                TelemetryMsg? msg;
+                try
+                {
+                    msg = JsonSerializer.Deserialize<TelemetryMsg>(
+                        body,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "failed to deserialize telemetry message");
+                    _model!.BasicNack(ea.DeliveryTag, false, false);
+                    return;
+                }
+
                 if (msg is null)
                 {
+                    _logger.LogWarning("received null telemetry message");
                     _model!.BasicNack(ea.DeliveryTag, false, false);
                     return;
                 }
 
                 foreach (var kv in msg.Properties)
                 {
+                    var normalizedValue = NormalizeValue(kv.Value);
                     var pointMsg = new TelemetryPointMsg
                     {
                         TenantId = msg.TenantId,
@@ -55,7 +70,7 @@ public sealed class RabbitMqIngestConnector : ITelemetryIngestConnector, IAsyncD
                         PointId = kv.Key,
                         Sequence = msg.Sequence,
                         Timestamp = msg.Timestamp,
-                        Value = kv.Value
+                        Value = normalizedValue
                     };
                     await writer.WriteAsync(pointMsg, ct);
                 }
@@ -80,6 +95,27 @@ public sealed class RabbitMqIngestConnector : ITelemetryIngestConnector, IAsyncD
         }
         catch (OperationCanceledException)
         {
+        }
+    }
+
+    private async Task EnsureConnectionWithRetryAsync(CancellationToken ct)
+    {
+        var attempt = 0;
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                EnsureConnection();
+                return;
+            }
+            catch (Exception ex)
+            {
+                attempt++;
+                var delaySeconds = Math.Min(10, attempt);
+                _logger.LogWarning(ex, "RabbitMQ connection failed. Retrying in {DelaySeconds}s.", delaySeconds);
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), ct);
+            }
         }
     }
 
@@ -145,6 +181,56 @@ public sealed class RabbitMqIngestConnector : ITelemetryIngestConnector, IAsyncD
     private ushort ResolvePrefetchCount()
     {
         return _options.PrefetchCount == 0 ? (ushort)100 : _options.PrefetchCount;
+    }
+
+    private static object? NormalizeValue(object? value)
+    {
+        if (value is JsonElement element)
+        {
+            return ConvertJsonElement(element);
+        }
+
+        return value;
+    }
+
+    private static object? ConvertJsonElement(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+            {
+                var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                foreach (var property in element.EnumerateObject())
+                {
+                    dict[property.Name] = ConvertJsonElement(property.Value);
+                }
+
+                return dict;
+            }
+            case JsonValueKind.Array:
+            {
+                var list = new List<object?>();
+                foreach (var item in element.EnumerateArray())
+                {
+                    list.Add(ConvertJsonElement(item));
+                }
+
+                return list;
+            }
+            case JsonValueKind.String:
+                return element.GetString();
+            case JsonValueKind.Number:
+                return element.TryGetInt64(out var longValue) ? longValue : element.GetDouble();
+            case JsonValueKind.True:
+                return true;
+            case JsonValueKind.False:
+                return false;
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+                return null;
+            default:
+                return element.ToString();
+        }
     }
 
     public ValueTask DisposeAsync()
