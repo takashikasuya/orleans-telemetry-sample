@@ -2,6 +2,38 @@
 
 ---
 
+# plans.md: Validate Tests and Fix Failures (2026-??-??)
+
+## Purpose
+Run the test suite, identify failures, and apply minimal fixes so tests complete without errors.
+
+## Success Criteria
+1. `dotnet test` completes without errors (or remaining failures documented).
+2. Any fixes are minimal and recorded in this plan.
+3. Verification commands and results are documented.
+
+## Steps
+1. Run `dotnet test` to collect failures.
+2. Diagnose and apply minimal fixes.
+3. Re-run relevant tests to confirm.
+
+## Progress
+- [x] Run `dotnet test`
+- [x] Apply fixes (if needed)
+- [x] Re-run tests
+
+## Observations
+- `dotnet test` initially failed in `Telemetry.E2E.Tests` because ApiGateway attempted to connect to the default Orleans gateway port (30000) and received connection refused.
+- The config overrides supplied to `ApiGatewayFactory` were not applied early enough for Program startup, so ApiGateway fell back to defaults.
+
+## Decisions
+- Set `Orleans__GatewayHost`/`Orleans__GatewayPort` environment variables in the E2E tests before starting the ApiGateway factory to ensure the gateway port matches the test silo.
+
+## Retrospective
+- `dotnet test` passes after applying the gateway environment overrides.
+
+---
+
 # plans.md: Wait for Orleans Gateway Port Before Starting API in E2E
 
 ## Purpose
