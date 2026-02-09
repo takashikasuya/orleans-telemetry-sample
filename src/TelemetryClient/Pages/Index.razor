@@ -66,11 +66,27 @@
                     
                     <MudGrid Class="mt-4">
                         <MudItem xs="12">
-                            <TelemetryChart DeviceId="@_selectedDevice.DeviceId" 
-                                          PointId="@_selectedPointId" 
-                                          TenantId="@_tenantId"
-                                          Title="@($"Trend: {point.PointId}")" />
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTelemetryAsync">
+                                    Load Telemetry
+                                </MudButton>
+                                @if (_trendRequested)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Loaded latest telemetry trend.</MudText>
+                                }
+                            </MudStack>
                         </MudItem>
+
+                        @if (_trendRequested)
+                        {
+                            <MudItem xs="12">
+                                <TelemetryChart DeviceId="@_selectedDevice.DeviceId"
+                                              PointId="@_selectedPointId"
+                                              TenantId="@_tenantId"
+                                              Title="@($"Trend: {point.PointId}")"
+                                              @key="_trendRequestVersion" />
+                            </MudItem>
+                        }
                         
                         @if (point.Writable)
                         {
@@ -139,6 +155,8 @@
     private HierarchyTreeNode? _selectedNode;
     private DeviceSnapshotDto? _selectedDevice;
     private string? _selectedPointId;
+    private bool _trendRequested;
+    private int _trendRequestVersion;
     private string _buildingName = string.Empty;
     private string _spaceId = string.Empty;
 
@@ -188,6 +206,7 @@
         try
         {
             _treeNodes = await HierarchyTreeService.LoadRootNodesAsync(_tenantId);
+            await ExpandTreeToLevelAsync(_treeNodes);
             Snackbar.Add($"Loaded {_treeNodes.Count} root nodes", Severity.Success);
         }
         catch (Exception ex)
@@ -221,6 +240,7 @@
     {
         _selectedNode = node;
         _selectedPointId = null;
+        _trendRequested = false;
         
         // Extract building name and space ID from node attributes if available
         if (node.Attributes != null)
@@ -256,6 +276,51 @@
     private void OnPointRowClick(TableRowClickEventArgs<KeyValuePair<string, PointDto>> args)
     {
         _selectedPointId = args.Item.Key;
+        _trendRequested = false;
         StateHasChanged();
+    }
+
+    private void LoadTelemetryAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedPointId))
+        {
+            return;
+        }
+
+        _trendRequested = true;
+        _trendRequestVersion++;
+    }
+
+    private static bool IsLevelNode(HierarchyTreeNode node)
+        => node.NodeType.Equals("Level", StringComparison.OrdinalIgnoreCase) ||
+           node.NodeType.Equals("Floor", StringComparison.OrdinalIgnoreCase);
+
+    private async Task ExpandTreeToLevelAsync(IEnumerable<HierarchyTreeNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            if (IsLevelNode(node))
+            {
+                node.IsExpanded = true;
+                continue;
+            }
+
+            if (!node.CanHaveChildren())
+            {
+                continue;
+            }
+
+            node.IsExpanded = true;
+            if (!node.ChildrenLoaded)
+            {
+                node.Children = await HierarchyTreeService.LoadChildrenAsync(node.NodeId, _tenantId);
+                node.ChildrenLoaded = true;
+            }
+
+            if (node.Children.Any())
+            {
+                await ExpandTreeToLevelAsync(node.Children);
+            }
+        }
     }
 }

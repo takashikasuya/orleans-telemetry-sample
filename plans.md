@@ -1798,3 +1798,34 @@ OIDC 認証後に ApiGateway の REST API を通して、リソース一覧・�
 
 ## Retrospective
 - まだ `dotnet build` / `dotnet test` は未実行。必要に応じて実行する。
+
+---
+
+# plans.md: Telemetry Client Tree Expansion + Manual Trend Load
+
+## Purpose
+管理 UI（Telemetry Tree Client）で、ツリーの初期展開をフロア/Level まで広げ、ポイント選択後に明示的なボタン操作で最新テレメトリのトレンドを表示できるようにする。
+
+## Success Criteria
+1. テナント読み込み後、Site/Building 配下が自動で展開され、Level/Floor ノードまで表示された状態になる。
+2. ポイント選択時に「Load Telemetry」ボタンが表示され、ボタンを押したときのみトレンドチャートが表示される。
+3. 変更内容が plans.md に記録される。
+
+## Steps
+1. TelemetryClient のツリー読み込み時に Level/Floor まで自動展開する処理を追加する。
+2. ポイント選択後に手動ロードボタンを追加し、押下時にトレンドチャートを表示する。
+3. 必要な UI 状態（選択解除時のリセット）を調整する。
+
+## Progress
+- [x] Step 1: ツリー自動展開を追加
+- [x] Step 2: 手動ロードボタン + トレンド表示制御
+- [x] Step 3: UI 状態のリセット調整
+
+## Observations
+- Load 時に Site/Building の子ノードを取得して Level/Floor まで展開するため、初期ロードの API 呼び出し回数は増加する。
+
+## Decisions
+- 既存の自動ポーリングチャートは、ボタン押下後に初回表示される形で流用する。
+
+## Retrospective
+- 未検証（`dotnet build` / `dotnet test` は未実行）。
