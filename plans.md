@@ -2,6 +2,39 @@
 
 ---
 
+# plans.md: OpenTelemetry Collector Monitoring Policy (2026-??-??)
+
+## Purpose
+OpenTelemetry Collector を前提に、モジュールごとに問題を効率的に発見でき、過剰にならない監視方針を整理する。
+
+## Success Criteria
+1. 監視対象モジュールごとの最小限のメトリクス/ログ/トレース方針が整理されている。
+2. 収集・サンプリング・保持の基本方針が明文化されている。
+3. 本内容が docs に記録され、plans.md に作業記録が残る。
+
+## Steps
+1. 監視対象（mq/silo/api/admin/publisher/storage/client）と運用ゴールを整理する。
+2. OpenTelemetry Collector の収集方針（signals/attributes/sampling）を記述する。
+3. docs に監視方針を追加し、plans.md を更新する。
+
+## Progress
+- [x] Step 1: 監視対象とゴール整理
+- [x] Step 2: 収集方針の記述
+- [x] Step 3: docs 追加と記録更新
+
+## Observations
+- 既存のドキュメントに横断的な監視ポリシーが無い。
+
+## Decisions
+- 過剰な可観測性を避けるため、最小限のゴールデンシグナルとモジュール固有の少数メトリクスに限定する。
+
+## Retrospective
+- TBD
+
+## Update (2026-??-??)
+- 具体設計として Collector パイプライン雛形、収集経路、共通リソース属性、モジュール別計測ポイントを docs に追記。
+- Collector 設定ファイルと docker compose override を追加し、実装開始点を用意。
+
 # plans.md: Validate Tests and Fix Failures (2026-??-??)
 
 ## Purpose
