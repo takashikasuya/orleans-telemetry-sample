@@ -404,7 +404,7 @@ http://localhost:8080/swagger/v1/swagger.json
 
 ## CustomTags ベース検索 API
 
-RDF の `CustomTags` は Graph ノード属性へ `tag:<name>=true` で保存されます。以下の API でタグ検索できます。
+RDF の `CustomTags` は Graph ノード属性へ `tag:<name>=true` で保存され、seed時にタグ逆引きインデックス Grain（`tag -> nodeIds`）へ登録されます。検索時はこのインデックスを使って候補ノードを絞り込みます。
 
 ### REST
 

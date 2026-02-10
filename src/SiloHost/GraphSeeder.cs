@@ -96,6 +96,7 @@ internal sealed class GraphSeeder
             }
             _logger.LogInformation("Graph seed Area count: {AreaCount}", areaCount);
             var index = _grainFactory.GetGrain<IGraphIndexGrain>(tenantId);
+            var tagIndex = _grainFactory.GetGrain<IGraphTagIndexGrain>(tenantId);
             var registry = _grainFactory.GetGrain<IGraphTenantRegistryGrain>(0);
 
             foreach (var node in seed.Nodes)
@@ -105,6 +106,7 @@ internal sealed class GraphSeeder
                 var grain = _grainFactory.GetGrain<IGraphNodeGrain>(key);
                 await grain.UpsertAsync(node);
                 await index.AddNodeAsync(node);
+                await tagIndex.IndexNodeAsync(node.NodeId, node.Attributes);
             }
 
             foreach (var edge in seed.Edges)

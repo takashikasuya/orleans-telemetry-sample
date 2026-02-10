@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Devices.V1;
 using FluentAssertions;
@@ -65,11 +66,24 @@ public sealed class GrpcRegistryServiceTests
 
     private static Mock<IClusterClient> BuildClusterMock()
     {
-        var indexMock = new Mock<IGraphIndexGrain>();
-        indexMock.Setup(x => x.GetByTypeAsync(GraphNodeType.Equipment)).ReturnsAsync(new[] { "equipment:boiler-1" });
-        indexMock.Setup(x => x.GetByTypeAsync(GraphNodeType.Point)).ReturnsAsync(new[] { "point:temp-1" });
-        indexMock.Setup(x => x.GetByTypeAsync(It.Is<GraphNodeType>(t => t != GraphNodeType.Equipment && t != GraphNodeType.Point)))
-            .ReturnsAsync(System.Array.Empty<string>());
+        var tagIndexMock = new Mock<IGraphTagIndexGrain>();
+        tagIndexMock
+            .Setup(x => x.GetNodeIdsByTagsAsync(It.IsAny<IReadOnlyList<string>>()))
+            .ReturnsAsync((IReadOnlyList<string> tags) =>
+            {
+                var normalized = tags.Select(x => x.Trim()).Where(x => !string.IsNullOrWhiteSpace(x)).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+                if (normalized.SetEquals(new[] { "hot", "zone-a" }))
+                {
+                    return new[] { "point:temp-1" };
+                }
+
+                if (normalized.SetEquals(new[] { "hot" }))
+                {
+                    return new[] { "equipment:boiler-1", "point:temp-1" };
+                }
+
+                return System.Array.Empty<string>();
+            });
 
         var snapshots = new Dictionary<string, GraphNodeSnapshot>
         {
@@ -109,8 +123,8 @@ public sealed class GrpcRegistryServiceTests
 
         var clientMock = new Mock<IClusterClient>();
         clientMock
-            .Setup(c => c.GetGrain<IGraphIndexGrain>(It.IsAny<string>(), It.IsAny<string?>()))
-            .Returns(indexMock.Object);
+            .Setup(c => c.GetGrain<IGraphTagIndexGrain>(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns(tagIndexMock.Object);
         clientMock
             .Setup(c => c.GetGrain<IGraphNodeGrain>(It.IsAny<string>(), It.IsAny<string?>()))
             .Returns<string, string?>((key, _) =>

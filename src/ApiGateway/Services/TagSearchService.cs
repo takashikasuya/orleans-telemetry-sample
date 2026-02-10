@@ -8,11 +8,6 @@ namespace ApiGateway.Services;
 
 public sealed class TagSearchService
 {
-    private static readonly GraphNodeType[] SearchableNodeTypes = Enum
-        .GetValues<GraphNodeType>()
-        .Where(x => x != GraphNodeType.Unknown)
-        .ToArray();
-
     private readonly IClusterClient _client;
 
     public TagSearchService(IClusterClient client)
@@ -77,20 +72,10 @@ public sealed class TagSearchService
         HashSet<string> normalizedTags,
         CancellationToken ct)
     {
-        var index = _client.GetGrain<IGraphIndexGrain>(tenant);
-        var nodeIds = new HashSet<string>(StringComparer.Ordinal);
+        var tagIndex = _client.GetGrain<IGraphTagIndexGrain>(tenant);
+        var nodeIds = await tagIndex.GetNodeIdsByTagsAsync(normalizedTags.ToArray());
 
-        foreach (var nodeType in SearchableNodeTypes)
-        {
-            ct.ThrowIfCancellationRequested();
-            var byType = await index.GetByTypeAsync(nodeType);
-            foreach (var nodeId in byType)
-            {
-                nodeIds.Add(nodeId);
-            }
-        }
-
-        var results = new List<TagMatchedNode>();
+        var results = new List<TagMatchedNode>(nodeIds.Count);
         foreach (var nodeId in nodeIds)
         {
             ct.ThrowIfCancellationRequested();

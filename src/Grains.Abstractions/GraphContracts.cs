@@ -106,3 +106,12 @@ public interface IGraphTenantRegistryGrain : IGrainWithIntegerKey
     Task RegisterTenantAsync(string tenantId);
     Task<IReadOnlyList<string>> GetTenantIdsAsync();
 }
+
+
+public interface IGraphTagIndexGrain : IGrainWithStringKey
+{
+    Task IndexNodeAsync(string nodeId, Dictionary<string, string> attributes);
+    Task RemoveNodeAsync(string nodeId);
+    Task<IReadOnlyList<string>> GetNodeIdsByTagsAsync(IReadOnlyList<string> tags);
+}
+
