@@ -401,3 +401,23 @@ http://localhost:8080/swagger/v1/swagger.json
 ### Docker Compose での取得
 
 `docker-compose.yml` の `api` サービスに `ASPNETCORE_ENVIRONMENT=Development` を追加すると Swagger が有効になります。既存の開発用フローでは、`scripts/start-system.sh` が `ASPNETCORE_ENVIRONMENT=Development` を指定する運用を想定しています。
+
+## CustomTags ベース検索 API
+
+RDF の `CustomTags` は Graph ノード属性へ `tag:<name>=true` で保存されます。以下の API でタグ検索できます。
+
+### REST
+
+- `GET /api/registry/search/nodes?tags=hot&tags=zone-a&limit=50`
+  - 指定タグをすべて持つノードを返す。
+- `GET /api/registry/search/grains?tags=hot&limit=50`
+  - 指定タグを持つノードから導出できる Grain キー（Device/Point）を返す。
+
+`tags` は `tags=hot,zone-a` のようなカンマ区切りも受け付けます。
+
+### gRPC (`devices.v1.RegistryService`)
+
+- `rpc SearchByTags(TagSearchRequest) returns (TagNodeSearchResponse)`
+- `rpc SearchGrainsByTags(TagSearchRequest) returns (TagGrainSearchResponse)`
+
+`TagSearchRequest.tags` にタグ一覧、`limit` に最大件数を指定します。

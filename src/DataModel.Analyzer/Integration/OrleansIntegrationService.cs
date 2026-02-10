@@ -437,6 +437,16 @@ public class OrleansIntegrationService
             attributes[$"prop:{kv.Key}"] = FormatAttributeValue(kv.Value);
         }
 
+        foreach (var kv in resource.CustomTags)
+        {
+            if (!kv.Value || string.IsNullOrWhiteSpace(kv.Key))
+            {
+                continue;
+            }
+
+            attributes[$"tag:{kv.Key.Trim()}"] = bool.TrueString;
+        }
+
         extras?.Invoke(attributes);
 
         return new GraphNodeDefinition

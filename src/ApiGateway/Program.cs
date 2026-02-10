@@ -38,6 +38,7 @@ builder.Services.AddHostedService<TelemetryExportCleanupService>();
 builder.Services.Configure<RegistryExportOptions>(builder.Configuration.GetSection("RegistryExport"));
 builder.Services.AddSingleton<RegistryExportService>();
 builder.Services.AddSingleton<GraphRegistryService>();
+builder.Services.AddSingleton<TagSearchService>();
 builder.Services.AddSingleton<GraphPointResolver>();
 builder.Services.AddHostedService<RegistryExportCleanupService>();
 
@@ -303,6 +304,28 @@ app.MapGet("/api/registry/sites", async (
     return Results.Ok(result);
 }).RequireAuthorization();
 
+app.MapGet("/api/registry/search/nodes", async (
+    string[] tags,
+    int? limit,
+    TagSearchService tagSearch,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var result = await tagSearch.SearchNodesByTagsAsync(tenant, tags, limit, http.RequestAborted);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/registry/search/grains", async (
+    string[] tags,
+    int? limit,
+    TagSearchService tagSearch,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var result = await tagSearch.SearchGrainsByTagsAsync(tenant, tags, limit, http.RequestAborted);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
 app.MapGet("/api/registry/exports/{exportId}", async (
     string exportId,
     RegistryExportService registryExports,
@@ -370,6 +393,7 @@ app.MapGet("/api/telemetry/exports/{exportId}", async (
 if (grpcEnabled)
 {
     app.MapGrpcService<DeviceService>().RequireAuthorization();
+    app.MapGrpcService<RegistryGrpcService>().RequireAuthorization();
 }
 
 app.Run();
