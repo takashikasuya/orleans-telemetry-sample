@@ -10,6 +10,7 @@ data/graph-uploads/
 *.userosscache
 *.sln.docstates
 *.parquet
+credentials.*
 
 # VS Code settings
 .vscode/

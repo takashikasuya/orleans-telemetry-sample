@@ -205,13 +205,13 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     
     # Build services sequentially to avoid Docker daemon overload
     echo "Building silo..."
-    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build --no-cache silo
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build silo
     
     echo "Building api..."
-    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build --no-cache api
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build api
     
     echo "Building admin..."
-    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build --no-cache admin
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build admin
     
     echo "Starting services..."
     $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo api admin mock-oidc$PUBLISHER_SERVICE

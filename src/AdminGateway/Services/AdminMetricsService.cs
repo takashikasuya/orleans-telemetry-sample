@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using AdminGateway.Models;
@@ -456,6 +458,36 @@ internal sealed class AdminMetricsService
         return new GraphNodeDetailView(snapshot, pointSnapshot, pointGrainKey);
     }
 
+    public async Task<IReadOnlyList<PointTrendSample>> SamplePointTrendAsync(
+        string pointGrainKey,
+        int sampleCount = 12,
+        int intervalMs = 1000,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(pointGrainKey))
+        {
+            return Array.Empty<PointTrendSample>();
+        }
+
+        var results = new List<PointTrendSample>(Math.Max(1, sampleCount));
+        var grain = _client.GetGrain<IPointGrain>(pointGrainKey);
+
+        for (var i = 0; i < sampleCount; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var snapshot = await grain.GetAsync();
+            var (value, raw) = NormalizeNumericValue(snapshot.LatestValue);
+            results.Add(new PointTrendSample(snapshot.UpdatedAt, value, raw));
+
+            if (i < sampleCount - 1)
+            {
+                await Task.Delay(intervalMs, ct);
+            }
+        }
+
+        return results;
+    }
+
     public async Task<IReadOnlyList<GrainHierarchyNode>> GetGrainHierarchyAsync(
         int maxTypesPerSilo = 20,
         int maxGrainsPerType = 50)
@@ -841,4 +873,64 @@ internal sealed class AdminMetricsService
     }
 
     private sealed record GraphRelation(string ParentId, string ChildId, int Priority);
+
+    private static (double? Value, string? Raw) NormalizeNumericValue(object? value)
+    {
+        if (value is null)
+        {
+            return (null, null);
+        }
+
+        switch (value)
+        {
+            case double d:
+                return (d, d.ToString(CultureInfo.InvariantCulture));
+            case float f:
+                return (f, f.ToString(CultureInfo.InvariantCulture));
+            case decimal dec:
+                return ((double)dec, dec.ToString(CultureInfo.InvariantCulture));
+            case int i:
+                return (i, i.ToString(CultureInfo.InvariantCulture));
+            case long l:
+                return (l, l.ToString(CultureInfo.InvariantCulture));
+            case short s:
+                return (s, s.ToString(CultureInfo.InvariantCulture));
+            case byte b:
+                return (b, b.ToString(CultureInfo.InvariantCulture));
+            case bool boolean:
+                return (boolean ? 1 : 0, boolean.ToString());
+            case string text:
+                if (double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+                {
+                    return (parsed, text);
+                }
+                return (null, text);
+            case JsonElement element:
+                return NormalizeJsonElement(element);
+            default:
+                return (null, value.ToString());
+        }
+    }
+
+    private static (double? Value, string? Raw) NormalizeJsonElement(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Number when element.TryGetDouble(out var number):
+                return (number, number.ToString(CultureInfo.InvariantCulture));
+            case JsonValueKind.String:
+                var text = element.GetString();
+                if (double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+                {
+                    return (parsed, text);
+                }
+                return (null, text);
+            case JsonValueKind.True:
+                return (1, "true");
+            case JsonValueKind.False:
+                return (0, "false");
+            default:
+                return (null, element.ToString());
+        }
+    }
 }

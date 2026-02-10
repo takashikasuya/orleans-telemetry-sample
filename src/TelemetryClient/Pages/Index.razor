@@ -8,144 +8,147 @@
 @inject ControlService ControlService
 @inject ISnackbar Snackbar
 
-<MudGrid>
-    <MudItem xs="12">
-        <MudPaper Class="pa-4">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                <MudText Typo="Typo.h4">Telemetry Tree Client</MudText>
-                <MudStack Row="true" Spacing="2">
-                    <MudTextField @bind-Value="_tenantId" Label="Tenant ID" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTreeAsync" Disabled="_loading">
-                        @if (_loading)
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                        }
-                        else
-                        {
-                            <MudText>Load</MudText>
-                        }
-                    </MudButton>
-                </MudStack>
-            </MudStack>
-        </MudPaper>
-    </MudItem>
-
-    <MudItem xs="12" md="4">
-        <MudPaper Class="pa-4" Style="height: calc(100vh - 200px); overflow-y: auto;">
-            <MudTextField @bind-Value="_searchTerm" Label="Search" Variant="Variant.Outlined" 
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" 
-                          Margin="Margin.Dense" Immediate="true" DebounceInterval="300" />
-            
-            @if (_loading)
-            {
-                <MudProgressLinear Indeterminate="true" Class="mt-2" />
-            }
-            else if (_treeNodes.Any())
-            {
-                @RenderTreeView(_treeNodes)
-            }
-            else
-            {
-                <MudText Class="mt-4" Typo="Typo.body2">No data loaded. Select tenant and click Load.</MudText>
-            }
-        </MudPaper>
-    </MudItem>
-
-    <MudItem xs="12" md="8">
-        <MudPaper Class="pa-4" Style="height: calc(100vh - 200px); overflow-y: auto;">
-            @if (_selectedDevice != null)
-            {
-                <MudText Typo="Typo.h5">@_selectedDevice.Name</MudText>
-                <MudText Typo="Typo.caption" Class="mb-4">Device ID: @_selectedDevice.DeviceId</MudText>
-                
-                <MudDivider Class="my-2" />
-                
-                @if (!string.IsNullOrEmpty(_selectedPointId) && _selectedDevice.Points.ContainsKey(_selectedPointId))
+<div class="layout-content">
+    <header class="telemetry-header">
+        <div>
+            <p class="eyebrow">Telemetry Client</p>
+            <MudText Typo="Typo.h4">Telemetry Tree Explorer</MudText>
+            <MudText Typo="Typo.body2" Class="text-muted">Browse building hierarchy, inspect points, and load recent telemetry trends.</MudText>
+        </div>
+        <div class="telemetry-actions">
+            <MudTextField @bind-Value="_tenantId" Label="Tenant ID" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudButton Class="refresh-button" Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTreeAsync" Disabled="_loading">
+                @if (_loading)
                 {
-                    var point = _selectedDevice.Points[_selectedPointId];
-                    
-                    <MudGrid Class="mt-4">
-                        <MudItem xs="12">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTelemetryAsync">
-                                    Load Telemetry
-                                </MudButton>
-                                @if (_trendRequested)
-                                {
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Loaded latest telemetry trend.</MudText>
-                                }
-                            </MudStack>
-                        </MudItem>
-
-                        @if (_trendRequested)
-                        {
-                            <MudItem xs="12">
-                                <TelemetryChart DeviceId="@_selectedDevice.DeviceId"
-                                              PointId="@_selectedPointId"
-                                              TenantId="@_tenantId"
-                                              Title="@($"Trend: {point.PointId}")"
-                                              @key="_trendRequestVersion" />
-                            </MudItem>
-                        }
-                        
-                        @if (point.Writable)
-                        {
-                            <MudItem xs="12">
-                                <PointControl DeviceId="@_selectedDevice.DeviceId"
-                                            PointId="@_selectedPointId"
-                                            PointType="@point.PointType"
-                                            TenantId="@_tenantId"
-                                            BuildingName="@_buildingName"
-                                            SpaceId="@_spaceId" />
-                            </MudItem>
-                        }
-                    </MudGrid>
-                }
-                
-                <MudText Typo="Typo.h6" Class="mt-4">Points</MudText>
-                @if (_selectedDevice.Points.Any())
-                {
-                    <MudTable Items="_selectedDevice.Points" Dense="true" Hover="true" Class="mt-2" 
-                              T="KeyValuePair<string, PointDto>" OnRowClick="OnPointRowClick">
-                        <HeaderContent>
-                            <MudTh>Point ID</MudTh>
-                            <MudTh>Type</MudTh>
-                            <MudTh>Value</MudTh>
-                            <MudTh>Unit</MudTh>
-                            <MudTh>Timestamp</MudTh>
-                            <MudTh>Writable</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Point ID">@context.Value.PointId</MudTd>
-                            <MudTd DataLabel="Type">@context.Value.PointType</MudTd>
-                            <MudTd DataLabel="Value">@context.Value.Value</MudTd>
-                            <MudTd DataLabel="Unit">@context.Value.Unit</MudTd>
-                            <MudTd DataLabel="Timestamp">@context.Value.Timestamp?.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
-                            <MudTd DataLabel="Writable">
-                                @if (context.Value.Writable)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Yes</MudChip>
-                                }
-                                else
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Default">No</MudChip>
-                                }
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                 }
                 else
                 {
-                    <MudText Typo="Typo.body2" Class="mt-2">No points available.</MudText>
+                    <MudText>Load</MudText>
                 }
+            </MudButton>
+        </div>
+    </header>
+
+    <div class="telemetry-grid">
+        <MudPaper Class="panel">
+            <div class="panel-header">
+                <MudText Typo="Typo.h6">Hierarchy</MudText>
+                <MudText Typo="Typo.caption" Class="text-muted">@_treeNodes.Count root nodes</MudText>
+            </div>
+            <MudTextField @bind-Value="_searchTerm" Label="Search" Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Margin="Margin.Dense" Immediate="true" DebounceInterval="300" />
+            <div class="tree-scroll">
+                @if (_loading)
+                {
+                    <MudProgressLinear Indeterminate="true" />
+                }
+                else if (_treeNodes.Any())
+                {
+                    @RenderTreeView(_treeNodes)
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">No data loaded. Select tenant and click Load.</MudText>
+                }
+            </div>
+        </MudPaper>
+
+        <MudPaper Class="panel">
+            @if (_selectedDevice != null)
+            {
+                <div class="detail-stack">
+                    <div>
+                        <MudText Typo="Typo.h5">@_selectedDevice.Name</MudText>
+                        <MudText Typo="Typo.caption" Class="text-muted">Device ID: @_selectedDevice.DeviceId</MudText>
+                    </div>
+
+                    <MudDivider />
+
+                    @if (!string.IsNullOrEmpty(_selectedPointId) && _selectedDevice.Points.ContainsKey(_selectedPointId))
+                    {
+                        var point = _selectedDevice.Points[_selectedPointId];
+
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudButton Class="refresh-button" Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTelemetryAsync">
+                                Load Telemetry
+                            </MudButton>
+                            @if (_trendRequested)
+                            {
+                                <MudText Typo="Typo.caption" Class="text-muted">Loaded latest telemetry trend.</MudText>
+                            }
+                        </MudStack>
+
+                        @if (_trendRequested)
+                        {
+                            <TelemetryChart DeviceId="@_selectedDevice.DeviceId"
+                                          PointId="@_selectedPointId"
+                                          TenantId="@_tenantId"
+                                          Title="@($"Trend: {point.PointId}")"
+                                          @key="_trendRequestVersion" />
+                        }
+
+                        @if (point.Writable)
+                        {
+                            <PointControl DeviceId="@_selectedDevice.DeviceId"
+                                        PointId="@_selectedPointId"
+                                        PointType="@point.PointType"
+                                        TenantId="@_tenantId"
+                                        BuildingName="@_buildingName"
+                                        SpaceId="@_spaceId" />
+                        }
+                    }
+
+                    <div>
+                        <MudText Typo="Typo.h6">Points</MudText>
+                        @if (_selectedDevice.Points.Any())
+                        {
+                            <div class="table-scroll">
+                                <MudTable Items="_selectedDevice.Points" Dense="true" Hover="true"
+                                          T="KeyValuePair<string, PointDto>" OnRowClick="OnPointRowClick">
+                                    <HeaderContent>
+                                        <MudTh>Point ID</MudTh>
+                                        <MudTh>Type</MudTh>
+                                        <MudTh>Value</MudTh>
+                                        <MudTh>Unit</MudTh>
+                                        <MudTh>Timestamp</MudTh>
+                                        <MudTh>Writable</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Point ID">@context.Value.PointId</MudTd>
+                                        <MudTd DataLabel="Type">@context.Value.PointType</MudTd>
+                                        <MudTd DataLabel="Value">@context.Value.Value</MudTd>
+                                        <MudTd DataLabel="Unit">@context.Value.Unit</MudTd>
+                                        <MudTd DataLabel="Timestamp">@context.Value.Timestamp?.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+                                        <MudTd DataLabel="Writable">
+                                            @if (context.Value.Writable)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Success">Yes</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Default">No</MudChip>
+                                            }
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="text-muted">No points available.</MudText>
+                        }
+                    </div>
+                </div>
             }
             else
             {
                 <MudText Typo="Typo.body1">Select a device from the tree to view details.</MudText>
             }
         </MudPaper>
-    </MudItem>
-</MudGrid>
+    </div>
+</div>
 
 @code {
     private string _tenantId = "default";

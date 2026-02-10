@@ -73,3 +73,8 @@ public sealed record GraphNodeDetailView(
     GraphNodeSnapshot Snapshot,
     PointSnapshot? PointSnapshot,
     string? PointGrainKey);
+
+public sealed record PointTrendSample(
+    DateTimeOffset Timestamp,
+    double? Value,
+    string? RawValue);

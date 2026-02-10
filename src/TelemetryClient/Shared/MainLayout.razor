@@ -1,17 +1,51 @@
 @inherits LayoutComponentBase
+@using MudBlazor
+
+<MudThemeProvider Theme="_theme" @bind-IsDarkMode="_isDarkMode" />
+<MudDialogProvider />
+<MudSnackbarProvider />
 
 <MudLayout>
     <MudAppBar Elevation="1" Color="Color.Primary">
-        <MudText Typo="Typo.h6">Telemetry Tree Client</MudText>
+        <MudText Typo="Typo.h6">Telemetry Client</MudText>
+        <MudSpacer />
+        <MudSwitch T="bool" @bind-Value="_isDarkMode" Color="Color.Secondary" Label="Dark mode" Class="theme-toggle" />
+        <MudText Typo="Typo.subtitle2" Class="top-bar__note">Telemetry tree explorer</MudText>
     </MudAppBar>
 
-    <MudDrawer Elevation="1" Variant="DrawerVariant.Mini">
-        <NavMenu />
-    </MudDrawer>
-
-    <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
+    <MudMainContent Class=@($"theme-surface {(_isDarkMode ? "theme-dark" : "theme-light")}")>
+        <MudContainer MaxWidth="MaxWidth.False" Class=@($"layout-root {(_isDarkMode ? "theme-dark" : "theme-light")}")>
             @Body
         </MudContainer>
     </MudMainContent>
 </MudLayout>
+
+@code {
+    private bool _isDarkMode;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#2563eb",
+            Secondary = "#0ea5e9",
+            Background = "#f5f7fb",
+            Surface = "#ffffff",
+            AppbarBackground = "#ffffff",
+            AppbarText = "#0f172a",
+            TextPrimary = "#0f172a",
+            TextSecondary = "#475569"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#60a5fa",
+            Secondary = "#2dd4bf",
+            Background = "#0b1220",
+            Surface = "#121a2a",
+            AppbarBackground = "#0f172a",
+            AppbarText = "#e2e8f0",
+            TextPrimary = "#e2e8f0",
+            TextSecondary = "#94a3b8"
+        }
+    };
+}

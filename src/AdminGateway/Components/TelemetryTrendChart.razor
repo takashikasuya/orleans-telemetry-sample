@@ -1,0 +1,74 @@
+@using AdminGateway.Models
+@using System.Globalization
+@inject IJSRuntime JSRuntime
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h6">@Title</MudText>
+    <div id="@_chartId" class="telemetry-chart"></div>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Class="mt-2" />
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "Telemetry Trend";
+
+    [Parameter]
+    public IReadOnlyList<PointTrendSample> Samples { get; set; } = Array.Empty<PointTrendSample>();
+
+    private readonly string _chartId = $"chart-{Guid.NewGuid():N}";
+    private bool _loading;
+    private bool _initialized;
+    private bool _pendingUpdate;
+
+    protected override void OnParametersSet()
+    {
+        _loading = Samples.Count == 0;
+        if (_initialized)
+        {
+            _ = UpdateChartAsync();
+        }
+        else
+        {
+            _pendingUpdate = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await JSRuntime.InvokeVoidAsync("initializeChart", _chartId);
+        _initialized = true;
+
+        if (_pendingUpdate)
+        {
+            _pendingUpdate = false;
+            await UpdateChartAsync();
+        }
+    }
+
+    private async Task UpdateChartAsync()
+    {
+        if (!_initialized)
+        {
+            return;
+        }
+
+        if (Samples.Count == 0)
+        {
+            await JSRuntime.InvokeVoidAsync("updateChart", _chartId, Array.Empty<string>(), Array.Empty<string>());
+            return;
+        }
+
+        var timestamps = Samples.Select(s => s.Timestamp.ToLocalTime().ToString("HH:mm:ss")).ToArray();
+        var values = Samples.Select(s => s.Value?.ToString(CultureInfo.InvariantCulture) ?? "0").ToArray();
+        await JSRuntime.InvokeVoidAsync("updateChart", _chartId, timestamps, values);
+    }
+}

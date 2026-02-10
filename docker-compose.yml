@@ -20,13 +20,18 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   silo:
     build:
-      context: ./src/SiloHost
-      dockerfile: ../../Dockerfile.dotnet
+      context: .
+      dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: SiloHost
+        PROJECT: src/SiloHost
     depends_on:
       - mq
     environment:
@@ -45,10 +50,10 @@ services:
 
   api:
     build:
-      context: ./src/ApiGateway
-      dockerfile: ../../Dockerfile.dotnet
+      context: .
+      dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: ApiGateway
+        PROJECT: src/ApiGateway
     depends_on:
       - silo
     environment:
@@ -62,10 +67,10 @@ services:
 
   admin:
     build:
-      context: ./src/AdminGateway
-      dockerfile: ../../Dockerfile.dotnet
+      context: .
+      dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: AdminGateway
+        PROJECT: src/AdminGateway
     depends_on:
       - silo
     environment:
@@ -82,10 +87,10 @@ services:
 
   telemetry-client:
     build:
-      context: ./src/TelemetryClient
-      dockerfile: ../../Dockerfile.dotnet
+      context: .
+      dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: TelemetryClient
+        PROJECT: src/TelemetryClient
     depends_on:
       - api
     environment:
@@ -96,10 +101,10 @@ services:
 
   publisher:
     build:
-      context: ./src/Publisher
-      dockerfile: ../../Dockerfile.dotnet
+      context: .
+      dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: Publisher
+        PROJECT: src/Publisher
     depends_on:
       - mq
     environment:

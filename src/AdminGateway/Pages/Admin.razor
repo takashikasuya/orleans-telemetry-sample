@@ -349,6 +349,42 @@ else
                                         </tbody>
                                     </table>
                                 }
+
+                                <MudText Typo="Typo.subtitle2" Class="mt-4">Telemetry Trend</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_pointTrendLoading" OnClick="LoadPointTrendAsync">
+                                        @if (_pointTrendLoading)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                        }
+                                        else
+                                        {
+                                            <MudText>Load Telemetry</MudText>
+                                        }
+                                    </MudButton>
+                                    @if (_pointTrendRequested && !_pointTrendLoading && string.IsNullOrWhiteSpace(_pointTrendError))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Loaded latest telemetry trend.</MudText>
+                                    }
+                                </MudStack>
+
+                                @if (_pointTrendLoading)
+                                {
+                                    <MudProgressLinear Indeterminate="true" Class="mt-2" />
+                                }
+                                else if (!string.IsNullOrWhiteSpace(_pointTrendError))
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_pointTrendError</MudText>
+                                }
+                                else if (_pointTrendRequested && _pointTrendSamples.Any(sample => sample.Value.HasValue))
+                                {
+                                    <TelemetryTrendChart Samples="_pointTrendSamples"
+                                                         Title="Latest telemetry trend" />
+                                }
+                                else if (_pointTrendRequested)
+                                {
+                                    <MudText Typo="Typo.body2" Class="muted mt-2">No telemetry samples available.</MudText>
+                                }
                             }
                         }
                         else
@@ -444,6 +480,11 @@ else
     private string? _uploadedGraphFileName;
     private string? _graphUploadMessage;
     private string? _graphUploadError;
+    private HashSet<string> _expandedGraphNodes = new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<PointTrendSample> _pointTrendSamples = Array.Empty<PointTrendSample>();
+    private bool _pointTrendRequested;
+    private bool _pointTrendLoading;
+    private string? _pointTrendError;
     private const long DefaultGraphUploadLimitBytes = 10 * 1024 * 1024;
 
     protected override async Task OnInitializedAsync()
@@ -482,6 +523,8 @@ else
         {
             _graphTreeNodes.Clear();
             _selectedGraphNodeDetails = null;
+            _expandedGraphNodes.Clear();
+            ResetPointTrend();
             return;
         }
 
@@ -491,6 +534,8 @@ else
         {
             _graphTreeNodes = (await Metrics.GetGraphTreeAsync(_selectedGraphTenant)).ToList();
             _selectedGraphNodeDetails = null;
+            _expandedGraphNodes = BuildExpandedGraphNodes(_graphTreeNodes);
+            ResetPointTrend();
         }
         catch (Exception ex)
         {
@@ -536,6 +581,7 @@ else
 
         _selectedGraphTenant = tenant;
         _selectedGraphNodeDetails = null;
+        ResetPointTrend();
         await LoadSpatialHierarchyAsync();
         StateHasChanged();
     }
@@ -550,6 +596,18 @@ else
             builder.AddAttribute(sequence++, "Text", node.DisplayName);
             builder.AddAttribute(sequence++, "Icon", GetTreeIcon(node.NodeType));
             builder.AddAttribute(sequence++, "CanExpand", node.Children.Count > 0);
+            builder.AddAttribute(sequence++, "Expanded", _expandedGraphNodes.Contains(node.NodeId));
+            builder.AddAttribute(sequence++, "ExpandedChanged", EventCallback.Factory.Create<bool>(this, expanded =>
+            {
+                if (expanded)
+                {
+                    _expandedGraphNodes.Add(node.NodeId);
+                }
+                else
+                {
+                    _expandedGraphNodes.Remove(node.NodeId);
+                }
+            }));
             builder.AddAttribute(sequence++, "OnClick", EventCallback.Factory.Create<MouseEventArgs>(this, _ => SelectGraphNodeAsync(node.NodeId)));
             if (node.Children.Count > 0)
             {
@@ -564,11 +622,44 @@ else
         if (string.IsNullOrWhiteSpace(nodeId) || string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             _selectedGraphNodeDetails = null;
+            ResetPointTrend();
             return;
         }
 
         _selectedGraphNodeDetails = await Metrics.GetGraphNodeDetailsAsync(_selectedGraphTenant, nodeId);
+        ResetPointTrend();
         StateHasChanged();
+    }
+
+    private async Task LoadPointTrendAsync()
+    {
+        if (_selectedGraphNodeDetails?.PointGrainKey is null)
+        {
+            return;
+        }
+
+        _pointTrendRequested = true;
+        _pointTrendLoading = true;
+        _pointTrendError = null;
+        _pointTrendSamples = Array.Empty<PointTrendSample>();
+
+        try
+        {
+            _pointTrendSamples = await Metrics.SamplePointTrendAsync(_selectedGraphNodeDetails.PointGrainKey);
+            if (_pointTrendSamples.All(sample => !sample.Value.HasValue))
+            {
+                _pointTrendError = "Telemetry values are non-numeric and cannot be charted.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _pointTrendError = $"Failed to load telemetry trend: {ex.Message}";
+        }
+        finally
+        {
+            _pointTrendLoading = false;
+            StateHasChanged();
+        }
     }
 
     private static string GetTreeIcon(GraphNodeType type)
@@ -583,6 +674,46 @@ else
             GraphNodeType.Point => Icons.Material.Filled.ControlPoint,
             _ => Icons.Material.Filled.DeviceHub
         };
+
+    private static bool IsLevelNode(GraphTreeNode node) => node.NodeType == GraphNodeType.Level;
+
+    private static HashSet<string> BuildExpandedGraphNodes(IEnumerable<GraphTreeNode> nodes)
+    {
+        var expanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in nodes)
+        {
+            ExpandToLevel(node, expanded);
+        }
+
+        return expanded;
+    }
+
+    private static void ExpandToLevel(GraphTreeNode node, HashSet<string> expanded)
+    {
+        if (IsLevelNode(node))
+        {
+            return;
+        }
+
+        if (node.Children.Count == 0)
+        {
+            return;
+        }
+
+        expanded.Add(node.NodeId);
+        foreach (var child in node.Children)
+        {
+            ExpandToLevel(child, expanded);
+        }
+    }
+
+    private void ResetPointTrend()
+    {
+        _pointTrendSamples = Array.Empty<PointTrendSample>();
+        _pointTrendRequested = false;
+        _pointTrendLoading = false;
+        _pointTrendError = null;
+    }
 
     private static string GetNodeLabel(GraphNodeSnapshot snapshot)
     {

@@ -186,13 +186,13 @@ while ($RetryCount -lt $MaxRetries) {
     
     # Build services sequentially to avoid Docker daemon overload
     Write-Host "Building silo..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build --no-cache silo
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build silo
     
     Write-Host "Building api..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build --no-cache api
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build api
     
     Write-Host "Building admin..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build --no-cache admin
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build admin
     
     Write-Host "Starting services..."
     & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d mq silo api admin mock-oidc$publisherService

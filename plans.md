@@ -33,9 +33,82 @@ README と関連ドキュメントのアーキテクチャ/システム構成記
 
 ---
 
+# plans.md: Admin UI Tree Default Expand + Point Trend (2026-02-10)
+
+## Purpose
+Admin UI のツリーは初期表示で Floor/Level まで展開し、ポイント選択時に明示的な操作で直近テレメトリーのトレンド表示を可能にする。
+
+## Success Criteria
+1. Admin UI の階層ツリーが初期表示で Floor/Level まで展開される。
+2. Point ノード選択時に「Load Telemetry」ボタンで直近テレメトリーのトレンドが表示される。
+3. 変更内容が plans.md に記録される。
+
+## Steps
+1. Admin UI ツリーの展開状態を Floor/Level まで初期化する。
+2. Point ノードの最新スナップショットをサンプリングしてトレンド表示する UI/ロジックを追加する。
+3. 影響範囲の動作確認を行い、plans.md を更新する。
+
+## Verification Steps
+1. `dotnet build`
+2. Admin UI でツリーが Level まで展開されることを確認する。
+3. Point ノード選択後に「Load Telemetry」でトレンドが描画されることを確認する。
+
+## Progress
+- [x] Step 1: ツリー初期展開
+- [x] Step 2: トレンド表示追加
+- [ ] Step 3: 確認と記録
+
+## Observations
+- AdminGateway に軽量なチャート描画（canvas）を追加し、Point Grain のサンプル値を描画する方針にした。
+- ビルド/実 UI の動作確認は未実施。
+
+## Decisions
+- テレメトリーのトレンドはポイント Grain を一定間隔でサンプリングし、直近の値推移として表示する。
+
+## Retrospective
+- 未検証（ローカルでの UI 確認が必要）。
+
+---
+
 # plans.md
 
 ---
+
+# plans.md: TelemetryClient UI Alignment + Usage Notes (2026-02-10)
+
+## Purpose
+TelemetryClient の UI 配置を Admin UI のデザイン規則に揃え、視認性と操作の一貫性を高める。併せて UI 機能の説明を整理する。
+
+## Success Criteria
+1. TelemetryClient のレイアウト/配色/タイポグラフィが Admin UI と同系統のルールに統一されている。
+2. 主要 UI 要素（ツリー/詳細/トレンド/コントロール）の配置が整理され、視線誘導が分かりやすい。
+3. 変更内容と機能説明が plans.md に記録される。
+
+## Steps
+1. Admin UI のデザイントークン/レイアウト規則を参照し、TelemetryClient 側のテーマ・CSS を整備する。
+2. TelemetryClient の画面構成を整理し、カード/セクションの間隔・高さ・境界を統一する。
+3. 変更点を記録する。
+
+## Verification Steps
+1. TelemetryClient 画面の表示確認（レイアウト/配色/余白/情報階層）。
+
+## Progress
+- [x] Step 1: テーマ/スタイル整備
+- [x] Step 2: 画面構成の整理
+- [x] Step 3: 記録更新
+
+## Observations
+- TelemetryClient は MudBlazor を使っているが、Admin UI とはテーマ/タイポグラフィ/余白ルールが揃っていない。
+- 高さ指定やインラインスタイルが混在し、視線誘導が弱い。
+
+## Decisions
+- Admin UI の `theme-surface` / spacing / surface / border / shadow ルールを TelemetryClient に移植する。
+- TelemetryClient のコンテナ/カードは共通クラスで統一し、インライン高さ指定を削減する。
+
+## Retrospective
+- TelemetryClient のテーマ/タイポグラフィ/配色を Admin UI に合わせ、レイアウトの情報階層を整理した。
+- 画面構成の統一により、ツリー/詳細/トレンド/コントロールの視線誘導が明確になった。
+
 
 # plans.md: OpenTelemetry Collector Monitoring Policy (2026-??-??)
 
