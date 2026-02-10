@@ -1,12 +1,11 @@
 using System.Text.Json;
-//using Devices.V1;
+using Devices.V1;
 using Grains.Abstractions;
 
 namespace ApiGateway.Telemetry;
 
 internal static class DeviceSnapshotMapper
 {
-    /*
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     public static Snapshot ToGrpc(string deviceId, DeviceSnapshot snapshot)
@@ -29,5 +28,4 @@ internal static class DeviceSnapshotMapper
 
         return proto;
     }
-    */
 }
