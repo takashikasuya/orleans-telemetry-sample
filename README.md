@@ -36,6 +36,62 @@ Once running:
 - Admin console (grain/client/storage health): `http://localhost:8082/`
 - Telemetry Tree Client (building hierarchy browser): `http://localhost:8083/`
 
+## Architecture & System Configuration
+
+### System Topology (Docker Compose default)
+
+```mermaid
+flowchart LR
+    Publisher[Publisher
+.NET Console] -->|Telemetry JSON| MQ[(RabbitMQ)]
+    MQ -->|Ingest| Silo[SiloHost
+Orleans Silo]
+    Silo -->|Orleans Client| API[ApiGateway
+REST + gRPC endpoint]
+    Silo -->|Orleans Client| Admin[AdminGateway
+Blazor Admin UI]
+    API --> Client[TelemetryClient
+Blazor UI]
+
+    Silo -->|Stage JSONL / Compact| Storage[(Parquet + Index)]
+    API -->|History Query| Storage
+
+    OIDC[(mock-oidc)] -->|JWT/OIDC| API
+    OIDC -->|JWT/OIDC| Admin
+
+    User((User)) -->|Browser| API
+    User -->|Browser| Admin
+    User -->|Browser| Client
+```
+
+### Telemetry Data Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Pub as Publisher / Connector
+    participant MQ as RabbitMQ / Kafka / Simulator
+    participant Coord as TelemetryIngestCoordinator
+    participant Router as TelemetryRouterGrain
+    participant Point as PointGrain / DeviceGrain
+    participant Sink as ParquetTelemetryEventSink
+    participant Comp as TelemetryStorageCompactor
+    participant API as ApiGateway
+
+    Pub->>MQ: publish telemetry
+    MQ->>Coord: TelemetryPointMsg
+    Coord->>Router: RouteBatchAsync(batch)
+    Router->>Point: UpsertAsync(sequence ordered)
+    Coord->>Sink: WriteBatchAsync(envelopes)
+    Sink->>Comp: stage JSONL
+    Comp-->>Comp: compact to Parquet + index
+    API->>Point: latest snapshot query
+    API->>Comp: historical query (via storage query)
+```
+
+> Note: ApiGateway exposes gRPC endpoint configuration, but the concrete gRPC service implementation is currently limited/scaffold stage in this sample.
+
+
 ### 2. Optional: Seed the Graph from RDF
 
 ```bash
