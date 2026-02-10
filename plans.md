@@ -1,3 +1,38 @@
+# plans.md: Refresh Architecture/System Mermaid Docs (2026-02-10)
+
+## Purpose
+README と関連ドキュメントのアーキテクチャ/システム構成記述を最新実装に合わせ、Mermaid 図で俯瞰しやすくする。
+
+## Success Criteria
+1. README に現行サービス構成とデータフローを示す Mermaid 図が追加/更新されている。
+2. 既存ドキュメントの記述との差分（gRPC 実装状況など）が矛盾しない。
+3. `dotnet build` と `dotnet test` が成功し、plans.md に結果が記録される。
+
+## Steps
+1. 既存ドキュメント（README/PROJECT_OVERVIEW/docs）を確認し、現行構成を整理する。
+2. README のアーキテクチャ/システム構成を Mermaid で追加し、注記を最新化する。
+3. ビルド・テストを実行して検証し、plans.md を完了更新する。
+
+## Progress
+- [x] Step 1: 既存ドキュメント確認
+- [x] Step 2: README 反映
+- [x] Step 3: build/test と記録
+
+## Observations
+- README にはサービス一覧はあるが、全体構成を俯瞰する Mermaid 図は未記載。
+- PROJECT_OVERVIEW 側には gRPC がスキャフォールド段階という注記があるため README 側にも整合する注記が必要。
+- `dotnet build` は既存の CS1591/nullable/obsolete warning が出るが、新規変更由来のエラーはなし。
+
+## Decisions
+- Mermaid 図は README に「システム構成」と「データフロー」の 2 つを追加し、既存 docs へのリンクで詳細を委譲する。
+- gRPC は「API Gateway が公開するが実装は限定的」という注記を追加し、誤解を避ける。
+
+## Retrospective
+- README に Mermaid 図を追加し、サービス構成と ingest→storage→API までの流れを1ページで把握できるようにした。
+- `dotnet build` / `dotnet test` の結果、既存 warning はあるがエラーなく完了。
+
+---
+
 # plans.md
 
 ---
