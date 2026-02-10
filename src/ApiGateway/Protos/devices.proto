@@ -20,7 +20,43 @@ message Snapshot {
   repeated Property properties = 4;
 }
 
+message TagSearchRequest {
+  repeated string tags = 1;
+  int32 limit = 2;
+}
+
+message TagNode {
+  string node_id = 1;
+  string node_type = 2;
+  string display_name = 3;
+  map<string, string> attributes = 4;
+  repeated string matched_tags = 5;
+}
+
+message TagNodeSearchResponse {
+  repeated TagNode items = 1;
+  int32 count = 2;
+}
+
+message TagGrain {
+  string source_node_id = 1;
+  string node_type = 2;
+  string grain_type = 3;
+  string grain_key = 4;
+  repeated string matched_tags = 5;
+}
+
+message TagGrainSearchResponse {
+  repeated TagGrain items = 1;
+  int32 count = 2;
+}
+
 service DeviceService {
   rpc GetSnapshot (DeviceKey) returns (Snapshot);
   rpc StreamUpdates (DeviceKey) returns (stream Snapshot);
+}
+
+service RegistryService {
+  rpc SearchByTags (TagSearchRequest) returns (TagNodeSearchResponse);
+  rpc SearchGrainsByTags (TagSearchRequest) returns (TagGrainSearchResponse);
 }

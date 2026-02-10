@@ -1994,3 +1994,99 @@ OIDC 認証後に ApiGateway の REST API を通して、リソース一覧・�
 ## Decisions (2026-02-10, follow-up)
 - cancellation は `Cancelled` と `DeadlineExceeded` を分離し、運用時の失敗分類を明確化する。
 - feature flag の動作は統合テストで担保し、誤設定時の挙動を回帰検知対象にする。
+
+# plans.md: CustomTagsベースのノード/Grain検索API追加 (2026-02-10)
+
+## Purpose
+RDFから抽出される `CustomTags` をGraphノード属性へ反映し、タグ指定でノード一覧および関連Grainキーを検索できるAPIをRESTとgRPCで提供する。
+
+## Success Criteria
+1. RDF `CustomTags` がGraphノード属性に保存される（`tag:<name>=true`）。
+2. RESTでタグ検索API（ノード検索/Grain検索）が利用可能。
+3. gRPCで同等のタグ検索APIが利用可能。
+4. `dotnet build` / `dotnet test` が成功し、追加テストで検索挙動を検証できる。
+
+## Steps
+1. 既存のGraph seedとAPI構成を確認し、タグ属性の表現方法を確定する。
+2. DataModel→Graph変換にCustomTagsの反映を追加する。
+3. ApiGatewayにタグ検索サービスを追加し、RESTとgRPCの両方に公開する。
+4. テスト（unit/integration）を追加して検証する。
+5. build/test結果と意思決定を記録する。
+
+## Progress
+- [x] Step 1: 既存構成確認と属性方針確定
+- [ ] Step 2: CustomTags反映
+- [ ] Step 3: REST/gRPC公開
+- [ ] Step 4: テスト追加
+- [ ] Step 5: 検証記録
+
+## Observations
+- 現状 `CustomTags` は `BuildingDataModel` には保持されるが、`GraphNodeDefinition.Attributes` へは展開されていない。
+- API GatewayのgRPCは `devices.proto` のDeviceService中心で、Graph/Registry向けのタグ検索RPCは未実装。
+
+## Decisions
+- Graph属性では `tag:<name>` キー（値は `"true"`）で正規化し、検索時は大文字小文字を無視する。
+- ノード検索は全GraphNodeType（Unknown除く）を横断し、Grain検索は一致ノードからDevice/Point Grainキーを導出する。
+- gRPCは既存 `devices.v1` パッケージに `RegistryService.SearchByTags/SearchGrainsByTags` を追加して最小変更で実装する。
+
+## Retrospective
+- 実装完了後に更新。
+
+## Update (2026-02-10)
+- [x] Step 2: `OrleansIntegrationService` で `CustomTags` を `tag:<name>=true` 属性へ展開。
+- [x] Step 3: `TagSearchService`、REST (`/api/registry/search/nodes`, `/api/registry/search/grains`) と gRPC (`RegistryService.SearchByTags`, `SearchGrainsByTags`) を追加。
+- [x] Step 4: `TagSearchServiceTests` と `GrpcRegistryServiceTests` を追加し、タグ一致とGrainキー導出を検証。
+- [x] Step 5: `dotnet build` / `dotnet test` で検証完了。
+
+## Observations (2026-02-10)
+- gRPCの map 型は `IDictionary` を要求するため、`IReadOnlyDictionary` からは個別コピーが必要だった。
+- タグ検索は属性キーを `tag:` プレフィックスで統一すると、RDF由来・将来手動付与の両方を同じロジックで扱える。
+
+## Retrospective (2026-02-10)
+- CustomTagsのデータ保持と検索APIがREST/gRPCで揃い、クライアント実装側で同一のタグ検索体験を提供できる土台ができた。
+- 今後はタグ候補一覧APIや、検索対象ノードタイプ絞り込み（query/filter）を追加すると運用性が上がる。
+
+# plans.md: タグ逆引きインデックスGrain導入 (2026-02-10)
+
+## Purpose
+タグ検索時の全ノード走査コストを削減するため、`tag -> nodeIds` の逆引きインデックスGrainを導入し、REST/gRPCのタグ検索をインデックスベースに置き換える。
+
+## Success Criteria
+1. `IGraphTagIndexGrain` を追加し、タグAND条件で nodeId を取得できる。
+2. Graph seed 時にノード属性からタグインデックスが更新される。
+3. `TagSearchService` が全タイプ走査ではなくタグインデックス経由で候補 nodeId を取得する。
+4. 既存のREST/gRPC API契約を維持したまま `dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. Grain契約・実装・ストレージ登録を追加する。
+2. GraphSeeder で seed 時にタグインデックス更新を追加する。
+3. TagSearchService をインデックス利用へ変更し、テストを更新する。
+4. build/test を実行し、結果を記録する。
+
+## Progress
+- [x] Step 1: 方針確定
+- [ ] Step 2: Grain追加
+- [ ] Step 3: サービス/テスト更新
+- [ ] Step 4: 検証
+
+## Decisions
+- 逆引きGrainは `ByTag` と `TagsByNode` の双方向状態を持ち、同一 nodeId の再インデックス時に差分更新できるようにする。
+- tag値は既存互換のため `tag:*` 属性かつ truthy (`true`/`1`) のみ対象とする。
+- API契約（REST/gRPCエンドポイントとメッセージ）は変更しない。
+
+## Update (2026-02-10, reverse-index)
+- [x] Step 2: `IGraphTagIndexGrain` / `GraphTagIndexGrain` を追加し、`ByTag` と `TagsByNode` の双方向インデックスを実装。
+- [x] Step 2: SiloHost に `GraphTagIndexStore` を登録。
+- [x] Step 2: `GraphSeeder` でノードseed時に `tagIndex.IndexNodeAsync` を呼び出すよう更新。
+- [x] Step 3: `TagSearchService` を逆引きインデックス経由に変更し、全ノードタイプ走査を排除。
+- [x] Step 3: `TagSearchServiceTests` / `GrpcRegistryServiceTests` をインデックスモック前提へ更新。
+- [x] Step 3: `GraphTagIndexGrainTests` を追加し、AND検索・再インデックス時の差分更新・削除挙動を検証。
+- [x] Step 4: `dotnet build` / `dotnet test` 実行完了。
+
+## Observations (2026-02-10, reverse-index)
+- 逆引きインデックスを追加することで、検索時の主要コストを「全ノード読み出し」から「タグ一致候補ノードのみ読み出し」に削減できた。
+- node属性の truthy 判定（`true`/`1`）をインデックス側にも持たせることで既存タグ表現との互換性を維持できた。
+
+## Retrospective (2026-02-10, reverse-index)
+- API契約を変えずに内部検索方式を差し替えられたため、クライアント影響なく性能改善の土台を作れた。
+- 将来的には seed 以外のノード更新経路（運用時の属性変更）でも同インデックス更新を通すと一貫性がより高まる。
