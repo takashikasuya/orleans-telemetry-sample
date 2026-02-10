@@ -13,7 +13,7 @@
     <PackageReference Include="Grpc.Tools" Version="2.57.0" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
-    <Protobuf Include="Protos/devices.proto" GrpcServices="Server" />
+    <Protobuf Include="Protos/devices.proto" GrpcServices="Both" />
   </ItemGroup>
 
 </Project>

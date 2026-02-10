@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -14,20 +15,33 @@ namespace ApiGateway.Tests;
 internal sealed class ApiGatewayTestFactory : WebApplicationFactory<global::Program>
 {
     private readonly Mock<IClusterClient> _clusterMock;
+    private readonly IReadOnlyDictionary<string, string?> _extraConfig;
 
-    public ApiGatewayTestFactory(Mock<IClusterClient> clusterMock)
+    public ApiGatewayTestFactory(
+        Mock<IClusterClient> clusterMock,
+        IReadOnlyDictionary<string, string?>? extraConfig = null)
     {
         _clusterMock = clusterMock;
+        _extraConfig = extraConfig ?? new Dictionary<string, string?>();
     }
 
     protected override IHost CreateHost(IHostBuilder builder)
     {
+        Environment.SetEnvironmentVariable("Orleans__DisableClient", "true");
+
         builder.ConfigureAppConfiguration(config =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
+            var values = new Dictionary<string, string?>
             {
                 ["Orleans:DisableClient"] = "true"
-            });
+            };
+
+            foreach (var pair in _extraConfig)
+            {
+                values[pair.Key] = pair.Value;
+            }
+
+            config.AddInMemoryCollection(values);
         });
 
         builder.ConfigureServices(services =>

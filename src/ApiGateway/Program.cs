@@ -43,6 +43,7 @@ builder.Services.AddHostedService<RegistryExportCleanupService>();
 
 // Configure gRPC
 builder.Services.AddGrpc();
+var grpcEnabled = builder.Configuration.GetValue<bool>("Grpc:Enabled", true);
 
 // Swagger for convenience
 builder.Services.AddEndpointsApiExplorer();
@@ -366,7 +367,10 @@ app.MapGet("/api/telemetry/exports/{exportId}", async (
 }).RequireAuthorization();
 
 // gRPC endpoints
-app.MapGrpcService<DeviceService>().RequireAuthorization();
+if (grpcEnabled)
+{
+    app.MapGrpcService<DeviceService>().RequireAuthorization();
+}
 
 app.Run();
 
