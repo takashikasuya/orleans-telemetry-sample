@@ -343,7 +343,12 @@ public class OrleansIntegrationService
         }
 
         var area = ResolveAreaForEquipment(model, equipment);
-        if (area is not null && !string.IsNullOrWhiteSpace(area.Name))
+        var spacePath = BuildSpacePath(model, area);
+        if (!string.IsNullOrWhiteSpace(spacePath))
+        {
+            attributes["SpaceId"] = spacePath;
+        }
+        else if (area is not null && !string.IsNullOrWhiteSpace(area.Name))
         {
             attributes["SpaceId"] = area.Name;
         }
@@ -387,13 +392,37 @@ public class OrleansIntegrationService
         return null;
     }
 
+    private static string? BuildSpacePath(BuildingDataModel model, Area? area)
+    {
+        if (area is null)
+        {
+            return null;
+        }
+
+        var parts = new List<string>();
+        var building = ResolveBuildingForArea(model, area);
+        if (building is not null && !string.IsNullOrWhiteSpace(building.Name))
+        {
+            parts.Add(building.Name);
+        }
+
+        var level = ResolveLevelForArea(model, area);
+        if (level is not null && !string.IsNullOrWhiteSpace(level.Name))
+        {
+            parts.Add(level.Name);
+        }
+
+        if (!string.IsNullOrWhiteSpace(area.Name))
+        {
+            parts.Add(area.Name);
+        }
+
+        return parts.Count > 0 ? string.Join("/", parts) : null;
+    }
+
     private static Building? ResolveBuildingForArea(BuildingDataModel model, Area area)
     {
-        var level = model.Levels.FirstOrDefault(l => l.Areas.Contains(area));
-        if (level is null && !string.IsNullOrWhiteSpace(area.LevelUri))
-        {
-            level = model.Levels.FirstOrDefault(l => l.Uri == area.LevelUri);
-        }
+        var level = ResolveLevelForArea(model, area);
 
         if (level is null)
         {
@@ -407,6 +436,17 @@ public class OrleansIntegrationService
         }
 
         return building;
+    }
+
+    private static Level? ResolveLevelForArea(BuildingDataModel model, Area area)
+    {
+        var level = model.Levels.FirstOrDefault(l => l.Areas.Contains(area));
+        if (level is null && !string.IsNullOrWhiteSpace(area.LevelUri))
+        {
+            level = model.Levels.FirstOrDefault(l => l.Uri == area.LevelUri);
+        }
+
+        return level;
     }
 
     private GraphNodeDefinition CreateNodeDefinition(RdfResource resource, GraphNodeType nodeType, Action<Dictionary<string, string>>? extras = null, string? forcedId = null)

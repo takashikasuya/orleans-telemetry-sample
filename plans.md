@@ -73,6 +73,47 @@ Admin UI のツリーは初期表示で Floor/Level まで展開し、ポイン�
 # plans.md
 
 ---
+# plans.md: TelemetryClient OIDC Auth + Registry Load Fix (2026-02-11)
+
+## Purpose
+TelemetryClient が ApiGateway の認証必須エンドポイントにアクセスできず、ツリーが空になる問題を解消する。
+
+## Success Criteria
+1. TelemetryClient が OIDC トークンを取得して ApiGateway に Bearer を付与できる。
+2. TenantId を指定して Load するとツリーが表示される。
+3. 変更内容が plans.md に記録される。
+
+## Steps
+1. TelemetryClient に OIDC 設定とトークン取得/付与の仕組みを追加する。
+2. docker-compose の TelemetryClient 設定を OIDC に合わせる。
+3. 変更点を記録する。
+
+## Verification Steps
+1. TelemetryClient 画面で `Load` 後にツリーが表示されることを確認する。
+
+## Progress
+- [x] Step 1: OIDC 設定とトークン付与
+- [x] Step 2: compose 設定反映
+- [x] Step 3: 記録更新
+
+## Observations
+- ApiGateway の registry/traverse 系エンドポイントは `RequireAuthorization()` のため、Bearer なしだと 401 になる。
+- TelemetryClient は現状トークンを付与していないため、結果が空配列になる。
+
+## Decisions
+- Mock OIDC の token エンドポイントへ `client_credentials` でトークンを取得し、ApiGateway 呼び出しに付与する。
+
+## Retrospective
+- TelemetryClient に OIDC トークン取得と Bearer 付与を追加し、ApiGateway の認証必須エンドポイントにアクセス可能にした。
+- docker-compose に TelemetryClient の OIDC 設定を追加した。
+- ApiGateway の registry レスポンスが `items` 形式のため、TelemetryClient のデシリアライズを `nodes/items` 両対応にした。
+- registry の `nodeType` が数値で返るため、TelemetryClient 側で数値/文字列どちらでも受け取れる変換を追加した。
+- graph traverse の `nodes/edges` が null の場合に備えてガードし、TreeView の OnClick を型一致に修正した。
+- MudTreeViewItem の BodyContent 型不一致を避けるため、Text で表示するよう修正した。
+- MudTreeViewItem を MudTreeView 配下で描画するようにし、クリック時の NullReference を解消した。
+- graph traverse の実レスポンス（Node + OutgoingEdges）に合わせて DTO を更新し、子ノード展開が動くように修正した。
+
+---
 
 # plans.md: TelemetryClient UI Alignment + Usage Notes (2026-02-10)
 
@@ -2214,3 +2255,36 @@ README の情報量を一般的なリポジトリ案内レベルに整理し、�
 ### Retrospective
 - README の役割を「入口」と「導線」に限定できたため、初見ユーザーが情報過多になりにくくなった。
 - 詳細は docs へ集約し、README から関連情報へ到達しやすい構成に整理できた。
+
+---
+
+# plans.md: Align Graph Seed SpaceId with Publisher Path (2026-02-11)
+
+## Purpose
+Admin UI の Point snapshot が取得できない原因となる SpaceId 不一致を解消し、Publisher と同じ Building/Level/Area パスで PointGrainKey を組めるようにする。
+
+## Success Criteria
+1. Graph seed で Point の `SpaceId` が `Building/Level/Area` 形式で保存される。
+2. Admin UI で Point snapshot と Telemetry Trend が表示できる。
+
+## Steps
+1. Graph seed の Point binding で `SpaceId` をパス形式に統一する。
+2. 変更点を記録する。
+
+## Progress
+- [x] Step 1: SpaceId パス化
+- [x] Step 2: 記録更新
+
+## Verification Steps
+1. `docker compose restart silo` で seed を再読み込み。
+2. Admin UI で該当 Point を選択し、Point snapshot が表示されることを確認。
+3. `GET /api/devices/DEV001?tenantId=t1` で `properties` が存在することを確認。
+
+## Observations
+- 既存の Graph seed は `SpaceId=Room101` のように Area 名のみを保存しており、Publisher の `Building/Level/Area` 形式と一致しなかった。
+
+## Decisions
+- 互換性維持のため、Building/Level/Area が不足する場合は従来の Area 名へフォールバックする。
+
+## Retrospective
+- 未検証（Admin UI / API での確認が必要）。

@@ -35,7 +35,7 @@ public class HierarchyTreeService
             {
                 NodeId = site.NodeId,
                 NodeType = site.NodeType,
-                DisplayName = site.Name ?? site.NodeId,
+                DisplayName = site.DisplayName ?? site.Name ?? site.NodeId,
                 Attributes = site.Attributes,
                 ChildrenLoaded = false
             }).ToList();
@@ -61,20 +61,21 @@ public class HierarchyTreeService
             var result = await _graphTraversalService.TraverseAsync(nodeId, tenantId, depth: 1, cancellationToken: cancellationToken);
             
             // Find edges originating from this node
-            var childNodeIds = result.Edges
-                .Where(e => e.SourceNodeId == nodeId)
+            var startNode = result.Nodes?.FirstOrDefault(n => n.Node.NodeId == nodeId);
+            var childNodeIds = (startNode?.OutgoingEdges ?? Enumerable.Empty<TraversalEdge>())
                 .Select(e => e.TargetNodeId)
                 .Distinct()
                 .ToList();
 
             // Map nodes to tree nodes
-            var children = result.Nodes
+            var children = (result.Nodes ?? Enumerable.Empty<TraversalNodeSnapshot>())
+                .Select(n => n.Node)
                 .Where(n => childNodeIds.Contains(n.NodeId))
                 .Select(n => new HierarchyTreeNode
                 {
                     NodeId = n.NodeId,
                     NodeType = n.NodeType,
-                    DisplayName = n.Name ?? n.NodeId,
+                    DisplayName = string.IsNullOrWhiteSpace(n.DisplayName) ? n.NodeId : n.DisplayName,
                     Attributes = n.Attributes,
                     ChildrenLoaded = false
                 })

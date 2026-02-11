@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ApiGateway.Contracts;
 
 namespace TelemetryClient.Services;
@@ -26,8 +27,10 @@ public class RegistryService
             
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             var result = JsonSerializer.Deserialize<RegistryResponse>(content, JsonOptions);
-            
-            return result?.Nodes ?? new List<GraphNodeDto>();
+
+            return result?.Nodes
+                ?? result?.Items
+                ?? new List<GraphNodeDto>();
         }
         catch (Exception ex)
         {
@@ -45,8 +48,10 @@ public class RegistryService
             
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             var result = JsonSerializer.Deserialize<RegistryResponse>(content, JsonOptions);
-            
-            return result?.Nodes ?? new List<GraphNodeDto>();
+
+            return result?.Nodes
+                ?? result?.Items
+                ?? new List<GraphNodeDto>();
         }
         catch (Exception ex)
         {
@@ -64,8 +69,10 @@ public class RegistryService
             
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             var result = JsonSerializer.Deserialize<RegistryResponse>(content, JsonOptions);
-            
-            return result?.Nodes ?? new List<GraphNodeDto>();
+
+            return result?.Nodes
+                ?? result?.Items
+                ?? new List<GraphNodeDto>();
         }
         catch (Exception ex)
         {
@@ -80,10 +87,50 @@ public class RegistryService
     };
 }
 
-public record RegistryResponse(List<GraphNodeDto>? Nodes, string? ExportUrl);
+public record RegistryResponse(
+    List<GraphNodeDto>? Nodes,
+    List<GraphNodeDto>? Items,
+    string? ExportUrl);
 
 public record GraphNodeDto(
     string NodeId,
-    string NodeType,
+    [property: JsonConverter(typeof(GraphNodeTypeStringConverter))] string NodeType,
     string? Name,
+    string? DisplayName,
     Dictionary<string, object>? Attributes);
+
+public sealed class GraphNodeTypeStringConverter : JsonConverter<string>
+{
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        return reader.TokenType switch
+        {
+            JsonTokenType.String => reader.GetString() ?? string.Empty,
+            JsonTokenType.Number => ConvertNumberToName(reader),
+            _ => string.Empty
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value);
+
+    private static string ConvertNumberToName(Utf8JsonReader reader)
+    {
+        if (reader.TryGetInt32(out var number))
+        {
+            return number switch
+            {
+                1 => "Site",
+                2 => "Building",
+                3 => "Level",
+                4 => "Area",
+                5 => "Equipment",
+                6 => "Device",
+                7 => "Point",
+                _ => number.ToString()
+            };
+        }
+
+        return string.Empty;
+    }
+}

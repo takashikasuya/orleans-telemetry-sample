@@ -203,15 +203,16 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
   if {
     $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" down --remove-orphans 2>/dev/null || true
     
-    # Build services sequentially to avoid Docker daemon overload
-    echo "Building silo..."
-    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build silo
-    
-    echo "Building api..."
-    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build api
-    
-    echo "Building admin..."
-    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build admin
+    # Only build if images don't exist
+    for SERVICE in silo api admin; do
+      IMAGE_NAME="orleans-telemetry-sample-${SERVICE}:latest"
+      if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+        echo "Building $SERVICE..."
+        $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build "$SERVICE"
+      else
+        echo "Image for $SERVICE already exists, skipping build"
+      fi
+    done
     
     echo "Starting services..."
     $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo api admin mock-oidc$PUBLISHER_SERVICE

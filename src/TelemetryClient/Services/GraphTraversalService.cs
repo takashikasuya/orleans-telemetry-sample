@@ -36,13 +36,18 @@ public class GraphTraversalService
 
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             var result = JsonSerializer.Deserialize<GraphTraversalResult>(content, JsonOptions);
+            if (result is null)
+            {
+                return new GraphTraversalResult(null, 0, new List<TraversalNodeSnapshot>());
+            }
 
-            return result ?? new GraphTraversalResult(new List<TraversalNode>(), new List<TraversalEdge>());
+            var nodes = result.Nodes ?? new List<TraversalNodeSnapshot>();
+            return new GraphTraversalResult(result.StartNodeId, result.Depth, nodes);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to traverse from node {NodeId}", nodeId);
-            return new GraphTraversalResult(new List<TraversalNode>(), new List<TraversalEdge>());
+            return new GraphTraversalResult(null, 0, new List<TraversalNodeSnapshot>());
         }
     }
 
@@ -74,24 +79,25 @@ public class GraphTraversalService
     };
 }
 
-public record GraphTraversalResult(List<TraversalNode> Nodes, List<TraversalEdge> Edges);
+public record GraphTraversalResult(string? StartNodeId, int Depth, List<TraversalNodeSnapshot>? Nodes);
+
+public record TraversalNodeSnapshot(
+    TraversalNode Node,
+    List<TraversalEdge>? OutgoingEdges,
+    List<TraversalEdge>? IncomingEdges);
 
 public record TraversalNode(
     string NodeId,
-    string NodeType,
-    string? Name,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(GraphNodeTypeStringConverter))] string NodeType,
+    string DisplayName,
     Dictionary<string, object>? Attributes);
 
 public record TraversalEdge(
-    string SourceNodeId,
     string TargetNodeId,
     string Predicate);
 
 public record NodeDetailsDto(
-    string NodeId,
-    string NodeType,
-    string? Name,
-    Dictionary<string, object>? Attributes,
+    TraversalNode Node,
     List<EdgeDto>? OutgoingEdges,
     List<EdgeDto>? IncomingEdges);
 

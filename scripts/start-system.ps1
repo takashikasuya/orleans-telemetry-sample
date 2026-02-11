@@ -184,15 +184,18 @@ while ($RetryCount -lt $MaxRetries) {
   try {
     & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile down --remove-orphans 2>$null
     
-    # Build services sequentially to avoid Docker daemon overload
-    Write-Host "Building silo..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build silo
-    
-    Write-Host "Building api..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build api
-    
-    Write-Host "Building admin..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build admin
+    # Only build if images don't exist
+    foreach ($service in @("silo", "api", "admin")) {
+      $imageName = "orleans-telemetry-sample-${service}:latest"
+      $imageExists = & docker image inspect $imageName 2>$null
+      
+      if (-not $imageExists) {
+        Write-Host "Building $service..."
+        & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build $service
+      } else {
+        Write-Host "Image for $service already exists, skipping build"
+      }
+    }
     
     Write-Host "Starting services..."
     & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d mq silo api admin mock-oidc$publisherService

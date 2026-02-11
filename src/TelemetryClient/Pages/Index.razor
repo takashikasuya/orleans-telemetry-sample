@@ -46,7 +46,9 @@
                 }
                 else if (_treeNodes.Any())
                 {
-                    @RenderTreeView(_treeNodes)
+                    <MudTreeView T="HierarchyTreeNode">
+                        @RenderTreeItems(_treeNodes)
+                    </MudTreeView>
                 }
                 else
                 {
@@ -163,7 +165,7 @@
     private string _buildingName = string.Empty;
     private string _spaceId = string.Empty;
 
-    private RenderFragment RenderTreeView(List<HierarchyTreeNode> nodes) => builder =>
+    private RenderFragment RenderTreeItems(IEnumerable<HierarchyTreeNode> nodes) => builder =>
     {
         var sequence = 0;
         foreach (var node in nodes)
@@ -181,22 +183,12 @@
                     InvokeAsync(async () => await LoadChildrenAsync(node));
                 }
             }));
-            builder.AddAttribute(sequence++, "OnClick", EventCallback.Factory.Create(this, () => OnNodeSelectedAsync(node)));
-            
-            builder.AddAttribute(sequence++, "BodyContent", (RenderFragment)(bodyBuilder =>
-            {
-                var bodySequence = 0;
-                bodyBuilder.OpenComponent<MudText>(bodySequence++);
-                bodyBuilder.AddAttribute(bodySequence++, "ChildContent", (RenderFragment)(textBuilder =>
-                {
-                    textBuilder.AddContent(0, node.DisplayName);
-                }));
-                bodyBuilder.CloseComponent();
-            }));
+            builder.AddAttribute(sequence++, "OnClick", EventCallback.Factory.Create<MouseEventArgs>(this, async _ => await OnNodeSelectedAsync(node)));
+            builder.AddAttribute(sequence++, "Text", node.DisplayName);
             
             if (node.Children.Any())
             {
-                builder.AddAttribute(sequence++, "ChildContent", RenderTreeView(node.Children));
+                builder.AddAttribute(sequence++, "ChildContent", RenderTreeItems(node.Children));
             }
             
             builder.CloseComponent();

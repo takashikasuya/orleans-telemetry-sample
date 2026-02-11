@@ -95,6 +95,10 @@ services:
       - api
     environment:
       TelemetryClient__ApiGatewayBaseAddress: http://api:80
+      TelemetryClient__Oidc__Authority: ${OIDC_AUTHORITY:-http://mock-oidc:8080/default}
+      TelemetryClient__Oidc__Audience: ${OIDC_AUDIENCE:-default}
+      TelemetryClient__Oidc__ClientId: ${OIDC_CLIENT_ID:-test-client}
+      TelemetryClient__Oidc__ClientSecret: ${OIDC_CLIENT_SECRET:-test-secret}
       ASPNETCORE_URLS: http://+:80
     ports:
       - "8083:80"

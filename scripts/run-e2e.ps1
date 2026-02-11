@@ -110,7 +110,19 @@ services:
 
   Log "Starting docker compose"
   & docker compose -f (Join-Path $Root "docker-compose.yml") -f $script:overrideFile down --remove-orphans
-  & docker compose -f (Join-Path $Root "docker-compose.yml") -f $script:overrideFile up --build -d mq silo api mock-oidc
+  
+  # Only build if images don't exist
+  foreach ($service in @("silo", "api")) {
+    $imageName = "orleans-telemetry-sample-${service}:latest"
+    $imageExists = & docker image inspect $imageName 2>$null
+    
+    if (-not $imageExists) {
+      Log "Building $service..."
+      & docker compose -f (Join-Path $Root "docker-compose.yml") -f $script:overrideFile build $service
+    }
+  }
+  
+  & docker compose -f (Join-Path $Root "docker-compose.yml") -f $script:overrideFile up -d mq silo api mock-oidc
 
   Log "Waiting for API"
   if (-not (Wait-ForUrl "http://localhost:8080/swagger" $apiWaitSeconds)) {

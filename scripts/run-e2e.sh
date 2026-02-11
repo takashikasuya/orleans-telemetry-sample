@@ -103,7 +103,17 @@ YML
 
   log "Starting docker compose"
   $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" down --remove-orphans
-  $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up --build -d mq silo api mock-oidc
+  
+  # Only build if images don't exist
+  for SERVICE in silo api; do
+    IMAGE_NAME="orleans-telemetry-sample-${SERVICE}:latest"
+    if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+      log "Building $SERVICE..."
+      $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build "$SERVICE"
+    fi
+  done
+  
+  $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo api mock-oidc
 
   trap cleanup EXIT
 
