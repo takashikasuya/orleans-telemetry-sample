@@ -2163,3 +2163,54 @@ RDFから抽出される `CustomTags` をGraphノード属性へ反映し、タ�
 ## Retrospective (2026-02-10, reverse-index)
 - API契約を変えずに内部検索方式を差し替えられたため、クライアント影響なく性能改善の土台を作れた。
 - 将来的には seed 以外のノード更新経路（運用時の属性変更）でも同インデックス更新を通すと一貫性がより高まる。
+
+---
+
+# plans.md: README Slim化とドキュメント再編 (2026-02-11)
+
+## Purpose
+README の情報量を一般的なリポジトリ案内レベルに整理し、詳細手順・設定・運用ノウハウを関連ドキュメントへ移管して参照性を上げる。
+
+## Success Criteria
+1. README が概要/クイックスタート/ドキュメント導線中心の簡潔な構成になっている。
+2. README から削減した詳細情報（起動詳細、設定、運用/検証手順）が docs 配下の関連ドキュメントに統合されている。
+3. README に関連ドキュメントへのリンクが明示されている。
+4. `dotnet build` と `dotnet test` が成功し、結果が記録されている。
+
+## Steps
+1. 既存 README の冗長セクションを棚卸しし、移管先ドキュメント方針を決める。
+2. docs 配下に運用寄りの集約ドキュメントを作成し、README から削減する内容を移す。
+3. README を簡潔版へ再構成し、関連 docs へのリンクを追加する。
+4. build/test を実行して検証し、plans.md を更新する。
+
+## Progress
+- [x] Step 1: 冗長セクション棚卸し
+- [ ] Step 2: docs へ移管
+- [ ] Step 3: README 再構成
+- [ ] Step 4: build/test 検証
+
+## Observations
+- README がアーキテクチャ詳細、設定 JSON、運用手順、各種シーケンス図まで含んでおり、初見導線としては情報過多。
+- 既存 docs は機能別に分かれているため、README の運用詳細を受ける「実行/運用ガイド」の受け皿を追加すると整理しやすい。
+
+## Decisions
+- README は「概要 + 最短起動 + 主要 docs へのリンク」に寄せる。
+- 具体的な運用手順（helper script、環境変数、テスト/ロードテスト、認証実行例）は新規 docs に統合する。
+
+## Retrospective
+- 進行中。
+
+## Update (2026-02-11)
+- [x] Step 2: `docs/local-setup-and-operations.md` を追加し、README から削減した運用手順（起動バリエーション、環境変数、認証、テスト実行）を統合。
+- [x] Step 3: README をスリム化し、概要/クイックスタート/ドキュメント導線中心へ再構成。
+- [x] Step 4: `dotnet build` / `dotnet test` を実行し成功を確認。
+
+### Additional Observation
+- `dotnet build` 初回実行時に既存コード `src/AdminGateway/Components/TelemetryTrendChart.razor` で `IJSRuntime` の using 不足によるコンパイルエラーを検出。
+
+### Additional Decision
+- 検証を成立させるため、`TelemetryTrendChart.razor` に `@using Microsoft.JSInterop` を追加し、挙動に影響しない最小修正でビルド障害のみ解消。
+
+### Retrospective
+- README の役割を「入口」と「導線」に限定できたため、初見ユーザーが情報過多になりにくくなった。
+- 詳細は docs へ集約し、README から関連情報へ到達しやすい構成に整理できた。
