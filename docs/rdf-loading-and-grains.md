@@ -86,7 +86,7 @@ SHACL/OWL スキーマの検索パス・ファイル名はオプションで制�
   - 環境変数: `RDF_SEED_PATH`, `TENANT_ID`（参照: [README.md](README.md)）
 
 Graph ノード属性 → PointGrain バインディングの流れは [docs/telemetry-routing-binding.md](docs/telemetry-routing-binding.md) を参照。  
-Graph ノードは `Attributes` に `PointId/DeviceId/...` を持ち、API が属性から PointGrainKey を組み立てて最新値を取得します。
+Graph ノードは `Attributes` に `PointId`（表示用に `DeviceId` など）を持ち、API が `PointId` から PointGrainKey を組み立てて最新値を取得します。
 
 ---
 

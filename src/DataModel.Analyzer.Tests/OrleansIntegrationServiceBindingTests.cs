@@ -23,15 +23,12 @@ public class OrleansIntegrationServiceBindingTests
         pointNode.Attributes["PointId"].Should().Be("temp-1");
         pointNode.Attributes["DeviceId"].Should().Be("dev-1");
         pointNode.Attributes["BuildingName"].Should().Be("BuildingA");
-        pointNode.Attributes["SpaceId"].Should().Be("Room101");
+        pointNode.Attributes["SpaceId"].Should().Be("BuildingA/L1/Room101");
 
         var grainKey = PointGrainKey.Create(
             "tenantA",
-            pointNode.Attributes["BuildingName"],
-            pointNode.Attributes["SpaceId"],
-            pointNode.Attributes["DeviceId"],
             pointNode.Attributes["PointId"]);
-        grainKey.Should().Be("tenantA:BuildingA:Room101:dev-1:temp-1");
+        grainKey.Should().Be("tenantA:temp-1");
     }
 
     [Fact]

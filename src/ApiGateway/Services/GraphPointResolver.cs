@@ -131,27 +131,17 @@ public sealed class GraphPointResolver
             return;
         }
 
-        if (!TryGetAttribute(attributes, "DeviceId", out var deviceId))
-        {
-            return;
-        }
-
+        TryGetAttribute(attributes, "DeviceId", out var deviceId);
         if (!string.IsNullOrWhiteSpace(expectedDeviceId) &&
-            !string.Equals(deviceId, expectedDeviceId, StringComparison.OrdinalIgnoreCase))
+            (string.IsNullOrWhiteSpace(deviceId) ||
+             !string.Equals(deviceId, expectedDeviceId, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
 
-        TryGetAttribute(attributes, "BuildingName", out var buildingName);
-        TryGetAttribute(attributes, "SpaceId", out var spaceId);
         TryGetAttribute(attributes, "PointType", out var pointType);
 
-        var pointKey = PointGrainKey.Create(
-            tenantId,
-            buildingName ?? string.Empty,
-            spaceId ?? string.Empty,
-            deviceId,
-            pointId);
+        var pointKey = PointGrainKey.Create(tenantId, pointId);
         var pointGrain = _client.GetGrain<IPointGrain>(pointKey);
         var snapshot = await pointGrain.GetAsync();
 

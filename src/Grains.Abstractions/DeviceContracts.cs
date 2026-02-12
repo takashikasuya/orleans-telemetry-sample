@@ -136,7 +136,7 @@ public interface IDeviceGrain : IGrainWithStringKey
 
 /// <summary>
 /// Grain interface for point state management. Each point is keyed by
-/// "{tenant}:{building}:{space}:{deviceId}:{pointId}" to support isolation.
+/// "{tenant}:{pointId}" to support isolation.
 /// </summary>
 public interface IPointGrain : IGrainWithStringKey
 {

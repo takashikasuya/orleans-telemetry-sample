@@ -47,7 +47,7 @@ sequenceDiagram
 
 ## Grain キーの組み立て
 
-- **PointGrainKey**: `{tenant}:{building}:{space}:{device}:{point}` で識別し、パーツ内の `:` は `_` に正規化。
+- **PointGrainKey**: `{tenant}:{point}` で識別し、パーツ内の `:` は `_` に正規化。
 - **GraphNodeKey**: `{tenant}:{nodeId}` で GraphNodeGrain を識別。
 - **DeviceGrainKey**: `{tenant}:{deviceId}` でデバイス単位の Grain を識別（API で参照）。
 
@@ -55,7 +55,7 @@ sequenceDiagram
 
 Graph ノード側の属性が **PointGrain の参照キー**を持ち、API がその情報を使って値を取得します。
 
-- Graph ノードは `GraphNodeGrain` に保存され、`Attributes` に `PointId` / `DeviceId` / `BuildingName` / `SpaceId` が入る想定。
+- Graph ノードは `GraphNodeGrain` に保存され、`Attributes` に `PointId`（および表示用の `DeviceId` / `BuildingName` / `SpaceId`）が入る想定。
 - `/api/nodes/{nodeId}/value` は `GraphNodeGrain` を取得し、属性から `PointGrainKey` を組み立て、
   `PointGrain` の最新値を返します。
 
@@ -112,4 +112,3 @@ graph TB
 - PointGrain は **point 単位の最終値**を保持する設計です。
 - DeviceGrain は **device 単位のスナップショット取得**に利用されます（API から参照）。
 - GraphNodeGrain と PointGrain のバインディングは、**Graph ノードの属性**で表現しています。
-

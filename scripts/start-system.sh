@@ -214,8 +214,40 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
       fi
     done
     
-    echo "Starting services..."
-    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo api admin mock-oidc$PUBLISHER_SERVICE
+    echo "Starting base services (mq, silo, mock-oidc)..."
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo mock-oidc
+
+    echo "Waiting for Orleans gateway (localhost:30000)..."
+    GATEWAY_RETRIES=24
+    GATEWAY_DELAY=2
+    GATEWAY_READY=false
+    for ((i=1; i<=GATEWAY_RETRIES; i++)); do
+      # Test gateway from host using nc (netcat) with timeout
+      if command -v nc >/dev/null 2>&1; then
+        if nc -z -w 1 localhost 30000 >/dev/null 2>&1; then
+          GATEWAY_READY=true
+          echo "Orleans gateway is ready."
+          break
+        fi
+      elif command -v timeout >/dev/null 2>&1; then
+        # Fallback: use bash /dev/tcp from host
+        if timeout 1 bash -c "</dev/tcp/localhost/30000" >/dev/null 2>&1; then
+          GATEWAY_READY=true
+          echo "Orleans gateway is ready."
+          break
+        fi
+      fi
+      echo "Gateway not ready (attempt $i/$GATEWAY_RETRIES). Retrying in ${GATEWAY_DELAY}s..."
+      sleep "$GATEWAY_DELAY"
+    done
+
+    if [ "$GATEWAY_READY" = false ]; then
+      echo "Orleans gateway did not become ready after $GATEWAY_RETRIES attempts." >&2
+      exit 1
+    fi
+
+    echo "Starting API/Admin/Publisher..."
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d api admin$PUBLISHER_SERVICE
   }; then
     SUCCESS=true
     break

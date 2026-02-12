@@ -2288,3 +2288,75 @@ Admin UI の Point snapshot が取得できない原因となる SpaceId 不一�
 
 ## Retrospective
 - 未検証（Admin UI / API での確認が必要）。
+
+---
+
+# plans.md: Simplify PointGrainKey to Tenant+PointId (2026-02-11)
+
+## Purpose
+PointId がテナント内で一意である前提に合わせ、PointGrainKey を `tenant:pointId` に簡素化する。
+
+## Success Criteria
+1. PointGrainKey が `tenant:pointId` で生成される。
+2. 既存のルーティング/参照（Silo, ApiGateway, Admin UI, TagSearch）が新キーで動作する。
+3. ドキュメントが新しいキー構成に更新される。
+
+## Steps
+1. PointGrainKey を `tenant:pointId` に変更し、呼び出し元を更新する。
+2. テスト・ドキュメントを更新する。
+3. 変更点を記録する。
+
+## Progress
+- [x] Step 1: キー構成変更と呼び出し元更新
+- [x] Step 2: テスト・ドキュメント更新
+- [x] Step 3: 記録更新
+
+## Verification Steps
+1. `dotnet build`
+2. `dotnet test`
+3. `docker compose restart silo` 後に Admin UI / API で Point snapshot が取得できることを確認。
+
+## Observations
+- 既存の PointGrainKey は `tenant:building:space:device:point` 前提だったため、SpaceId の不一致で Admin UI が空になるケースがあった。
+- PointId 一意前提により、ルーティングと参照を単純化できる。
+
+## Decisions
+- DeviceId/BuildingName/SpaceId は表示・検索・デバイス単位の参照に残し、PointGrainKey のみ簡素化する。
+
+## Retrospective
+- 未検証（ビルド/テスト/実 UI 確認が必要）。
+
+---
+
+# plans.md: Start-System Wait for Silo Gateway (2026-02-11)
+
+## Purpose
+ApiGateway が Orleans Gateway 起動前に落ちる問題を防ぐため、起動待ちと再接続（一定回数・間隔）の待機処理を start-system.sh に追加する。
+
+## Success Criteria
+1. `scripts/start-system.sh --rabbitmq` 実行時に Silo gateway (30000) の準備完了まで待機する。
+2. gateway が準備完了した後に api/admin/publisher が起動する。
+3. gateway が準備できない場合は明示的に失敗して終了する。
+
+## Steps
+1. start-system.sh に gateway 待機ループを追加する。
+2. 起動順を `mq/silo/mock-oidc` → wait → `api/admin/publisher` に変更する。
+3. 変更点を記録する。
+
+## Progress
+- [x] Step 1: 待機ループ追加
+- [x] Step 2: 起動順の調整
+- [x] Step 3: 記録更新
+
+## Verification Steps
+1. `./scripts/start-system.sh --rabbitmq` を実行し、gateway 待機ログが出ることを確認。
+2. api が落ちずに起動し、`http://localhost:8080/swagger` が表示できることを確認。
+
+## Observations
+- ApiGateway は gateway 接続失敗で即時終了するため、起動順の調整が必要。
+
+## Decisions
+- `docker compose exec -T silo bash -lc "</dev/tcp/127.0.0.1/30000"` を利用して gateway readiness を判定する。
+
+## Retrospective
+- 未検証（ローカルでの起動確認が必要）。

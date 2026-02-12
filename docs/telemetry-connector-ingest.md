@@ -81,9 +81,9 @@
 
 ### TelemetryPointMsg のメタデータ補完
 
-`PointGrainKey` やストレージの `TelemetryEventEnvelope` は `TenantId:BuildingName:SpaceId:DeviceId:PointId` という構成を前提として動いているため、コネクタが `PointId` しか持たない状態で `TelemetryPointMsg` を送り続けると、ルーティング（`TelemetryRouterGrain`）や API（`/api/nodes/{nodeId}/value` 等）が正しく対象を特定できません。【F:src/SiloHost/TelemetryRouterGrain.cs†L18-L90】【F:src/ApiGateway/Program.cs†L115-L155】
-このためコネクタ実装は受信直後に `PointId` をキーにして、RDF/Graph から `BuildingName`・`SpaceId`・`DeviceId`（と `TenantId`）を補完したうえで `TelemetryPointMsg` をチャネルに書き込んでください。Graph 側では `OrleansIntegrationService.AddPointBindingAttributes` が `GraphNodeDefinition.Attributes` に `PointId`/`DeviceId`/`SpaceId`/`BuildingName` を追加しており、`GraphNode` はポイント URI（`point:{PointId}` など）を NodeId として管理しているため、ApiGateway の `/api/nodes/{nodeId}` や内部の Graph Registry から逆引きできます。【F:src/DataModel.Analyzer/Integration/OrleansIntegrationService.cs†L318-L375】【F:docs/telemetry-routing-binding.md†L48-L115】【F:docs/rdf-loading-and-grains.md†L22-L77】
-PointId をベースにした逆引きが難しい場合は、コネクタ自身で RDF ソースや Graph シードをパースし、`PointId → (Building, Area, Device)` のマップを保持しておけば十分です。Graph から取得した属性をそのまま `TelemetryPointMsg` に流せばルータ/ストレージの整合性が保たれ、`SpaceId`/`DeviceId` が不要になるという前提は不要になります。
+`PointGrainKey` は `TenantId:PointId` を前提としているため、コネクタが `PointId` を送っていればポイント単位のルーティングは成立します。【F:src/SiloHost/TelemetryRouterGrain.cs†L18-L90】【F:src/ApiGateway/Program.cs†L115-L155】
+ただし、`DeviceId` は `DeviceGrainKey`（`{tenant}:{deviceId}`）で使用されるため、**デバイス単位の参照や API の device 系エンドポイント**を使う場合は `DeviceId` を補完してください。Graph 側では `OrleansIntegrationService.AddPointBindingAttributes` が `GraphNodeDefinition.Attributes` に `PointId`/`DeviceId`/`SpaceId`/`BuildingName` を追加しており、`GraphNode` はポイント URI（`point:{PointId}` など）を NodeId として管理しているため、ApiGateway の `/api/nodes/{nodeId}` や内部の Graph Registry から逆引きできます。【F:src/DataModel.Analyzer/Integration/OrleansIntegrationService.cs†L318-L375】【F:docs/telemetry-routing-binding.md†L48-L115】【F:docs/rdf-loading-and-grains.md†L22-L77】
+PointId をベースにした逆引きが難しい場合は、コネクタ自身で RDF ソースや Graph シードをパースし、`PointId → (Building, Area, Device)` のマップを保持しておくと安定します。
 
 ### コネクタによる変換の注意点
 
@@ -204,7 +204,7 @@ Simulator が有効な場合、SiloHost は **既存の RDF シードとは別�
 - 生成される Site/Building/Level/Area の名称は `Simulator-Site` / `Simulator-Building` / `Simulator-Level` / `Simulator-Area` です。
 - 既存の `RDF_SEED_PATH` が設定されている場合も、**同一テナント内に追加**されます（結果的に 2 サイト以上になります）。
 - 追加のシードは `TENANT_ID` があればそれを使い、未設定の場合は `TelemetryIngest:Simulator:TenantId` が使用されます。
-- Point Snapshot を確認するため、`TelemetryIngest:Simulator:BuildingName` と `SpaceId` は Simulator シードの名称（`Simulator-Building` / `Simulator-Area`）と一致させてください。
+- `TelemetryIngest:Simulator:BuildingName` と `SpaceId` は UI の階層表示・文脈に使われるため、Simulator シードの名称（`Simulator-Building` / `Simulator-Area`）と揃えると表示が一貫します。
 
 ## Publisher 制御コマンド
 

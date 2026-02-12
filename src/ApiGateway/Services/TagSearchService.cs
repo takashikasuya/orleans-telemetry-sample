@@ -166,25 +166,12 @@ public sealed class TagSearchService
             return false;
         }
 
-        if (!node.Attributes.TryGetValue("DeviceId", out var deviceId) || string.IsNullOrWhiteSpace(deviceId))
-        {
-            return false;
-        }
-
         if (!node.Attributes.TryGetValue("PointId", out var pointId) || string.IsNullOrWhiteSpace(pointId))
         {
             return false;
         }
 
-        node.Attributes.TryGetValue("BuildingName", out var buildingName);
-        node.Attributes.TryGetValue("SpaceId", out var spaceId);
-
-        var grainKey = PointGrainKey.Create(
-            tenant,
-            buildingName ?? string.Empty,
-            spaceId ?? string.Empty,
-            deviceId,
-            pointId);
+        var grainKey = PointGrainKey.Create(tenant, pointId);
 
         grain = new TagMatchedGrain(node.NodeId, node.NodeType, "Point", grainKey, node.MatchedTags);
         return true;

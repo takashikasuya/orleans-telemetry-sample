@@ -6,16 +6,13 @@ namespace Grains.Abstractions;
 public static class PointGrainKey
 {
     /// <summary>
-    /// Creates the storage key for a point grain using the tenant, building, space, device, and point identifiers.
+    /// Creates the storage key for a point grain using the tenant and point identifiers.
     /// </summary>
-    public static string Create(string tenantId, string buildingName, string spaceId, string deviceId, string pointId)
+    public static string Create(string tenantId, string pointId)
     {
         return string.Join(":", new[]
         {
             NormalizePart(tenantId),
-            NormalizePart(buildingName),
-            NormalizePart(spaceId),
-            NormalizePart(deviceId),
             NormalizePart(pointId)
         });
     }

@@ -426,22 +426,10 @@ internal sealed class AdminMetricsService
 
         if (snapshot.Node.NodeType == GraphNodeType.Point)
         {
-            if (TryGetAttribute(snapshot.Node.Attributes, "PointId", out var pointIdValue) &&
-                TryGetAttribute(snapshot.Node.Attributes, "DeviceId", out var deviceIdValue))
+            if (TryGetAttribute(snapshot.Node.Attributes, "PointId", out var pointIdValue))
             {
                 var pointId = pointIdValue!;
-                var deviceId = deviceIdValue!;
-                snapshot.Node.Attributes.TryGetValue("BuildingName", out var buildingNameValue);
-                snapshot.Node.Attributes.TryGetValue("SpaceId", out var spaceIdValue);
-                var buildingName = buildingNameValue ?? string.Empty;
-                var spaceId = spaceIdValue ?? string.Empty;
-
-                pointGrainKey = PointGrainKey.Create(
-                    tenantId,
-                    buildingName,
-                    spaceId,
-                    deviceId,
-                    pointId);
+                pointGrainKey = PointGrainKey.Create(tenantId, pointId);
 
                 try
                 {

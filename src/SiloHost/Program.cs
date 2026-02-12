@@ -51,20 +51,55 @@ internal static class Program
             var siloPort = orleansSection.GetValue("SiloPort", 11111);
             var gatewayPort = orleansSection.GetValue("GatewayPort", 30000);
 
-            // use localhost clustering for dev; override advertised address for Docker when configured
-            siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
+            // Determine advertised address
+            IPAddress? advertisedAddress = null;
             if (!string.IsNullOrWhiteSpace(advertisedHost))
             {
-                var advertisedAddress = ResolveAdvertisedAddress(advertisedHost);
+                if (IPAddress.TryParse(advertisedHost, out var parsedIp))
+                {
+                    advertisedAddress = parsedIp;
+                }
+                else
+                {
+                    // It's a hostname - try to resolve it
+                    try
+                    {
+                        var addresses = Dns.GetHostAddresses(advertisedHost);
+                        if (addresses.Length > 0)
+                        {
+                            advertisedAddress = addresses.FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+                            if (advertisedAddress == null)
+                            {
+                                // No IPv4 found, use first available
+                                advertisedAddress = addresses[0];
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Resolution failed - log and continue
+                        System.Console.WriteLine($"Warning: Failed to resolve Orleans advertised host '{advertisedHost}': {ex.Message}");
+                    }
+                }
+            }
+
+            // Configure endpoints FIRST, before UseLocalhostClustering
+            if (advertisedAddress != null)
+            {
                 siloBuilder.Configure<EndpointOptions>(options =>
                 {
                     options.AdvertisedIPAddress = advertisedAddress;
                     options.SiloPort = siloPort;
                     options.GatewayPort = gatewayPort;
+                    // Listen on all interfaces
                     options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, siloPort);
                     options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, gatewayPort);
                 });
             }
+
+            // Set up localhost clustering for in-memory membership (this will use endpoints we configured above)
+            siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
+            
             siloBuilder.Configure<ClusterOptions>(options =>
             {
                 options.ClusterId = "telemetry-cluster";
@@ -87,13 +122,4 @@ internal static class Program
         await host.RunAsync();
     }
 
-    private static IPAddress ResolveAdvertisedAddress(string host)
-    {
-        if (IPAddress.TryParse(host, out var parsed))
-        {
-            return parsed;
-        }
-
-        return Dns.GetHostAddresses(host).First(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-    }
 }

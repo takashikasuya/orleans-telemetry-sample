@@ -15,7 +15,7 @@ public class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
 {
     public async Task RouteAsync(TelemetryPointMsg msg)
     {
-        var key = PointGrainKey.Create(msg.TenantId, msg.BuildingName, msg.SpaceId, msg.DeviceId, msg.PointId);
+        var key = PointGrainKey.Create(msg.TenantId, msg.PointId);
         var pointGrain = GrainFactory.GetGrain<IPointGrain>(key);
         await pointGrain.UpsertAsync(msg);
 
@@ -61,9 +61,6 @@ public class TelemetryRouterGrain : Grain, ITelemetryRouterGrain
         {
             var grainKey = PointGrainKey.Create(
                 tupleKey.TenantId,
-                tupleKey.BuildingName,
-                tupleKey.SpaceId,
-                tupleKey.DeviceId,
                 tupleKey.PointId);
             var grain = GrainFactory.GetGrain<IPointGrain>(grainKey);
             var deviceKey = DeviceGrainKey.Create(tupleKey.TenantId, tupleKey.DeviceId);

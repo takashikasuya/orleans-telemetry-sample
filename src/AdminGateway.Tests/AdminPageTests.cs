@@ -96,7 +96,7 @@ public sealed class AdminPageTests : TestContext
         pointNode.Node.Attributes["Unit"] = "C";
         pointNode.OutgoingEdges.Add(new GraphEdge { Predicate = "isPointOf", TargetNodeId = "equip-1" });
 
-        var pointKey = PointGrainKey.Create("t1", "building", "space", "device-1", "pt-1");
+        var pointKey = PointGrainKey.Create("t1", "pt-1");
 
         var metrics = CreateMetricsService(
             tenants: new[] { "t1" },
