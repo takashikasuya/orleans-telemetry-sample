@@ -2360,3 +2360,86 @@ ApiGateway が Orleans Gateway 起動前に落ちる問題を防ぐため、起�
 
 ## Retrospective
 - 未検証（ローカルでの起動確認が必要）。
+
+---
+
+# plans.md: Fix start-system scripts for ApiGateway startup + rebuild behavior (2026-02-12)
+
+## Purpose
+`docker compose` 起動時に ApiGateway が安定起動しない問題と、ソース改変後に再ビルドされない問題を script 配下の起動スクリプト修正で解消する。
+
+## Success Criteria
+1. `scripts/start-system.sh` / `scripts/start-system.ps1` がコンテナ内到達可能な OIDC Authority を設定している。
+2. 既存イメージ有無に関わらず、起動時に `silo/api/admin`（必要時 `publisher`）を build する。
+3. 起動順が `mq/silo/mock-oidc` → gateway待機 → `api/admin/publisher` となり、ApiGateway の早期起動失敗を抑止する。
+4. 検証コマンド結果が記録される。
+
+## Steps
+1. start-system.sh の OIDC 設定と build ロジックを修正。
+2. start-system.ps1 に同等修正を反映し、起動順と gateway 待機を追加。
+3. 構文/ビルド/テストで検証し記録する。
+
+## Progress
+- [x] Step 1: bash スクリプト修正
+- [x] Step 2: PowerShell スクリプト修正
+- [x] Step 3: 検証と記録
+
+## Observations
+- 既存 script は `OIDC_AUTHORITY=http://localhost:8081/default` を api/admin コンテナへ注入しており、コンテナ内で localhost が自己参照になるため OIDC 到達不可になり得る。
+- 既存 script はイメージ存在時に build をスキップするため、ソース改変が反映されない。
+- bash 版は gateway 待機が既にあったが、PowerShell 版は待機せず一括起動だった。
+
+## Decisions
+- OIDC Authority は compose 既定と整合する `http://mock-oidc:8080/default` に統一。
+- build は毎回 `docker compose build silo api admin[ publisher]` を実行して確実に反映。
+- PowerShell 版にも gateway(TCP 30000) 待機を追加し bash 版と同等の起動順にした。
+
+## Verification Steps
+1. `bash -n scripts/start-system.sh`
+2. `dotnet build`
+3. `dotnet test`
+
+## Retrospective
+- script 経由起動のボトルネックだった「OIDC到達先」と「buildスキップ」を同時に是正できた。
+- bash/PowerShell の挙動差も縮められ、OS に依存しない再現性が改善した。
+
+### Verification Result Notes (2026-02-12)
+- `bash -n scripts/start-system.sh`: 成功。
+- `dotnet build`: 成功（既存 warning は継続）。
+- `dotnet test`: 失敗。`ApiGateway.Tests.TagSearchServiceTests.SearchGrainsByTagsAsync_ReturnsDeviceAndPointGrains` と `ApiGateway.Tests.GrpcRegistryServiceTests.SearchGrainsByTags_ReturnsDerivedGrains` が失敗。
+
+---
+
+# plans.md: Fix ApiGateway test expectations after PointGrainKey simplification (2026-02-12)
+
+## Purpose
+前回変更で PointGrainKey が `tenant:pointId` に簡素化されたため、旧形式キーを期待して失敗している ApiGateway テストを現仕様に合わせて修正する。
+
+## Success Criteria
+1. `TagSearchServiceTests` の Point GrainKey 期待値が現仕様 (`tenant:pointId`) に一致する。
+2. `GrpcRegistryServiceTests` の Point GrainKey 期待値が現仕様に一致する。
+3. `dotnet test` が成功する。
+
+## Steps
+1. 失敗中テスト2件の期待値を更新する。
+2. `dotnet test` を実行して回帰確認する。
+3. plans.md に結果を記録する。
+
+## Progress
+- [x] Step 1: 対象特定
+- [x] Step 2: 期待値更新
+- [x] Step 3: テスト実行と記録
+
+## Observations
+- 失敗中2件はいずれも Point GrainKey の旧形式 (`tenant:building:space:device:point`) を期待している。
+- 実装は `PointGrainKey.Create(tenant, pointId)` のため戻り値は `tenant:pointId`。
+
+## Decisions
+- 実装整合性を優先し、テスト期待値を `tenant:pointId` に更新する。
+
+## Verification Result Notes (2026-02-12)
+- `dotnet test`: 成功（全テスト通過）。
+- `dotnet build`: 成功（既存 warning 1件: `ApiGateway.Client/Program.cs` CS8604）。
+
+## Retrospective
+- PointGrainKey 仕様変更に追随していなかったテスト期待値のみを最小修正し、実装意図とテスト整合性を回復した。

@@ -34,7 +34,7 @@ public sealed class TagSearchServiceTests
 
         response.Count.Should().Be(2);
         response.Items.Should().ContainSingle(x => x.GrainType == "Device" && x.GrainKey == "tenant-1:device-01");
-        response.Items.Should().ContainSingle(x => x.GrainType == "Point" && x.GrainKey == "tenant-1:BuildingA:Room101:device-01:temp");
+        response.Items.Should().ContainSingle(x => x.GrainType == "Point" && x.GrainKey == "tenant-1:temp");
     }
 
     [Fact]

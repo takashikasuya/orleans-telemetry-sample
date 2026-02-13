@@ -149,7 +149,7 @@ $ingestEnabledText$ingestSinkText$rabbitMqText$simulatorText
         PROJECT: src/ApiGateway
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      OIDC_AUTHORITY: http://localhost:8081/default
+      OIDC_AUTHORITY: http://mock-oidc:8080/default
       OIDC_AUDIENCE: default
       TelemetryStorage__StagePath: /storage/stage
       TelemetryStorage__ParquetPath: /storage/parquet
@@ -168,7 +168,7 @@ $ingestEnabledText$ingestSinkText$rabbitMqText$simulatorText
       args:
         PROJECT: src/AdminGateway
     environment:
-      OIDC_AUTHORITY: http://localhost:8081/default
+      OIDC_AUTHORITY: http://mock-oidc:8080/default
       OIDC_AUDIENCE: default
     extra_hosts:
       - "localhost:host-gateway"
@@ -184,21 +184,43 @@ while ($RetryCount -lt $MaxRetries) {
   try {
     & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile down --remove-orphans 2>$null
     
-    # Only build if images don't exist
-    foreach ($service in @("silo", "api", "admin")) {
-      $imageName = "orleans-telemetry-sample-${service}:latest"
-      $imageExists = & docker image inspect $imageName 2>$null
-      
-      if (-not $imageExists) {
-        Write-Host "Building $service..."
-        & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build $service
-      } else {
-        Write-Host "Image for $service already exists, skipping build"
+    Write-Host "Building services (silo, api, admin$publisherService)..."
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build silo api admin$publisherService
+
+    Write-Host "Starting base services (mq, silo, mock-oidc)..."
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d mq silo mock-oidc
+
+    Write-Host "Waiting for Orleans gateway (localhost:30000)..."
+    $GatewayRetries = 24
+    $GatewayDelaySeconds = 2
+    $GatewayReady = $false
+
+    for ($i = 1; $i -le $GatewayRetries; $i++) {
+      try {
+        $tcpClient = [System.Net.Sockets.TcpClient]::new()
+        $connectTask = $tcpClient.ConnectAsync("localhost", 30000)
+        if ($connectTask.Wait(1000) -and $tcpClient.Connected) {
+          $GatewayReady = $true
+          $tcpClient.Dispose()
+          Write-Host "Orleans gateway is ready."
+          break
+        }
+        $tcpClient.Dispose()
       }
+      catch {
+        # retry
+      }
+
+      Write-Host "Gateway not ready (attempt $i/$GatewayRetries). Retrying in $GatewayDelaySeconds seconds..."
+      Start-Sleep -Seconds $GatewayDelaySeconds
     }
-    
-    Write-Host "Starting services..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d mq silo api admin mock-oidc$publisherService
+
+    if (-not $GatewayReady) {
+      throw "Orleans gateway did not become ready after $GatewayRetries attempts."
+    }
+
+    Write-Host "Starting API/Admin/Publisher..."
+    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d api admin$publisherService
     
     $Success = $true
     break

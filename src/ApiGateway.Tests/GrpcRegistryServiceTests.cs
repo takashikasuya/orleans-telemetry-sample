@@ -43,7 +43,7 @@ public sealed class GrpcRegistryServiceTests
 
         response.Count.Should().Be(1);
         response.Items[0].GrainType.Should().Be("Point");
-        response.Items[0].GrainKey.Should().Be("t1:BuildingA:Room101:device-01:temp");
+        response.Items[0].GrainKey.Should().Be("t1:temp");
     }
 
     [Fact]

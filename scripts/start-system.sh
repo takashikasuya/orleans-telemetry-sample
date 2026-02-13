@@ -166,7 +166,7 @@ $SIMULATOR_LINES
         PROJECT: src/ApiGateway
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      OIDC_AUTHORITY: http://localhost:8081/default
+      OIDC_AUTHORITY: http://mock-oidc:8080/default
       OIDC_AUDIENCE: default
       TelemetryStorage__StagePath: /storage/stage
       TelemetryStorage__ParquetPath: /storage/parquet
@@ -185,7 +185,7 @@ $SIMULATOR_LINES
       args:
         PROJECT: src/AdminGateway
     environment:
-      OIDC_AUTHORITY: http://localhost:8081/default
+      OIDC_AUTHORITY: http://mock-oidc:8080/default
       OIDC_AUDIENCE: default
     extra_hosts:
       - "localhost:host-gateway"
@@ -203,16 +203,8 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
   if {
     $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" down --remove-orphans 2>/dev/null || true
     
-    # Only build if images don't exist
-    for SERVICE in silo api admin; do
-      IMAGE_NAME="orleans-telemetry-sample-${SERVICE}:latest"
-      if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
-        echo "Building $SERVICE..."
-        $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build "$SERVICE"
-      else
-        echo "Image for $SERVICE already exists, skipping build"
-      fi
-    done
+    echo "Building services (silo, api, admin${PUBLISHER_SERVICE})..."
+    $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build silo api admin${PUBLISHER_SERVICE}
     
     echo "Starting base services (mq, silo, mock-oidc)..."
     $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo mock-oidc
