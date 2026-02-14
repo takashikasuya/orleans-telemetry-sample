@@ -2279,27 +2279,17 @@ AdminGateway につぁE��、RDF を�E力として grain を生成し、ツ
 3. README のドキュメント一覧から本方針に辿れるようにする、E
 
 ## Steps
-<<<<<<< ours
 1. AdminGateway と RDF/grain 関連実裁E��確認し、テスト設計上�E論点を抽出する、E
 2. 設計方針ドキュメントを `docs/` に追加する、E
 3. README の Documentation セクションにリンクを追加する、E
 4. `dotnet build` / `dotnet test` で回帰確認する、E
 5. Phase 2 として `AdminGateway.Tests` に bUnit を導�Eし、`Admin.razor` の表示/選抁EUI チE��トを追加する、E
 6. `dotnet test src/AdminGateway.Tests` を実行し、Phase 2 の追加チE��トが通ることを確認する、E
-=======
-1. AdminGateway と RDF/grain 関連実装を確認し、テスト設計上の論点を抽出する。
-2. 設計方針ドキュメントを `docs/` に追加する。
-3. README の Documentation セクションにリンクを追加する。
-4. `dotnet build` / `dotnet test` で回帰確認する。
-5. Phase 2 として `AdminGateway.Tests` に bUnit を導入し、`Admin.razor` の表示/選択 UI テストを追加する。
-6. `dotnet test src/AdminGateway.Tests` を実行し、Phase 2 の追加テストが通ることを確認する。
->>>>>>> theirs
 
 ## Progress
 - [x] AdminGateway の構造と既存ドキュメントを確誁E
 - [x] 設計方針ドキュメントを追加
 - [x] README へのリンク追加
-<<<<<<< ours
 - [x] ビルチEチE��ト�E実行結果を記録
 - [x] Phase 1 (サービス層チE��ト方針�E確宁E
 - [x] Phase 2 (bUnit UI チE��ト実裁E
@@ -2462,27 +2452,6 @@ SiloHost の `appsettings.json` に RabbitMQ 設定があるか確認し、無�
 
 ## Retrospective
 - 未検証（`docker compose up --build` 等は未実行）。
-=======
-- [x] ビルド/テストの実行結果を記録
-- [x] Phase 1 (サービス層テスト方針の確定)
-- [x] Phase 2 (bUnit UI テスト実装)
-- [x] Phase 2 のテスト実行確認 (`dotnet test src/AdminGateway.Tests`)
-
-## Observations
-- `src/AdminGateway.Tests` を新設し、bUnit + xUnit + Moq で `Admin.razor` の UI テスト実行基盤を追加した。
-- ツリー構築ロジックは `AdminMetricsService` 内に集約されており、関係解釈（`hasPart`/`isPartOf`/`locatedIn`/`isLocationOf`）と `Device` 正規化が主要なテスト対象。
-- `dotnet test src/AdminGateway.Tests` で Phase 2 の 2 テスト（ツリー表示 / ノード選択詳細表示）を追加し通過した。
-- `AdminMetricsService` が concrete + internal のため、`AdminGateway` 側に `InternalsVisibleTo("AdminGateway.Tests")` を追加してテストから DI 構成できるようにした。
-
-## Decisions
-- 今回はコード実装より先に、導入順序が明確なテスト設計方針をドキュメント化する。
-- 層A（RDF解析）/層B（サービス）/層C（bUnit UI）/統合D（Playwright E2E）の 4 区分で段階導入する。
-- Phase 2 はまず `Admin.razor` の最小 2 ケース（階層表示 / ノード選択）で固定し、壊れやすい表示ロジックを PR ごとに検知できる形にする。
-
-## Retrospective
-- Phase 2 の最小スコープ（表示 + ノード選択）を実装できたため、次は Phase 3 の Playwright E2E へ接続しやすい土台が整った。
-- `dotnet build` / `dotnet test` は成功したが、既存 warning（MudBlazor 近似解決、Moq 脆弱性通知、XML コメント警告）は継続しているため別タスクでの解消が必要。
->>>>>>> theirs
 
 ---
 
@@ -3789,102 +3758,41 @@ curl -X POST http://localhost:8080/api/sparql/query \
 5. **GraphQL ゲートウェイ**: SPARQL → GraphQL 変換レイヤー
 6. **クエリキャッシュ**: 頻繁に実行されるクエリ結果のメモリキャッシュ
 
-## SPARQL Query Engine Implementation Update (2026-02-14, Session 2)
+---
 
-### Purpose
-Embedded SPARQL Query Engine for RDF タスクのうち、最初の実装単位として Silo 側の SPARQL Grain と単体テストを追加する。
+# plans.md: OIDC階層権限設計方針検討 (2026-02-14)
 
-### Success Criteria
-1. `ISparqlQueryGrain` と `SparqlQueryGrain` が追加されること。
-2. RDF ロード、クエリ、テナント分離、クリアの単体テストが追加されること。
-3. 追加したテストがローカルで成功すること。
+## Purpose
+OIDC認証ユーザーごとのロール管理と、テナント配下の階層リソース（敷地/ビル/フロア/部屋/デバイス）に対する継承型アクセス制御を実現するための設計方針を定義する。加えて、全リソースアクセス可能な特権ユーザーの扱い、Admin UIでのユーザー・権限編集、PostgreSQLでの権限データ管理方針を整理する。
 
-### Steps
-1. Grain 契約を `Grains.Abstractions` に追加。
-2. `SiloHost` に dotNetRDF ベースの `SparqlQueryGrain` を実装。
-3. `SiloHost.Tests` に単体テストを追加。
-4. `dotnet test --filter FullyQualifiedName~SparqlQueryGrainTests` で検証。
+## Success Criteria
+1. 実装前提となる認可モデル（Role/Scope/Action + 階層継承 + 特権ユーザー）が文書化されている。
+2. PostgreSQLのテーブル構成、主要インデックス、認可判定フローが定義されている。
+3. Admin UIで必要な管理機能（ユーザー編集、権限割当、監査）と適用ポリシーが明示されている。
+4. 既存システム（ApiGateway/gRPC/AdminGateway）への適用ポイントが示されている。
 
-### Progress
-- [x] Step 1: Grain 契約追加
-- [x] Step 2: `SparqlQueryGrain` 実装（tenant別 triple 保持）
-- [x] Step 3: 単体テスト 4 ケース追加
-- [x] Step 4: テスト実行
+## Steps
+1. 既存ドキュメントを確認して現行認証/運用導線を把握する。
+2. ユーザー要望に対応する設計方針（認可モデル、データモデル、運用）を作成する。
+3. 設計内容を docs 配下へ追加し、plans.md に結果を記録する。
 
-### Observations
-- 既存コードには SPARQL 機能が未実装で、ゼロから追加する必要があった。
-- シリアライズ互換性のため、dotNetRDF の `Triple` を直接 state に保存せず、独自 DTO (`SerializedTriple`) に変換する設計にした。
+## Progress
+- [x] Step 1: 既存資料（README/PROJECT_OVERVIEW/docs）確認
+- [x] Step 2: OIDC階層RBAC設計方針ドラフト作成
+- [x] Step 3: plans.md へ記録
 
-### Verification
-- `dotnet test src/SiloHost.Tests/SiloHost.Tests.csproj --filter FullyQualifiedName~SparqlQueryGrainTests`
-  - Result: Passed 4, Failed 0
-- `dotnet build`
-  - Result: Succeeded (既存 warning のみ)
+## Observations
+- 既存 docs/admin-console.md では AdminGateway が JWT/OIDC 構成を前提にしており、運用UIを拡張する導線がある。
+- 現在のドキュメント群に、階層的アクセス制御を体系的に定義した文書は存在しなかった。
 
-## SPARQL Query Engine Implementation Update (2026-02-14, Session 3)
+## Decisions
+- 実装は行わず、まずは設計方針として `docs/oidc-hierarchical-authorization-design.md` を新設。
+- 判定モデルは初期段階を allow-only とし、deny/ABAC は将来拡張項目として位置づける。
+- 特権ユーザーは `global` スコープでの `super_admin` ロールとして定義し、判定最優先とする。
 
-### Purpose
-ユーザー要望に合わせ、API Gateway 経由の SPARQL エンドポイント実装と統合テストを追加する。
+## Verification
+- ドキュメント追加・更新のみのため、設計レビュー観点を文書内「受け入れ基準」に明記。
 
-### Success Criteria
-1. API Gateway に `/api/sparql/query`, `/api/sparql/load`, `/api/sparql/stats` が実装されること。
-2. ApiGateway.Tests に SPARQL エンドポイントの統合テストが追加されること。
-3. `dotnet build` / `dotnet test` が成功すること。
-
-### Steps
-1. SPARQL API の request/response DTO を追加。
-2. `Program.cs` に SPARQL エンドポイントを追加し、tenant 解決 + `ISparqlQueryGrain` 呼び出しを実装。
-3. `ApiGateway.Tests` に統合テスト（query success / unauthorized / stats）を追加。
-4. ビルドと全テストを実行する。
-
-### Progress
-- [x] Step 1: DTO 追加
-- [x] Step 2: エンドポイント実装
-- [x] Step 3: 統合テスト追加
-- [x] Step 4: build/test 実行
-
-### Decisions
-- まずは plans.md の API ステップに沿って最小セット（query/load/stats）を先行実装する。
-- 外部 SPARQL endpoint 抽象化は次段で実装し、今回スコープからは外す。
-
-### Verification
-- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter FullyQualifiedName~SparqlEndpointTests`
-  - Result: Passed 3, Failed 0
-- `dotnet build`
-  - Result: Succeeded
-- `dotnet test`
-  - Result: Succeeded (all tests passed)
-
-### Retrospective
-- 前回不足していた「API Gateway 経由の検証」が補完され、SPARQL 機能の入口を統合テストで担保できた。
-- 今後は `Sparql:Enabled` フラグや外部 endpoint 抽象化を含めた設定統合を進める。
-
-## SPARQL Query Engine Implementation Update (2026-02-14, Session 4)
-
-### Purpose
-直近実装（SPARQL API/統合テスト）に合わせて README と docs を更新し、利用手順と参照先を明確化する。
-
-### Success Criteria
-1. README に SPARQL 機能概要と docs への導線が追加されること。
-2. docs 配下に SPARQL 専用説明ページが追加されること。
-3. API ドキュメントに SPARQL エンドポイント記載が反映されること。
-
-### Steps
-1. README の Documentation Map と機能説明に SPARQL 記載を追加。
-2. `docs/sparql-query-service.md` を新規作成。
-3. `docs/api-gateway-apis.md` に SPARQL セクションを追記。
-4. 既存 SPARQL 統合テストを再実行して回帰を確認。
-
-### Progress
-- [x] Step 1: README 更新
-- [x] Step 2: SPARQL 専用 docs 追加
-- [x] Step 3: API docs 追記
-- [x] Step 4: テスト再実行
-
-### Verification
-- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter FullyQualifiedName~SparqlEndpointTests`
-  - Result: Passed 3, Failed 0
-
-### Retrospective
-- ドキュメントの導線を README に追加したことで、SPARQL 機能の発見性が改善した。
-- 実装と docs の乖離を抑えるため、今後も実装PR単位で docs 更新を同時実施する。
+## Retrospective
+- 実装前に、権限の粒度・継承・監査を1つの設計文書に集約できたことで、API/gRPC/Adminの適用順序とDB設計の議論が進めやすくなった。
+- 次フェーズでは、最小実装（DBスキーマ + 認可判定サービス + Admin UI最小編集）にスコープを絞るのが有効。
