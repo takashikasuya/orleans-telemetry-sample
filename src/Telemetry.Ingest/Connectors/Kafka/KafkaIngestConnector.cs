@@ -56,38 +56,23 @@ public sealed class KafkaIngestConnector : ITelemetryIngestConnector, IAsyncDisp
                     continue;
                 }
 
-                TelemetryMsg? msg;
-                try
+                if (!TryDeserializeTelemetry(result.Message.Value, out var msg, out var deserializeException))
                 {
-                    msg = JsonSerializer.Deserialize<TelemetryMsg>(result.Message.Value);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to deserialize Kafka message.");
-                    Commit(result);
-                    continue;
-                }
-
-                if (msg is null)
-                {
-                    _logger.LogWarning("Kafka message deserialized to null.");
-                    Commit(result);
-                    continue;
-                }
-
-                foreach (var kv in msg.Properties)
-                {
-                    var pointMsg = new TelemetryPointMsg
+                    if (deserializeException is not null)
                     {
-                        TenantId = msg.TenantId,
-                        BuildingName = msg.BuildingName,
-                        SpaceId = msg.SpaceId,
-                        DeviceId = msg.DeviceId,
-                        PointId = kv.Key,
-                        Sequence = msg.Sequence,
-                        Timestamp = msg.Timestamp,
-                        Value = kv.Value
-                    };
+                        _logger.LogError(deserializeException, "Failed to deserialize Kafka message.");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Kafka message deserialized to null.");
+                    }
+
+                    Commit(result);
+                    continue;
+                }
+
+                foreach (var pointMsg in ToTelemetryPointMessages(msg!))
+                {
                     await writer.WriteAsync(pointMsg, ct);
                 }
 
@@ -98,6 +83,43 @@ public sealed class KafkaIngestConnector : ITelemetryIngestConnector, IAsyncDisp
         {
             _consumer?.Close();
         }
+    }
+
+    internal static bool TryDeserializeTelemetry(byte[] payload, out TelemetryMsg? message, out Exception? exception)
+    {
+        try
+        {
+            message = JsonSerializer.Deserialize<TelemetryMsg>(payload);
+            exception = null;
+            return message is not null;
+        }
+        catch (Exception ex)
+        {
+            message = null;
+            exception = ex;
+            return false;
+        }
+    }
+
+    internal static IReadOnlyList<TelemetryPointMsg> ToTelemetryPointMessages(TelemetryMsg message)
+    {
+        var result = new List<TelemetryPointMsg>(message.Properties.Count);
+        foreach (var kv in message.Properties)
+        {
+            result.Add(new TelemetryPointMsg
+            {
+                TenantId = message.TenantId,
+                BuildingName = message.BuildingName,
+                SpaceId = message.SpaceId,
+                DeviceId = message.DeviceId,
+                PointId = kv.Key,
+                Sequence = message.Sequence,
+                Timestamp = message.Timestamp,
+                Value = kv.Value
+            });
+        }
+
+        return result;
     }
 
     private void EnsureConsumer()

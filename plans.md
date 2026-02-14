@@ -2480,3 +2480,52 @@ RDF/Graph に未登録の telemetry を ingest で除外し、ルーティング
 - 登録フィルタを ingest coordinator の入口に追加し、未登録データは router/sink の双方に到達しないようにできた。
 - SiloHost では Graph seed の PointId/DeviceId 属性を参照して登録判定を行う実装を導入し、spaceId 非依存の同定要件に合わせた。
 - `dotnet build` と `dotnet test` は成功。
+
+# plans.md: Connector Folder Restructure + Per-Connector Tests (2026-02-14)
+
+## Purpose
+Telemetry.Ingest のコネクタ拡張ポイントを明確化するため、フォルダ構成を connectors 中心に整理し、コネクタごとの個別テストを追加する。
+
+## Success Criteria
+1. Telemetry.Ingest の RabbitMQ/Kafka/Simulator 関連実装が connectors 配下へ整理され、実装者が拡張箇所を見つけやすい。
+2. Telemetry.Ingest.Tests にコネクタごとの個別テスト（RabbitMQ/Kafka/Simulator）が存在し、主要変換・デシリアライズ動作を検証できる。
+3. `dotnet build` と `dotnet test` が成功し、結果が plans.md に記録される。
+
+## Steps
+1. Telemetry.Ingest のコネクタ関連ファイルを `Connectors/<ConnectorName>/` へ再配置する。
+2. RabbitMQ/Kafka コネクタのメッセージ変換ロジックを単体テスト可能な形に最小限整理する。
+3. Telemetry.Ingest.Tests に RabbitMQ/Kafka の個別テストを追加し、既存 Simulator テストと合わせて実行する。
+4. `dotnet build` / `dotnet test` を実行し、plans.md を完了更新する。
+
+## Progress
+- [x] Step 1: コネクタ関連ファイル再配置
+- [x] Step 2: テスト容易化の最小整理
+- [x] Step 3: コネクタ個別テスト追加
+- [x] Step 4: build/test 実行と記録
+
+## Observations
+- コネクタ実装の再配置により docs 内のパス参照更新が必要。
+
+## Decisions
+- 既存 API 互換性を保つため、公開 API 変更を避けて内部ヘルパーを抽出してテスト追加する。
+
+## Retrospective
+- フォルダ再配置とコネクタ別テスト追加を完了。
+
+## Update (2026-02-14)
+- Step 1 完了: `src/Telemetry.Ingest/Connectors/{RabbitMq,Kafka,Simulator}` を作成し、各コネクタ実装/Options/DI 拡張を再配置。
+- Step 2 完了: RabbitMQ/Kafka コネクタにデシリアライズと `TelemetryPointMsg` 変換の内部ヘルパー（`TryDeserializeTelemetry` / `ToTelemetryPointMessages`）を追加し、動作を変えずにテスト可能性を向上。
+- Step 3 完了: `src/Telemetry.Ingest.Tests/Connectors/` 配下にコネクタ別テストを追加（RabbitMQ/Kafka/Simulator）。
+- Step 4 完了: `dotnet build` と `dotnet test` を実行し成功。
+
+## Observations (2026-02-14)
+- テストから内部ヘルパーへアクセスするため `Telemetry.Ingest.csproj` に `InternalsVisibleTo(Telemetry.Ingest.Tests)` が必要だった。
+- `docs/telemetry-connector-ingest.md` はファイルパスを多数参照していたため、再配置に合わせて更新が必要だった。
+
+## Decisions (2026-02-14)
+- 既存の外部公開 API は維持し、コネクタの本処理フローを変えずに「内部 static ヘルパー抽出」で個別テストを実現した。
+- コネクタごとのテスト可読性のため、`Telemetry.Ingest.Tests/Connectors/<ConnectorName>/` のディレクトリ構造を採用した。
+
+## Retrospective (2026-02-14)
+- コネクタ拡張点がフォルダ構成で明確になり、実装者が追加時に参照すべき場所が分かりやすくなった。
+- Telemetry.Ingest.Tests は 6 件→12 件になり、Coordinator + Simulator に加えて RabbitMQ/Kafka の変換ロジックを直接検証できるようになった。

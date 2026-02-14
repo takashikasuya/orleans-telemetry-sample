@@ -37,41 +37,23 @@ public sealed class RabbitMqIngestConnector : ITelemetryIngestConnector, IAsyncD
             try
             {
                 var body = ea.Body.ToArray();
-                TelemetryMsg? msg;
-                try
+                if (!TryDeserializeTelemetry(body, out var msg, out var deserializeException))
                 {
-                    msg = JsonSerializer.Deserialize<TelemetryMsg>(
-                        body,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "failed to deserialize telemetry message");
-                    _model!.BasicNack(ea.DeliveryTag, false, false);
-                    return;
-                }
-
-                if (msg is null)
-                {
-                    _logger.LogWarning("received null telemetry message");
-                    _model!.BasicNack(ea.DeliveryTag, false, false);
-                    return;
-                }
-
-                foreach (var kv in msg.Properties)
-                {
-                    var normalizedValue = NormalizeValue(kv.Value);
-                    var pointMsg = new TelemetryPointMsg
+                    if (deserializeException is not null)
                     {
-                        TenantId = msg.TenantId,
-                        BuildingName = msg.BuildingName,
-                        SpaceId = msg.SpaceId,
-                        DeviceId = msg.DeviceId,
-                        PointId = kv.Key,
-                        Sequence = msg.Sequence,
-                        Timestamp = msg.Timestamp,
-                        Value = normalizedValue
-                    };
+                        _logger.LogWarning(deserializeException, "failed to deserialize telemetry message");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("received null telemetry message");
+                    }
+
+                    _model!.BasicNack(ea.DeliveryTag, false, false);
+                    return;
+                }
+
+                foreach (var pointMsg in ToTelemetryPointMessages(msg!))
+                {
                     await writer.WriteAsync(pointMsg, ct);
                 }
 
@@ -96,6 +78,46 @@ public sealed class RabbitMqIngestConnector : ITelemetryIngestConnector, IAsyncD
         catch (OperationCanceledException)
         {
         }
+    }
+
+    internal static bool TryDeserializeTelemetry(byte[] body, out TelemetryMsg? message, out Exception? exception)
+    {
+        try
+        {
+            message = JsonSerializer.Deserialize<TelemetryMsg>(
+                body,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            exception = null;
+            return message is not null;
+        }
+        catch (Exception ex)
+        {
+            message = null;
+            exception = ex;
+            return false;
+        }
+    }
+
+    internal static IReadOnlyList<TelemetryPointMsg> ToTelemetryPointMessages(TelemetryMsg message)
+    {
+        var result = new List<TelemetryPointMsg>(message.Properties.Count);
+        foreach (var kv in message.Properties)
+        {
+            var normalizedValue = NormalizeValue(kv.Value);
+            result.Add(new TelemetryPointMsg
+            {
+                TenantId = message.TenantId,
+                BuildingName = message.BuildingName,
+                SpaceId = message.SpaceId,
+                DeviceId = message.DeviceId,
+                PointId = kv.Key,
+                Sequence = message.Sequence,
+                Timestamp = message.Timestamp,
+                Value = normalizedValue
+            });
+        }
+
+        return result;
     }
 
     private async Task EnsureConnectionWithRetryAsync(CancellationToken ct)

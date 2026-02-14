@@ -112,7 +112,7 @@ PointId をベースにした逆引きが難しい場合は、コネクタ自身
 ## SiloHost でのコネクタ設定
 
 SiloHost は起動時にコネクタを DI に登録し、どのコネクタを起動するかは `TelemetryIngest:Enabled` で制御します。【F:src/SiloHost/Program.cs†L17-L44】【F:src/Telemetry.Ingest/TelemetryIngestCoordinator.cs†L39-L70】
-登録されているコネクタ名は `RabbitMq` / `Kafka` / `Simulator` です。【F:src/Telemetry.Ingest/RabbitMqIngestConnector.cs†L24-L33】【F:src/Telemetry.Ingest/KafkaIngestConnector.cs†L20-L29】【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L20-L30】
+登録されているコネクタ名は `RabbitMq` / `Kafka` / `Simulator` です。【F:src/Telemetry.Ingest/Connectors/RabbitMq/RabbitMqIngestConnector.cs†L24-L33】【F:src/Telemetry.Ingest/Connectors/Kafka/KafkaIngestConnector.cs†L20-L29】【F:src/Telemetry.Ingest/Connectors/Simulator/SimulatorIngestConnector.cs†L20-L30】
 
 設定の流れは次の通りです。
 
@@ -142,28 +142,28 @@ SiloHost は起動時にコネクタを DI に登録し、どのコネクタを�
 
 RabbitMQ/Kafka は環境変数でのフォールバックも行います。
 
-1. RabbitMQ: `RABBITMQ_HOST` / `RABBITMQ_PORT` / `RABBITMQ_USER` / `RABBITMQ_PASS`（未設定時の既定は `mq:5672` / `user` / `password` です）。【F:src/Telemetry.Ingest/RabbitMqIngestConnector.cs†L93-L146】
-2. Kafka: `KAFKA_BOOTSTRAP_SERVERS` / `KAFKA_GROUP_ID` / `KAFKA_TOPIC` / `KAFKA_AUTO_OFFSET_RESET`（未設定時の既定は `localhost:9092` / `telemetry-ingest` / `telemetry` / `Latest` です）。【F:src/Telemetry.Ingest/KafkaIngestConnector.cs†L106-L163】
+1. RabbitMQ: `RABBITMQ_HOST` / `RABBITMQ_PORT` / `RABBITMQ_USER` / `RABBITMQ_PASS`（未設定時の既定は `mq:5672` / `user` / `password` です）。【F:src/Telemetry.Ingest/Connectors/RabbitMq/RabbitMqIngestConnector.cs†L93-L146】
+2. Kafka: `KAFKA_BOOTSTRAP_SERVERS` / `KAFKA_GROUP_ID` / `KAFKA_TOPIC` / `KAFKA_AUTO_OFFSET_RESET`（未設定時の既定は `localhost:9092` / `telemetry-ingest` / `telemetry` / `Latest` です）。【F:src/Telemetry.Ingest/Connectors/Kafka/KafkaIngestConnector.cs†L106-L163】
 
-Simulator は環境変数のフォールバックを持たないため、必要に応じて `TelemetryIngest:Simulator` を `appsettings.json` 等で明示的に設定してください。【F:src/Telemetry.Ingest/SimulatorIngestOptions.cs†L1-L19】
+Simulator は環境変数のフォールバックを持たないため、必要に応じて `TelemetryIngest:Simulator` を `appsettings.json` 等で明示的に設定してください。【F:src/Telemetry.Ingest/Connectors/Simulator/SimulatorIngestOptions.cs†L1-L19】
 
 ## Simulator コネクタの動作原理
 
-Simulator は一定間隔で擬似テレメトリを生成し、`TelemetryPointMsg` をチャネルに書き込みます。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L15-L72】
+Simulator は一定間隔で擬似テレメトリを生成し、`TelemetryPointMsg` をチャネルに書き込みます。【F:src/Telemetry.Ingest/Connectors/Simulator/SimulatorIngestConnector.cs†L15-L72】
 
 動作概要:
 
-1. `DeviceCount` 件のデバイスを想定し、`DeviceIdPrefix` に 1 始まりの連番を付けた `deviceId` を生成します（例: `sim-1`, `sim-2`）。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L32-L48】
-2. 各デバイスに対して `PointsPerDevice` 個のポイントを作り、`p1`, `p2` ... の `pointId` を付けます。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L40-L49】
-3. 値は `0.0`〜`100.0` の乱数（小数第 3 位で丸め）を生成します。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L49-L50】
-4. デバイスごとに `Sequence` を単調増加で更新します（ポイントごとではなくデバイス単位）。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L40-L56】
-5. `IntervalMilliseconds` 間隔で同じ処理を繰り返します（最小 10ms に丸め込み）。【F:src/Telemetry.Ingest/SimulatorIngestConnector.cs†L35-L63】
+1. `DeviceCount` 件のデバイスを想定し、`DeviceIdPrefix` に 1 始まりの連番を付けた `deviceId` を生成します（例: `sim-1`, `sim-2`）。【F:src/Telemetry.Ingest/Connectors/Simulator/SimulatorIngestConnector.cs†L32-L48】
+2. 各デバイスに対して `PointsPerDevice` 個のポイントを作り、`p1`, `p2` ... の `pointId` を付けます。【F:src/Telemetry.Ingest/Connectors/Simulator/SimulatorIngestConnector.cs†L40-L49】
+3. 値は `0.0`〜`100.0` の乱数（小数第 3 位で丸め）を生成します。【F:src/Telemetry.Ingest/Connectors/Simulator/SimulatorIngestConnector.cs†L49-L50】
+4. デバイスごとに `Sequence` を単調増加で更新します（ポイントごとではなくデバイス単位）。【F:src/Telemetry.Ingest/Connectors/Simulator/SimulatorIngestConnector.cs†L40-L56】
+5. `IntervalMilliseconds` 間隔で同じ処理を繰り返します（最小 10ms に丸め込み）。【F:src/Telemetry.Ingest/Connectors/Simulator/SimulatorIngestConnector.cs†L35-L63】
 
 そのため、Simulator の出力は **デバイス数 × ポイント数** のメッセージが 1 サイクルで発生し、`TenantId` / `BuildingName` / `SpaceId` は固定値で送られます。
 
 ## Simulator 設定
 
-`TelemetryIngest:Simulator` の設定項目は以下の通りです。【F:src/Telemetry.Ingest/SimulatorIngestOptions.cs†L1-L19】
+`TelemetryIngest:Simulator` の設定項目は以下の通りです。【F:src/Telemetry.Ingest/Connectors/Simulator/SimulatorIngestOptions.cs†L1-L19】
 
 | 設定キー | 既定値 | 役割 |
 | --- | --- | --- |
@@ -217,6 +217,10 @@ Simulator が有効な場合、SiloHost は **既存の RDF シードとは別�
 
 - `clear: true` と送るとオーバーライドを解除できます（`value` は無視されます）。
 - RDF で `writable=true` とされたポイントにのみコマンドが適用され、値はクリアされるまで維持されます。
+
+## コネクタ実装の配置
+
+実装者が拡張しやすいよう、コネクタ実装は `src/Telemetry.Ingest/Connectors/<ConnectorName>/` に配置しています（例: `RabbitMq` / `Kafka` / `Simulator`）。新規コネクタも同様の階層に追加すると、実装・設定・DI 登録の所在を揃えられます。
 
 ## コネクタ拡張方法
 
