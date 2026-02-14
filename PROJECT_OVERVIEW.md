@@ -62,6 +62,8 @@
 #### `Telemetry.Ingest.Tests`
 - **TelemetryIngestCoordinatorTests**: コネクタからのメッセージ受信、ルーティング、バッチ処理をテスト。有効化/無効化されたコネクタの制御を検証。
 - **SimulatorIngestConnectorTests**: シミュレータコネクタがテレメトリを正しく生成することをテスト。
+- **RabbitMqIngestConnectorTests**: RabbitMQ コネクタのデシリアライズ/ポイント変換と JSON 値正規化をテスト。
+- **KafkaIngestConnectorTests**: Kafka コネクタのデシリアライズ/ポイント変換をテスト。
 
 #### `ApiGateway.Tests`
 - **RegistryEndpointsTests**: Graph Registry サービスがノードタイプ別の検索、ページング、キャッシュを正しく実装していることをテスト。
