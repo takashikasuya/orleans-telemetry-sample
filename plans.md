@@ -2529,3 +2529,49 @@ Telemetry.Ingest のコネクタ拡張ポイントを明確化するため、フ
 ## Retrospective (2026-02-14)
 - コネクタ拡張点がフォルダ構成で明確になり、実装者が追加時に参照すべき場所が分かりやすくなった。
 - Telemetry.Ingest.Tests は 6 件→12 件になり、Coordinator + Simulator に加えて RabbitMQ/Kafka の変換ロジックを直接検証できるようになった。
+
+---
+
+# plans.md: MQTT Connector Design + Backpressure Test Plan (2026-02-14)
+
+## Purpose
+MQTTコネクタを追加する際の実装方針を先に設計し、受け入れtopic/必須パラメータを外部化可能にしたうえで、バックプレッシャー機能を検証できるテスト計画を定義する。
+
+## Success Criteria
+1. MQTTコネクタの設計ドキュメントが追加され、topic受け入れ仕様と設定外部化方針が明文化されている。
+2. backpressure（channel満杯時）で期待すべき挙動と観測メトリクス、テストケースが定義されている。
+3. docs インデックス（コネクタ説明）から MQTT 設計ドキュメントへ辿れる。
+4. `dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. 既存の ingest connector 設計（RabbitMQ/Kafka/Simulator）を確認し、MQTTに適用する共通方針を整理する。
+2. MQTT コネクタ設計ドキュメントを追加し、topic binding とオプション外部化仕様を定義する。
+3. backpressure の試験観点を unit / integration / load で定義する。
+4. `dotnet build` / `dotnet test` を実行してリポジトリ整合を確認する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+## Observations
+- 既存コネクタは `Connectors/<Name>/` 配下に実装されており、MQTTも同構造が自然。
+- backpressure の実体は `TelemetryIngestCoordinator` が読む channel 容量に依存するため、MQTT 側は内部無制限キューを持たない設計が重要。
+- build/test は成功（既存 warning は継続）。
+
+## Decisions
+- MQTT 受け入れ topic は `TopicBindings[]` で複数定義し、tenant/device/point の抽出元を Topic/Payload から選択可能にする。
+- backpressure ポリシーは `Block` を既定とし、`DropNewest` 等を設定で切替可能にする設計案を採用。
+- 検証は unit（変換ロジック）/integration（実 broker）/backpressure load（満杯時挙動）を分離して計画する。
+
+## Retrospective
+- 実装前に topic スキーマと backpressure 検証計画を明文化できたため、後続実装での仕様ぶれを抑制できる。
+- docs 側に MQTT 設計への導線を追加し、コネクタ拡張資料として参照しやすくなった。
+
+## Update (2026-02-14, feedback)
+- 追加フィードバック「バックプレッシャーの意図と実装をもう少し解説」に対応。
+- `docs/mqtt-connector-design.md` に以下を追記:
+  - 意図（壊れずに遅くなる、OOM 回避、可観測性優先）
+  - 実装イメージ（`WriteAsync` 待機点、ポリシー別挙動、QoSとの関係、停止時drain）
+- これにより「なぜその設計か」と「実装時にどこで効かせるか」が読み手に分かる形へ強化。
