@@ -3357,17 +3357,25 @@ MQTTコネクタを追加する際の実装方針を先に設計し、受け入�
 
 ## Progress
 - [x] Step 1: 失敗ログ再現（`api` が gateway 接続拒否）
-- [ ] Step 2: AdoNet clustering 実装
-- [ ] Step 3: Docker E2E 再有効化と検証
-- [ ] Step 4: build/test と最終記録
+- [x] Step 2: AdoNet clustering 実装
+- [x] Step 3: Docker E2E 再有効化（実行可能化）
+- [x] Step 3: Docker E2E 成功
+- [x] Step 4: build/test と最終記録
 
 ## Observations
 - 再現時の失敗は `ConnectionRefused` (`api` -> `S172.x.x.x:30000`)。
 - 現行 `UseLocalhostClustering` のままでは Docker コンテナ間接続が安定しない。
+- `dotnet build src/SiloHost/SiloHost.csproj` は成功。
+- `scripts/run-e2e.sh` の in-proc E2E は継続して成功（`Passed: 3`）。
+- Docker E2E は最終的に成功。レポート: `reports/telemetry-e2e-docker-20260214-071207.md`。
+- 失敗要因は PostgreSQL 初期SQLの不整合で、`OrleansQuery` 定義不足と `CleanupDefunctSiloEntriesKey` 欠落が致命点だった。
+- `docker/orleans-db/init/001_orleans_membership.sql` を Orleans 9.2.1 公式 `PostgreSQL-Clustering.sql` 相当に置換し、`PostgreSQL-Main.sql` 相当の `OrleansQuery` テーブル定義と 3.7.0 migration の `CleanupDefunctSiloEntriesKey` を追加して解消。
 
 ## Decisions
 - Docker 環境では `UseAdoNetClustering` を使用し、ローカル開発は `UseLocalhostClustering` を維持する。
 - PostgreSQL は compose に追加し、起動時に Orleans membership schema を自動初期化する。
+- `run-e2e.sh` は「簡易確認（in-proc）」を先に実行し、Docker E2E を最後に実行する現行フローを維持する。
+- Orleans 9.2.1 の公式SQL構成（Clustering本体 + Main + migrationキー）を採用し、手書きクエリの推測実装は廃止する。
 
 ---
 

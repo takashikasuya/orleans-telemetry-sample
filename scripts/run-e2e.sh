@@ -75,9 +75,6 @@ services:
       dockerfile: Dockerfile.dotnet
       args:
         PROJECT: src/SiloHost
-    depends_on:
-      - mq
-      - orleans-db
     environment:
       RABBITMQ_HOST: mq
       RDF_SEED_PATH: /seed/seed.ttl
@@ -109,8 +106,6 @@ services:
       dockerfile: Dockerfile.dotnet
       args:
         PROJECT: src/ApiGateway
-    depends_on:
-      - silo
     environment:
       OIDC_AUTHORITY: http://mock-oidc:8080/default
       OIDC_AUDIENCE: default
