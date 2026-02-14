@@ -13,12 +13,16 @@ public sealed record GraphSeedRequest
     [Id(1)]
     public string TenantId { get; init; } = "default";
 
+    [Id(2)]
+    public string? TenantName { get; init; }
+
     public GraphSeedRequest() { }
 
-    public GraphSeedRequest(string rdfPath, string tenantId)
+    public GraphSeedRequest(string rdfPath, string tenantId, string? tenantName = null)
     {
         RdfPath = rdfPath;
         TenantId = tenantId;
+        TenantName = tenantName;
     }
 }
 
@@ -49,6 +53,9 @@ public sealed record GraphSeedStatus
     [Id(7)]
     public string? Message { get; init; }
 
+    [Id(8)]
+    public string? TenantName { get; init; }
+
     public GraphSeedStatus() { }
 
     public GraphSeedStatus(
@@ -59,7 +66,8 @@ public sealed record GraphSeedStatus
         DateTimeOffset completedAt,
         int nodeCount,
         int edgeCount,
-        string? message)
+        string? message,
+        string? tenantName = null)
     {
         Success = success;
         TenantId = tenantId;
@@ -69,6 +77,7 @@ public sealed record GraphSeedStatus
         NodeCount = nodeCount;
         EdgeCount = edgeCount;
         Message = message;
+        TenantName = tenantName;
     }
 }
 

@@ -25,7 +25,7 @@ internal sealed class GraphSeedGrain : Grain, IGraphSeedGrain
 
     public async Task<GraphSeedStatus> SeedAsync(GraphSeedRequest request)
     {
-        var status = await _seeder.SeedAsync(request.RdfPath, request.TenantId, CancellationToken.None);
+        var status = await _seeder.SeedAsync(request.RdfPath, request.TenantId, request.TenantName, CancellationToken.None);
         _lastStatus = status;
         if (!status.Success)
         {

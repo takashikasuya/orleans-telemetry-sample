@@ -79,6 +79,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 ### RDF シード
 - `RDF_SEED_PATH`
 - `TENANT_ID`
+- `TENANT_NAME`
 
 > Docker Compose では `silo` と `publisher` が同一 RDF seed を参照するように揃えてください。
 

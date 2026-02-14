@@ -33,12 +33,14 @@ internal sealed class GraphSeedService : BackgroundService
         var seedPath = Environment.GetEnvironmentVariable("RDF_SEED_PATH");
         var tenantEnv = Environment.GetEnvironmentVariable("TENANT_ID");
         var tenant = string.IsNullOrWhiteSpace(tenantEnv) ? "default" : tenantEnv;
+        var tenantNameEnv = Environment.GetEnvironmentVariable("TENANT_NAME");
+        var tenantName = string.IsNullOrWhiteSpace(tenantNameEnv) ? tenant : tenantNameEnv.Trim();
         var seededAny = false;
 
         if (!string.IsNullOrWhiteSpace(seedPath))
         {
             _logger.LogInformation("Seeding graph from RDF: {Path} (tenant: {Tenant})", seedPath, tenant);
-            var result = await _seeder.SeedAsync(seedPath, tenant, stoppingToken);
+            var result = await _seeder.SeedAsync(seedPath, tenant, tenantName, stoppingToken);
             if (!result.Success)
             {
                 _logger.LogError("Graph seeding reported failure: {Message}", result.Message);
@@ -52,9 +54,10 @@ internal sealed class GraphSeedService : BackgroundService
         if (IsSimulatorEnabled())
         {
             var simulatorTenant = ResolveSimulatorTenant(tenantEnv);
+            var simulatorTenantName = ResolveSimulatorTenantName(simulatorTenant, tenantNameEnv);
             _logger.LogInformation("Seeding graph from Simulator settings (tenant: {Tenant})", simulatorTenant);
             var turtle = SimulatorGraphSeedBuilder.BuildTurtle(_simulatorOptions);
-            var result = await _seeder.SeedFromContentAsync(turtle, "simulator-generated", simulatorTenant, stoppingToken);
+            var result = await _seeder.SeedFromContentAsync(turtle, "simulator-generated", simulatorTenant, simulatorTenantName, stoppingToken);
             if (!result.Success)
             {
                 _logger.LogError("Simulator graph seeding reported failure: {Message}", result.Message);
@@ -90,5 +93,15 @@ internal sealed class GraphSeedService : BackgroundService
         }
 
         return string.IsNullOrWhiteSpace(_simulatorOptions.TenantId) ? "default" : _simulatorOptions.TenantId;
+    }
+
+    private static string ResolveSimulatorTenantName(string simulatorTenantId, string? envTenantName)
+    {
+        if (!string.IsNullOrWhiteSpace(envTenantName))
+        {
+            return envTenantName.Trim();
+        }
+
+        return simulatorTenantId;
     }
 }
