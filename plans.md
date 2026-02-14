@@ -3845,3 +3845,43 @@ RDF シード読み込み時にテナントIDに加えてテナント名を指�
 ## Retrospective
 - 変更は Graph seed 周辺の契約と UI のみに限定でき、既存 API 互換性を保ったまま要件を満たせた。
 - 将来的には `/admin/graph/tenants` を `GraphTenantInfo` ベースに切り替えることで、一覧 UI 側での表示名選択にも展開しやすい。
+
+---
+
+# plans.md: Publisher README for Generic Profile-based Emulator Design (2026-02-14)
+
+## Purpose
+`src/Publisher` 向けに個別 README を追加し、プロファイル指定でスキーマ/生成感覚を切り替える汎用テレメトリーエミュレータ化の設計方針を明文化する。
+
+## Success Criteria
+1. `src/Publisher/README.md` が新規作成されている。
+2. 現状の Publisher の実行方法・環境変数・CLI オプションが記載されている。
+3. BACnet 正規化 JSON を含むプロファイル駆動拡張の設計方針（目的、層構成、導入ステップ）が記載されている。
+4. `dotnet build` と `dotnet test` で検証結果を記録する。
+
+## Steps
+1. Publisher 実装 (`Program.cs`) を確認し、現状機能を整理する。
+2. README の章立てを設計し、現状説明と将来方針を記述する。
+3. ルート `plans.md` に作業内容と結果を記録する。
+4. build/test を実行して確認する。
+
+## Progress
+- [x] Step 1: 現状機能確認
+- [x] Step 2: `src/Publisher/README.md` 作成
+- [x] Step 3: plans.md 記録
+- [x] Step 4: build/test 実行
+
+## Observations
+- Publisher は既に RDF 駆動生成と制御コマンド適用の基盤を持つため、Profile/Adapter の分離設計と相性が良い。
+- 既存契約 `TelemetryMsg` を維持すれば Silo/API 側互換を保てる。
+
+## Decisions
+- 実装変更は行わず、まずは README に設計方針をまとめる。
+- 互換性重視で「profile 指定なしは現行動作維持」を明示した。
+
+## Verification
+- `dotnet build`
+- `dotnet test`
+
+## Retrospective
+- 今回は設計方針の文書化に集中し、次の実装フェーズ（Profile Reader 導入）へ直接つながるアウトラインを用意できた。
