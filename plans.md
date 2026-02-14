@@ -2614,3 +2614,37 @@ MQTTコネクタを追加する際の実装方針を先に設計し、受け入�
 - MQTT connectorの実装（Options/DI/Connector）を追加し、topic regex + payload(value/datetime) の取り込み経路を実コード化した。
 - backpressure の `DropNewest` / `FailFast` をユニットテストで検証し、チャネル満杯時の挙動を固定化できた。
 - `dotnet build` / `dotnet test` は成功（既存 warning は継続）。
+
+---
+
+# plans.md: E2Eテスト内容の必要十分性レビュー (2026-02-14)
+
+## Purpose
+`Telemetry.E2E.Tests` のテスト内容を確認し、現状のカバレッジが必要十分かを分析して改善提案をまとめる。
+
+## Success Criteria
+1. E2Eテストの対象範囲と検証観点を具体的に棚卸しできている。
+2. 必要十分性の判定（十分な点 / 不足点）が明文化されている。
+3. 実行した検証コマンド結果が記録されている。
+
+## Steps
+1. E2E関連コード・スクリプトを確認する。
+2. 実際に E2E テストプロジェクトを実行して結果を確認する。
+3. 分析結果を docs に文書化し、本 plans に記録する。
+
+## Progress
+- [x] Step 1: E2Eコード・スクリプト確認
+- [x] Step 2: `dotnet test src/Telemetry.E2E.Tests/Telemetry.E2E.Tests.csproj` 実行
+- [x] Step 3: `docs/e2e-test-assessment.md` 作成
+
+## Observations
+- E2E は in-proc 構成で `seed.ttl` + Simulator ingest + API + Storage compaction を一連検証している。
+- API 認証は `TestAuthHandler` 差し替えであり、OIDC の実経路は直接検証していない。
+- `dotnet test` 実行では E2E 3件が成功した（既存 warning は出力あり）。
+
+## Decisions
+- 「機能スモークとしては十分、リリース品質ゲートとしては不足」という2段階判定を採用。
+- 改善案は、Docker実体E2E・認証経路・negative path を優先度付きで提案。
+
+## Retrospective
+- 単なる所感ではなく、現在の検証実装と不足領域を分けて整理できたため、次のテスト拡張タスクに直接つなげられる状態になった。
