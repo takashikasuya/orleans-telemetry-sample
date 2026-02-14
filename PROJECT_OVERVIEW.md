@@ -47,7 +47,7 @@
   - `RabbitMq` / `Kafka` / `Mqtt` / `Simulator` の各オプションを `appsettings.json` などで設定可能です。
 - `TelemetryStorage` 設定で永続化パス、バケット間隔、圧縮間隔を制御します。
   - `ParquetStorage` を `EventSinks.Enabled` に追加することでストレージ機能を有効化します。
-- RDF シードは `RDF_SEED_PATH` と `TENANT_ID` で制御します。
+- RDF シードは `RDF_SEED_PATH` / `TENANT_ID` / `TENANT_NAME` で制御します（`TENANT_NAME` 未指定時は `TENANT_ID` が使用されます）。
 
 ## テスト体系
 

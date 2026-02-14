@@ -3804,3 +3804,44 @@ OIDC認証ユーザーごとのロール管理と、テナント配下の階層�
 ## Retrospective
 - 実装前に、権限の粒度・継承・監査を1つの設計文書に集約できたことで、API/gRPC/Adminの適用順序とDB設計の議論が進めやすくなった。
 - 次フェーズでは、最小実装（DBスキーマ + 認可判定サービス + Admin UI最小編集）にスコープを絞るのが有効。
+
+---
+
+# plans.md: RDF Seed Tenant Name Configurability (2026-02-14)
+
+## Purpose
+RDF シード読み込み時にテナントIDに加えてテナント名を指定できるようにし、起動時シードと Admin UI 手動インポートの両方で同じ入力を受け付ける。
+
+## Success Criteria
+1. 起動時 RDF シードで `TENANT_NAME`（未指定時は自動補完）が反映されること。
+2. Admin UI の Graph Import からテナント名を入力してシード実行できること。
+3. `dotnet build` と関連テストが成功すること。
+
+## Steps
+1. 既存の GraphSeed 契約とテナントレジストリを拡張し、テナント名を保持できるようにする。
+2. Silo 側のシード処理（環境変数経由・手動インポート経由）でテナント名を受け渡す。
+3. Admin UI の入力項目を追加し、GraphSeedRequest にテナント名を含める。
+4. ビルド・テストを実行し、結果を記録する。
+
+## Progress
+- [x] Step 1: GraphSeed 契約/レジストリ拡張
+- [x] Step 2: Silo シード処理更新
+- [x] Step 3: Admin UI 更新
+- [x] Step 4: build/test 実行
+
+## Observations
+- 既存実装は `tenantId` のみを扱っていたため、テナント名を保持するために `IGraphTenantRegistryGrain` の状態を `List<string>` から `List<GraphTenantInfo>` へ拡張した。
+- Admin UI は Import 実行時に `GraphSeedRequest` を生成しており、契約に `TenantName` を追加するだけで UI/Grain 間の受け渡しを自然に拡張できた。
+- AdminGateway 単体起動でのスクリーンショット取得を試行したが、ローカル Orleans Gateway (`127.0.0.1:30000`) 不在のため起動時接続失敗となった。
+
+## Decisions
+- 後方互換性のため `GetTenantIdsAsync()` は残しつつ、将来の表示拡張用に `GetTenantsAsync()` を追加した。
+- テナント名未指定時は従来挙動を維持するため `tenantId` を自動採用する仕様に統一した（起動時シード/手動インポートとも同じ）。
+
+## Verification
+- `dotnet build` : 成功（既存 warning のみ）
+- `dotnet test` : 成功（全テストパス）
+
+## Retrospective
+- 変更は Graph seed 周辺の契約と UI のみに限定でき、既存 API 互換性を保ったまま要件を満たせた。
+- 将来的には `/admin/graph/tenants` を `GraphTenantInfo` ベースに切り替えることで、一覧 UI 側での表示名選択にも展開しやすい。

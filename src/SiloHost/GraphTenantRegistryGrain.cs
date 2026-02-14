@@ -16,31 +16,65 @@ internal sealed class GraphTenantRegistryGrain : Grain, IGraphTenantRegistryGrai
         _state = state;
     }
 
-    public async Task RegisterTenantAsync(string tenantId)
+    public async Task RegisterTenantAsync(string tenantId, string? tenantName = null)
     {
         if (string.IsNullOrWhiteSpace(tenantId))
         {
             return;
         }
 
-        var normalized = tenantId.Trim();
-        if (_state.State.Tenants.Any(t => string.Equals(t, normalized, StringComparison.OrdinalIgnoreCase)))
+        var normalizedId = tenantId.Trim();
+        var normalizedName = NormalizeTenantName(tenantName, normalizedId);
+
+        var existing = _state.State.Tenants
+            .FirstOrDefault(t => string.Equals(t.TenantId, normalizedId, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is not null)
         {
+            if (string.IsNullOrWhiteSpace(existing.TenantName) ||
+                !string.Equals(existing.TenantName, normalizedName, StringComparison.Ordinal))
+            {
+                existing.TenantName = normalizedName;
+                await _state.WriteStateAsync();
+            }
+
             return;
         }
 
-        _state.State.Tenants.Add(normalized);
+        _state.State.Tenants.Add(new GraphTenantInfo
+        {
+            TenantId = normalizedId,
+            TenantName = normalizedName
+        });
         await _state.WriteStateAsync();
     }
 
     public Task<IReadOnlyList<string>> GetTenantIdsAsync()
     {
-        return Task.FromResult<IReadOnlyList<string>>(_state.State.Tenants.ToArray());
+        var ids = _state.State.Tenants
+            .Select(t => t.TenantId)
+            .ToArray();
+        return Task.FromResult<IReadOnlyList<string>>(ids);
+    }
+
+    public Task<IReadOnlyList<GraphTenantInfo>> GetTenantsAsync()
+    {
+        var tenants = _state.State.Tenants
+            .Select(t => new GraphTenantInfo
+            {
+                TenantId = t.TenantId,
+                TenantName = string.IsNullOrWhiteSpace(t.TenantName) ? t.TenantId : t.TenantName
+            })
+            .ToArray();
+        return Task.FromResult<IReadOnlyList<GraphTenantInfo>>(tenants);
     }
 
     [GenerateSerializer]
     public sealed class GraphTenantRegistryState
     {
-        [Id(0)] public List<string> Tenants { get; set; } = new();
+        [Id(0)] public List<GraphTenantInfo> Tenants { get; set; } = new();
     }
+
+    private static string NormalizeTenantName(string? tenantName, string tenantId)
+        => string.IsNullOrWhiteSpace(tenantName) ? tenantId : tenantName.Trim();
 }

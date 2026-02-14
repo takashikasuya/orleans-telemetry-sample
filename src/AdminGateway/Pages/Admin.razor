@@ -405,8 +405,12 @@ else
                         <InputFile OnChange="HandleGraphFileSelected" class="graph-input" accept=".ttl,.rdf,.nt,.nq,.jsonld" />
                     </label>
                     <label>
-                        Tenant
+                        Tenant ID
                         <input class="graph-input" @bind="_graphTenant" />
+                    </label>
+                    <label>
+                        Tenant Name
+                        <input class="graph-input" @bind="_graphTenantName" placeholder="Optional (defaults to Tenant ID)" />
                     </label>
                     <div class="graph-import-actions">
                         <button class="refresh-button" @onclick="TriggerGraphSeedAsync" disabled="@_isImporting">
@@ -429,6 +433,10 @@ else
                     {
                         <p class="graph-status-line">Path: @_graphStatus.Path</p>
                         <p class="graph-status-line">Tenant: @_graphStatus.TenantId</p>
+                        @if (!string.IsNullOrWhiteSpace(_graphStatus.TenantName))
+                        {
+                            <p class="graph-status-line">Tenant Name: @_graphStatus.TenantName</p>
+                        }
                         <p class="graph-status-line">@_graphStatus.StartedAt:u / @_graphStatus.CompletedAt:u</p>
                         <p class="graph-status-line">Nodes: @_graphStatus.NodeCount / Edges: @_graphStatus.EdgeCount</p>
                         @if (!string.IsNullOrWhiteSpace(_graphStatus.Message))
@@ -467,6 +475,7 @@ else
     private bool _loading = true;
     private string? _error;
     private string _graphTenant = "default";
+    private string _graphTenantName = "default";
     private GraphSeedStatus? _graphStatus;
     private bool _isImporting;
     private string? _graphFeedback;
@@ -569,6 +578,10 @@ else
             !string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             _graphTenant = _selectedGraphTenant;
+            if (string.IsNullOrWhiteSpace(_graphTenantName) || string.Equals(_graphTenantName, "default", StringComparison.OrdinalIgnoreCase))
+            {
+                _graphTenantName = _selectedGraphTenant;
+            }
         }
     }
 
@@ -840,7 +853,7 @@ else
                 return;
             }
 
-            var request = new GraphSeedRequest(seedPath, _graphTenant);
+            var request = new GraphSeedRequest(seedPath, _graphTenant, _graphTenantName);
             var result = await Metrics.TriggerGraphSeedAsync(request);
             _graphStatus = result;
             _graphFeedback = result.Success
