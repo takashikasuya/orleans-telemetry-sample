@@ -86,22 +86,28 @@ internal static class Program
                 }
             }
 
-            // Configure endpoints FIRST, before UseLocalhostClustering
+            // Configure endpoints and clustering based on whether we have an advertised address
             if (advertisedAddress != null)
             {
+                // Docker/containerized environment: use localhost clustering but listen on all interfaces
+                // Set localhost clustering first, then override endpoint configuration
+                siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
+                
                 siloBuilder.Configure<EndpointOptions>(options =>
                 {
                     options.AdvertisedIPAddress = advertisedAddress;
                     options.SiloPort = siloPort;
                     options.GatewayPort = gatewayPort;
-                    // Listen on all interfaces
+                    // Listen on all interfaces so other containers can connect
                     options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, siloPort);
                     options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, gatewayPort);
                 });
             }
-
-            // Set up localhost clustering for in-memory membership (this will use endpoints we configured above)
-            siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
+            else
+            {
+                // Local development: use localhost clustering
+                siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
+            }
             
             siloBuilder.Configure<ClusterOptions>(options =>
             {

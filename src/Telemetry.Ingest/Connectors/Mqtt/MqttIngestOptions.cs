@@ -20,6 +20,7 @@ public sealed class MqttIngestOptions
     public int MaxInFlightMessages { get; set; } = 100;
 }
 
+// TODO 実態に合わせて修正
 public sealed class MqttTopicBindingOptions
 {
     public string Filter { get; set; } = "tenants/+/devices/+/points/+";
