@@ -6,6 +6,7 @@ using ApiControlRequest = ApiGateway.Contracts.PointControlRequest;
 using ApiControlResponse = ApiGateway.Contracts.PointControlResponse;
 using ApiGateway.Infrastructure;
 using ApiGateway.Services;
+using ApiGateway.Sparql;
 using ApiGateway.Telemetry;
 using Grains.Abstractions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -403,6 +404,55 @@ app.MapGet("/api/telemetry/exports/{exportId}", async (
 {
     return await TelemetryExportEndpoint.HandleOpenExportAsync(exportId, exports, http, DateTimeOffset.UtcNow);
 }).RequireAuthorization();
+
+var sparqlGroup = app.MapGroup("/api/sparql").RequireAuthorization();
+
+sparqlGroup.MapPost("/query", async (
+    SparqlQueryRequest request,
+    IClusterClient client,
+    HttpContext http) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Query))
+    {
+        return Results.BadRequest(new { Message = "query is required." });
+    }
+
+    var tenant = TenantResolver.ResolveTenant(http);
+    var grain = client.GetGrain<ISparqlQueryGrain>("sparql");
+    var result = await grain.ExecuteQueryAsync(request.Query, tenant);
+    return Results.Ok(result);
+});
+
+sparqlGroup.MapPost("/load", async (
+    SparqlLoadRequest request,
+    IClusterClient client,
+    HttpContext http) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Content))
+    {
+        return Results.BadRequest(new { Message = "content is required." });
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Format))
+    {
+        return Results.BadRequest(new { Message = "format is required." });
+    }
+
+    var tenant = TenantResolver.ResolveTenant(http);
+    var grain = client.GetGrain<ISparqlQueryGrain>("sparql");
+    await grain.LoadRdfAsync(request.Content, request.Format, tenant);
+    return Results.Ok();
+});
+
+sparqlGroup.MapGet("/stats", async (
+    IClusterClient client,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var grain = client.GetGrain<ISparqlQueryGrain>("sparql");
+    var count = await grain.GetTripleCountAsync(tenant);
+    return Results.Ok(new SparqlStatsResponse(count));
+});
 
 // gRPC endpoints
 if (grpcEnabled)

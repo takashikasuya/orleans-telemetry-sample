@@ -162,6 +162,16 @@ ApiGateway は Orleans の最新状態・グラフ・履歴データを REST API
   - `404 NotFound`
   - `410 Gone`
 
+### SPARQL クエリ
+
+`POST /api/sparql/load`
+`POST /api/sparql/query`
+`GET /api/sparql/stats`
+
+- 説明: RDF ロード、SPARQL 実行、テナント単位 triple 数取得を提供します。
+- 認証: 必須（JWT）
+- 備考: 返却フォーマット詳細は `docs/sparql-query-service.md` を参照してください。
+
 ## gRPC API（現状と拡張計画）
 
 gRPC は `devices.proto` ベースで一部実装済みです。現状の提供 API と、将来的な拡張計画を以下に整理します。

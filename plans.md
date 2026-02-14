@@ -2279,27 +2279,17 @@ AdminGateway につぁE��、RDF を�E力として grain を生成し、ツ
 3. README のドキュメント一覧から本方針に辿れるようにする、E
 
 ## Steps
-<<<<<<< ours
 1. AdminGateway と RDF/grain 関連実裁E��確認し、テスト設計上�E論点を抽出する、E
 2. 設計方針ドキュメントを `docs/` に追加する、E
 3. README の Documentation セクションにリンクを追加する、E
 4. `dotnet build` / `dotnet test` で回帰確認する、E
 5. Phase 2 として `AdminGateway.Tests` に bUnit を導�Eし、`Admin.razor` の表示/選抁EUI チE��トを追加する、E
 6. `dotnet test src/AdminGateway.Tests` を実行し、Phase 2 の追加チE��トが通ることを確認する、E
-=======
-1. AdminGateway と RDF/grain 関連実装を確認し、テスト設計上の論点を抽出する。
-2. 設計方針ドキュメントを `docs/` に追加する。
-3. README の Documentation セクションにリンクを追加する。
-4. `dotnet build` / `dotnet test` で回帰確認する。
-5. Phase 2 として `AdminGateway.Tests` に bUnit を導入し、`Admin.razor` の表示/選択 UI テストを追加する。
-6. `dotnet test src/AdminGateway.Tests` を実行し、Phase 2 の追加テストが通ることを確認する。
->>>>>>> theirs
 
 ## Progress
 - [x] AdminGateway の構造と既存ドキュメントを確誁E
 - [x] 設計方針ドキュメントを追加
 - [x] README へのリンク追加
-<<<<<<< ours
 - [x] ビルチEチE��ト�E実行結果を記録
 - [x] Phase 1 (サービス層チE��ト方針�E確宁E
 - [x] Phase 2 (bUnit UI チE��ト実裁E
@@ -2462,27 +2452,6 @@ SiloHost の `appsettings.json` に RabbitMQ 設定があるか確認し、無�
 
 ## Retrospective
 - 未検証（`docker compose up --build` 等は未実行）。
-=======
-- [x] ビルド/テストの実行結果を記録
-- [x] Phase 1 (サービス層テスト方針の確定)
-- [x] Phase 2 (bUnit UI テスト実装)
-- [x] Phase 2 のテスト実行確認 (`dotnet test src/AdminGateway.Tests`)
-
-## Observations
-- `src/AdminGateway.Tests` を新設し、bUnit + xUnit + Moq で `Admin.razor` の UI テスト実行基盤を追加した。
-- ツリー構築ロジックは `AdminMetricsService` 内に集約されており、関係解釈（`hasPart`/`isPartOf`/`locatedIn`/`isLocationOf`）と `Device` 正規化が主要なテスト対象。
-- `dotnet test src/AdminGateway.Tests` で Phase 2 の 2 テスト（ツリー表示 / ノード選択詳細表示）を追加し通過した。
-- `AdminMetricsService` が concrete + internal のため、`AdminGateway` 側に `InternalsVisibleTo("AdminGateway.Tests")` を追加してテストから DI 構成できるようにした。
-
-## Decisions
-- 今回はコード実装より先に、導入順序が明確なテスト設計方針をドキュメント化する。
-- 層A（RDF解析）/層B（サービス）/層C（bUnit UI）/統合D（Playwright E2E）の 4 区分で段階導入する。
-- Phase 2 はまず `Admin.razor` の最小 2 ケース（階層表示 / ノード選択）で固定し、壊れやすい表示ロジックを PR ごとに検知できる形にする。
-
-## Retrospective
-- Phase 2 の最小スコープ（表示 + ノード選択）を実装できたため、次は Phase 3 の Playwright E2E へ接続しやすい土台が整った。
-- `dotnet build` / `dotnet test` は成功したが、既存 warning（MudBlazor 近似解決、Moq 脆弱性通知、XML コメント警告）は継続しているため別タスクでの解消が必要。
->>>>>>> theirs
 
 ---
 
