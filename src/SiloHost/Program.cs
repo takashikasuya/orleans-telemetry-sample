@@ -12,6 +12,7 @@ using Orleans.Hosting;
 using Orleans.Streaming;
 using Telemetry.Ingest;
 using Telemetry.Ingest.Kafka;
+using Telemetry.Ingest.Mqtt;
 using Telemetry.Ingest.RabbitMq;
 using Telemetry.Ingest.Simulator;
 using Telemetry.Storage;
@@ -37,6 +38,7 @@ internal static class Program
             services.AddSingleton<ITelemetryPointRegistrationFilter, GraphRegisteredTelemetryPointFilter>();
             // Connector registration stays in code; config controls which ones are enabled.
             services.AddKafkaIngest(ingestSection.GetSection("Kafka"));
+            services.AddMqttIngest(ingestSection.GetSection("Mqtt"));
             services.AddRabbitMqIngest(ingestSection.GetSection("RabbitMq"));
             services.AddSimulatorIngest(ingestSection.GetSection("Simulator"));
             services.AddLoggingTelemetryEventSink();

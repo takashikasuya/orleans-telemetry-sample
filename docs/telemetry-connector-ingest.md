@@ -233,9 +233,9 @@ Simulator が有効な場合、SiloHost は **既存の RDF シードとは別�
 
 > 補足: コネクタ登録はコードで行い、どのコネクタを起動するかは `TelemetryIngest:Enabled` で制御されます。【F:src/SiloHost/Program.cs†L31-L44】【F:src/Telemetry.Ingest/TelemetryIngestCoordinator.cs†L39-L70】
 
-## MQTT コネクタ設計（ドラフト）
+## MQTT コネクタ
 
-MQTT コネクタの設計方針・受け入れ topic・パラメータ外部化・バックプレッシャーテスト計画は `docs/mqtt-connector-design.md` に整理しています。
+MQTT コネクタは `src/Telemetry.Ingest/Connectors/Mqtt/` に実装されており、設計方針・受け入れ topic・パラメータ外部化・バックプレッシャーテスト計画は `docs/mqtt-connector-design.md` に整理しています。
 
 - 受け入れ topic は `TopicBindings` で外部設定し、tenant/device/point を topic または payload から抽出
 - QoS / retain / clean session / in-flight 上限などを設定で切り替え
