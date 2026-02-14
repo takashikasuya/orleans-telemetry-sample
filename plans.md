@@ -3845,3 +3845,85 @@ RDF シード読み込み時にテナントIDに加えてテナント名を指�
 ## Retrospective
 - 変更は Graph seed 周辺の契約と UI のみに限定でき、既存 API 互換性を保ったまま要件を満たせた。
 - 将来的には `/admin/graph/tenants` を `GraphTenantInfo` ベースに切り替えることで、一覧 UI 側での表示名選択にも展開しやすい。
+
+---
+
+# plans.md: Publisher README for Generic Profile-based Emulator Design (2026-02-14)
+
+## Purpose
+`src/Publisher` 向けに個別 README を追加し、プロファイル指定でスキーマ/生成感覚を切り替える汎用テレメトリーエミュレータ化の設計方針を明文化する。
+
+## Success Criteria
+1. `src/Publisher/README.md` が新規作成されている。
+2. 現状の Publisher の実行方法・環境変数・CLI オプションが記載されている。
+3. BACnet 正規化 JSON を含むプロファイル駆動拡張の設計方針（目的、層構成、導入ステップ）が記載されている。
+4. `dotnet build` と `dotnet test` で検証結果を記録する。
+
+## Steps
+1. Publisher 実装 (`Program.cs`) を確認し、現状機能を整理する。
+2. README の章立てを設計し、現状説明と将来方針を記述する。
+3. ルート `plans.md` に作業内容と結果を記録する。
+4. build/test を実行して確認する。
+
+## Progress
+- [x] Step 1: 現状機能確認
+- [x] Step 2: `src/Publisher/README.md` 作成
+- [x] Step 3: plans.md 記録
+- [x] Step 4: build/test 実行
+
+## Observations
+- Publisher は既に RDF 駆動生成と制御コマンド適用の基盤を持つため、Profile/Adapter の分離設計と相性が良い。
+- 既存契約 `TelemetryMsg` を維持すれば Silo/API 側互換を保てる。
+
+## Decisions
+- 実装変更は行わず、まずは README に設計方針をまとめる。
+- 互換性重視で「profile 指定なしは現行動作維持」を明示した。
+
+## Verification
+- `dotnet build`
+- `dotnet test`
+
+## Retrospective
+- 今回は設計方針の文書化に集中し、次の実装フェーズ（Profile Reader 導入）へ直接つながるアウトラインを用意できた。
+
+---
+
+# plans.md: Publisher Profile-based Emulator Implementation (2026-02-14)
+
+## Purpose
+Publisher の設計方針（profile 指定による生成切替）に基づき実装を進め、`--profile` / `--profile-file` で汎用エミュレーションを可能にする。引数なし実行時は既存の動作（RDF があれば RDF、なければランダム）を維持する。
+
+## Success Criteria
+1. Publisher が profile ファイルを読み取り、profile 定義に基づくテレメトリーを publish できる。
+2. `--profile` / `--profile-file` と `PUBLISH_PROFILE` の選択ロジックが追加される。
+3. 引数なし（かつ profile 環境変数なし）の時、既存挙動が維持される。
+4. `dotnet build` と `dotnet test` が成功する。
+
+## Steps
+1. Profile モデル/ローダー/生成器を `src/Publisher` に追加する。
+2. `Program.cs` に profile 選択と publish ループ分岐を追加する。
+3. `Publisher.Tests` に profile 読み込み・生成のテストを追加する。
+4. build/test を実行して結果を記録する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+## Observations
+- `--profile-file` または `--profile`/`PUBLISH_PROFILE` を指定した場合、profile の Tenant/Site/Timing を優先して送信設定へ反映する実装を追加した。
+- profile 未指定時は既存分岐（RDF シードがあれば RDF、なければランダム）を維持し、後方互換を確保した。
+- Control Queue 上書きの writable 判定は、RDF 定義または profile 定義の point registry を使う共通ロジックへ整理した。
+
+## Decisions
+- 初回実装は `number` / `bool` と `random` / `step` / `sin` / `constant` の最小ジェネレータに限定し、複雑なイベント注入は次段階へ分離した。
+- profile の読み込み失敗（ファイル未存在や必須項目不足）は例外で明示的に失敗させる方針にした。
+
+## Verification
+- `dotnet build`
+- `dotnet test`
+
+## Retrospective
+- profile 駆動の最小実装を追加したことで、README の設計方針に対して実装の足場（読み込み・分岐・生成・テスト）を用意できた。
+- 引数なし実行時の挙動を変えないことを最優先にしたため、既存利用者への影響を抑えつつ拡張可能性を高められた。
