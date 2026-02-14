@@ -154,6 +154,7 @@ internal static class Program
             siloBuilder.AddMemoryGrainStorage("GraphIndexStore");
             siloBuilder.AddMemoryGrainStorage("GraphTagIndexStore");
             siloBuilder.AddMemoryGrainStorage("GraphTenantStore");
+            siloBuilder.AddMemoryGrainStorage("SparqlStore");
             siloBuilder.AddMemoryStreams("DeviceUpdates");
             siloBuilder.AddMemoryGrainStorage("PointStore");
             siloBuilder.AddMemoryStreams("PointUpdates");

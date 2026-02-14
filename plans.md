@@ -3788,3 +3788,103 @@ curl -X POST http://localhost:8080/api/sparql/query \
 4. **外部 Endpoint 統合**: Blazegraph, Stardog, GraphDB などとの連携
 5. **GraphQL ゲートウェイ**: SPARQL → GraphQL 変換レイヤー
 6. **クエリキャッシュ**: 頻繁に実行されるクエリ結果のメモリキャッシュ
+
+## SPARQL Query Engine Implementation Update (2026-02-14, Session 2)
+
+### Purpose
+Embedded SPARQL Query Engine for RDF タスクのうち、最初の実装単位として Silo 側の SPARQL Grain と単体テストを追加する。
+
+### Success Criteria
+1. `ISparqlQueryGrain` と `SparqlQueryGrain` が追加されること。
+2. RDF ロード、クエリ、テナント分離、クリアの単体テストが追加されること。
+3. 追加したテストがローカルで成功すること。
+
+### Steps
+1. Grain 契約を `Grains.Abstractions` に追加。
+2. `SiloHost` に dotNetRDF ベースの `SparqlQueryGrain` を実装。
+3. `SiloHost.Tests` に単体テストを追加。
+4. `dotnet test --filter FullyQualifiedName~SparqlQueryGrainTests` で検証。
+
+### Progress
+- [x] Step 1: Grain 契約追加
+- [x] Step 2: `SparqlQueryGrain` 実装（tenant別 triple 保持）
+- [x] Step 3: 単体テスト 4 ケース追加
+- [x] Step 4: テスト実行
+
+### Observations
+- 既存コードには SPARQL 機能が未実装で、ゼロから追加する必要があった。
+- シリアライズ互換性のため、dotNetRDF の `Triple` を直接 state に保存せず、独自 DTO (`SerializedTriple`) に変換する設計にした。
+
+### Verification
+- `dotnet test src/SiloHost.Tests/SiloHost.Tests.csproj --filter FullyQualifiedName~SparqlQueryGrainTests`
+  - Result: Passed 4, Failed 0
+- `dotnet build`
+  - Result: Succeeded (既存 warning のみ)
+
+## SPARQL Query Engine Implementation Update (2026-02-14, Session 3)
+
+### Purpose
+ユーザー要望に合わせ、API Gateway 経由の SPARQL エンドポイント実装と統合テストを追加する。
+
+### Success Criteria
+1. API Gateway に `/api/sparql/query`, `/api/sparql/load`, `/api/sparql/stats` が実装されること。
+2. ApiGateway.Tests に SPARQL エンドポイントの統合テストが追加されること。
+3. `dotnet build` / `dotnet test` が成功すること。
+
+### Steps
+1. SPARQL API の request/response DTO を追加。
+2. `Program.cs` に SPARQL エンドポイントを追加し、tenant 解決 + `ISparqlQueryGrain` 呼び出しを実装。
+3. `ApiGateway.Tests` に統合テスト（query success / unauthorized / stats）を追加。
+4. ビルドと全テストを実行する。
+
+### Progress
+- [x] Step 1: DTO 追加
+- [x] Step 2: エンドポイント実装
+- [x] Step 3: 統合テスト追加
+- [x] Step 4: build/test 実行
+
+### Decisions
+- まずは plans.md の API ステップに沿って最小セット（query/load/stats）を先行実装する。
+- 外部 SPARQL endpoint 抽象化は次段で実装し、今回スコープからは外す。
+
+### Verification
+- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter FullyQualifiedName~SparqlEndpointTests`
+  - Result: Passed 3, Failed 0
+- `dotnet build`
+  - Result: Succeeded
+- `dotnet test`
+  - Result: Succeeded (all tests passed)
+
+### Retrospective
+- 前回不足していた「API Gateway 経由の検証」が補完され、SPARQL 機能の入口を統合テストで担保できた。
+- 今後は `Sparql:Enabled` フラグや外部 endpoint 抽象化を含めた設定統合を進める。
+
+## SPARQL Query Engine Implementation Update (2026-02-14, Session 4)
+
+### Purpose
+直近実装（SPARQL API/統合テスト）に合わせて README と docs を更新し、利用手順と参照先を明確化する。
+
+### Success Criteria
+1. README に SPARQL 機能概要と docs への導線が追加されること。
+2. docs 配下に SPARQL 専用説明ページが追加されること。
+3. API ドキュメントに SPARQL エンドポイント記載が反映されること。
+
+### Steps
+1. README の Documentation Map と機能説明に SPARQL 記載を追加。
+2. `docs/sparql-query-service.md` を新規作成。
+3. `docs/api-gateway-apis.md` に SPARQL セクションを追記。
+4. 既存 SPARQL 統合テストを再実行して回帰を確認。
+
+### Progress
+- [x] Step 1: README 更新
+- [x] Step 2: SPARQL 専用 docs 追加
+- [x] Step 3: API docs 追記
+- [x] Step 4: テスト再実行
+
+### Verification
+- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter FullyQualifiedName~SparqlEndpointTests`
+  - Result: Passed 3, Failed 0
+
+### Retrospective
+- ドキュメントの導線を README に追加したことで、SPARQL 機能の発見性が改善した。
+- 実装と docs の乖離を抑えるため、今後も実装PR単位で docs 更新を同時実施する。

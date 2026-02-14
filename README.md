@@ -47,6 +47,7 @@ graph LR
 
 機能別ドキュメント:
 - [API Gateway API](docs/api-gateway-apis.md)
+- [SPARQL クエリ機能](docs/sparql-query-service.md)
 - [コネクタ & テレメトリーインジェスト](docs/telemetry-connector-ingest.md)
 - [MQTT コネクタ設計](docs/mqtt-connector-design.md)
 - [ルーティングと値バインディング](docs/telemetry-routing-binding.md)
@@ -57,6 +58,17 @@ graph LR
 - [負荷試験ガイド](docs/telemetry-ingest-loadtest.md)
 - [OpenTelemetry 運用メモ](docs/observability-opentelemetry.md)
 - [Orleans クラスタリングとスケーラビリティ](docs/clustering-and-scalability.md)
+
+
+## SPARQL Query (API Gateway 経由)
+
+API Gateway には SPARQL 用の REST エンドポイントが追加されています（認証必須）。
+
+- `POST /api/sparql/load`: RDF データをロード
+- `POST /api/sparql/query`: SPARQL SELECT/ASK クエリを実行
+- `GET /api/sparql/stats`: テナント単位のトリプル数を取得
+
+詳細は [docs/sparql-query-service.md](docs/sparql-query-service.md) を参照してください。
 
 ## Build & Test
 

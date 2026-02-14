@@ -6,6 +6,7 @@
     <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="9.2.1" />
     <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
     <PackageReference Include="Npgsql" Version="8.0.5" />
+    <PackageReference Include="dotNetRDF" Version="3.2.0" />
     <ProjectReference Include="../Grains.Abstractions/Grains.Abstractions.csproj" />
     <ProjectReference Include="../DataModel.Analyzer/DataModel.Analyzer.csproj" />
     <ProjectReference Include="../Telemetry.Ingest/Telemetry.Ingest.csproj" />
