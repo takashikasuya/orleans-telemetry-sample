@@ -3788,3 +3788,42 @@ curl -X POST http://localhost:8080/api/sparql/query \
 4. **外部 Endpoint 統合**: Blazegraph, Stardog, GraphDB などとの連携
 5. **GraphQL ゲートウェイ**: SPARQL → GraphQL 変換レイヤー
 6. **クエリキャッシュ**: 頻繁に実行されるクエリ結果のメモリキャッシュ
+
+---
+
+# plans.md: OIDC階層権限設計方針検討 (2026-02-14)
+
+## Purpose
+OIDC認証ユーザーごとのロール管理と、テナント配下の階層リソース（敷地/ビル/フロア/部屋/デバイス）に対する継承型アクセス制御を実現するための設計方針を定義する。加えて、全リソースアクセス可能な特権ユーザーの扱い、Admin UIでのユーザー・権限編集、PostgreSQLでの権限データ管理方針を整理する。
+
+## Success Criteria
+1. 実装前提となる認可モデル（Role/Scope/Action + 階層継承 + 特権ユーザー）が文書化されている。
+2. PostgreSQLのテーブル構成、主要インデックス、認可判定フローが定義されている。
+3. Admin UIで必要な管理機能（ユーザー編集、権限割当、監査）と適用ポリシーが明示されている。
+4. 既存システム（ApiGateway/gRPC/AdminGateway）への適用ポイントが示されている。
+
+## Steps
+1. 既存ドキュメントを確認して現行認証/運用導線を把握する。
+2. ユーザー要望に対応する設計方針（認可モデル、データモデル、運用）を作成する。
+3. 設計内容を docs 配下へ追加し、plans.md に結果を記録する。
+
+## Progress
+- [x] Step 1: 既存資料（README/PROJECT_OVERVIEW/docs）確認
+- [x] Step 2: OIDC階層RBAC設計方針ドラフト作成
+- [x] Step 3: plans.md へ記録
+
+## Observations
+- 既存 docs/admin-console.md では AdminGateway が JWT/OIDC 構成を前提にしており、運用UIを拡張する導線がある。
+- 現在のドキュメント群に、階層的アクセス制御を体系的に定義した文書は存在しなかった。
+
+## Decisions
+- 実装は行わず、まずは設計方針として `docs/oidc-hierarchical-authorization-design.md` を新設。
+- 判定モデルは初期段階を allow-only とし、deny/ABAC は将来拡張項目として位置づける。
+- 特権ユーザーは `global` スコープでの `super_admin` ロールとして定義し、判定最優先とする。
+
+## Verification
+- ドキュメント追加・更新のみのため、設計レビュー観点を文書内「受け入れ基準」に明記。
+
+## Retrospective
+- 実装前に、権限の粒度・継承・監査を1つの設計文書に集約できたことで、API/gRPC/Adminの適用順序とDB設計の議論が進めやすくなった。
+- 次フェーズでは、最小実装（DBスキーマ + 認可判定サービス + Admin UI最小編集）にスコープを絞るのが有効。
