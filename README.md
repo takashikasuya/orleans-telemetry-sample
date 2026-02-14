@@ -1,6 +1,6 @@
-# Orleans Telemetry Sample
+# Building OS using Orleans
 
-Orleans を使ったテレメトリー取り込みサンプルです。RabbitMQ / Kafka / Simulator から受信したメッセージを Grain にルーティングし、最新値を API で参照、履歴を Parquet に保存して検索できます。
+Orleans を使ったビルOSの参考実装です。RabbitMQ / Kafka / MQTT Broker / Simulator から受信したメッセージを Grain にルーティングし、最新値を API で参照、履歴を Parquet に保存して検索できます。
 
 ## Quick Start
 
@@ -17,22 +17,26 @@ docker compose up --build
 ## System Overview
 
 ```mermaid
-flowchart LR
-    Pub[Publisher/Connector] --> MQ[(RabbitMQ/Kafka/Simulator)]
-    MQ --> Silo[SiloHost (Orleans)]
-    Silo --> API[ApiGateway (REST/gRPC)]
-    Silo --> Storage[(Parquet + Index)]
-    API --> Client[Telemetry Client / Admin]
+graph LR
+    Pub["Publisher/Connector"] --> MQ["RabbitMQ/MQTT/Kafka"]
+    MQ --> Silo["SiloHost"]
+    Silo --> Storage[("Telemetry Storage")]
+    API["ApiGateway"] -.Orleans Client.-> Silo
+    Admin["AdminGateway"] -.Orleans Client.-> Silo
+    API --> WebUI["TelemetryClient"]
+    Admin --> AdminUI["Admin UI"]
 ```
 
 ## Repository Structure
 
 - `src/SiloHost`: Orleans サイロ（ingest / grain / graph seed）
 - `src/ApiGateway`: REST/gRPC API
-- `src/Telemetry.Ingest`: コネクタ/バッチ取り込み
-- `src/Telemetry.Storage`: JSONL ステージ + Parquet compaction
 - `src/AdminGateway`: 運用向け管理 UI
 - `src/TelemetryClient`: 階層ツリー/ポイント閲覧 UI
+- `src/Telemetry.Ingest`: コネクタ/バッチ取り込み
+- `src/Telemetry.Storage`: JSONL ステージ + Parquet compaction
+- `src/DataModel.Analyzer`: RDF 解析と BuildingDataModel 構築
+- `src/Grains.Abstractions`: Grain インターフェースと契約モデル
 - `src/Publisher`: サンプルテレメトリー送信
 
 ## Documentation Map
@@ -44,6 +48,7 @@ flowchart LR
 機能別ドキュメント:
 - [API Gateway API](docs/api-gateway-apis.md)
 - [コネクタ & テレメトリーインジェスト](docs/telemetry-connector-ingest.md)
+- [MQTT コネクタ設計](docs/mqtt-connector-design.md)
 - [ルーティングと値バインディング](docs/telemetry-routing-binding.md)
 - [テレメトリーストレージ](docs/telemetry-storage.md)
 - [RDF ロードと Grain 初期化](docs/rdf-loading-and-grains.md)
@@ -51,6 +56,7 @@ flowchart LR
 - [Telemetry Client Spec](docs/telemetry-client-spec.md)
 - [負荷試験ガイド](docs/telemetry-ingest-loadtest.md)
 - [OpenTelemetry 運用メモ](docs/observability-opentelemetry.md)
+- [Orleans クラスタリングとスケーラビリティ](docs/clustering-and-scalability.md)
 
 ## Build & Test
 
@@ -62,7 +68,7 @@ dotnet test
 ## Notes
 
 - このリポジトリはローカル検証・学習用途のサンプルです（本番運用向けの堅牢化は未実装）。
-- gRPC は構成を含みますが、実装は一部スキャフォールド段階です。
+- gRPC は `DeviceService`（GetSnapshot/StreamUpdates）と `RegistryService`（タグ検索系）が実装済みです。
 
 ## License
 

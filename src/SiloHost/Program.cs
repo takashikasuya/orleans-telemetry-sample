@@ -53,6 +53,8 @@ internal static class Program
             var advertisedHost = orleansSection["AdvertisedIPAddress"];
             var siloPort = orleansSection.GetValue("SiloPort", 11111);
             var gatewayPort = orleansSection.GetValue("GatewayPort", 30000);
+            var clusteringMode = context.Configuration.GetValue("SiloHost:ClusteringMode", "Localhost");
+            var useAdoNetClustering = string.Equals(clusteringMode, "AdoNet", StringComparison.OrdinalIgnoreCase);
 
             // Determine advertised address
             IPAddress? advertisedAddress = null;
@@ -86,27 +88,59 @@ internal static class Program
                 }
             }
 
-            // Configure endpoints and clustering based on whether we have an advertised address
-            if (advertisedAddress != null)
+            // Configure clustering provider first.
+            if (useAdoNetClustering)
             {
-                // Docker/containerized environment: use localhost clustering but listen on all interfaces
-                // Set localhost clustering first, then override endpoint configuration
-                siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
-                
-                siloBuilder.Configure<EndpointOptions>(options =>
+                var adoNetSection = orleansSection.GetSection("AdoNet");
+                var connectionString = adoNetSection["ConnectionString"];
+                var invariant = adoNetSection["Invariant"] ?? "Npgsql";
+                if (string.IsNullOrWhiteSpace(connectionString))
                 {
-                    options.AdvertisedIPAddress = advertisedAddress;
-                    options.SiloPort = siloPort;
-                    options.GatewayPort = gatewayPort;
-                    // Listen on all interfaces so other containers can connect
-                    options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, siloPort);
-                    options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, gatewayPort);
+                    throw new InvalidOperationException("Orleans AdoNet clustering is enabled but Orleans:AdoNet:ConnectionString is not configured.");
+                }
+
+                siloBuilder.UseAdoNetClustering(options =>
+                {
+                    options.ConnectionString = connectionString;
+                    options.Invariant = invariant;
                 });
             }
             else
             {
-                // Local development: use localhost clustering
                 siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
+            }
+
+            // Configure endpoints and networking.
+            if (useAdoNetClustering)
+            {
+                // Force final endpoint values for container networking after Orleans applies provider defaults.
+                siloBuilder.ConfigureServices(services =>
+                {
+                    services.PostConfigure<EndpointOptions>(options =>
+                    {
+                        options.SiloPort = siloPort;
+                        options.GatewayPort = gatewayPort;
+                        options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, siloPort);
+                        options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, gatewayPort);
+                        if (advertisedAddress != null)
+                        {
+                            options.AdvertisedIPAddress = advertisedAddress;
+                        }
+                    });
+                });
+            }
+            else if (advertisedAddress != null)
+            {
+                // Docker/containerized environment: advertise container IP and listen on all interfaces.
+                siloBuilder.ConfigureEndpoints(advertisedAddress, siloPort, gatewayPort, listenOnAnyHostAddress: true);
+            }
+            else
+            {
+                siloBuilder.Configure<EndpointOptions>(options =>
+                {
+                    options.SiloPort = siloPort;
+                    options.GatewayPort = gatewayPort;
+                });
             }
             
             siloBuilder.Configure<ClusterOptions>(options =>

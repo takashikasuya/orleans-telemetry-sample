@@ -1,3 +1,48 @@
+# plans.md: gRPC Endpoint Implementation & Test Audit (2026-02-14)
+
+## Purpose
+ApiGateway の gRPC エンドポイント実装とテストを監査し、不足している検証を補完する。併せて、実装実態と不整合なドキュメントを更新する。
+
+## Success Criteria
+1. `DeviceService` / `RegistryService` の実装有無とマッピング状態を確認できること。
+2. gRPC テストに不足していたケース（最低1件以上）を追加し、テストが成功すること。
+3. `README.md` / `PROJECT_OVERVIEW.md` / `docs/api-gateway-apis.md` の gRPC 記述が実装実態と一致すること。
+
+## Steps
+1. 必須ドキュメントと gRPC 実装・既存テストを確認する。
+2. テストの不足を特定し、`ApiGateway.Tests` に追加する。
+3. ドキュメントの不整合を修正する。
+4. gRPC テストを実行して結果を記録する。
+
+## Progress
+- [x] Step 1: 実装・既存テスト監査
+- [x] Step 2: gRPC テスト追加（未認証/StreamUpdates 入力バリデーション）
+- [x] Step 3: ドキュメント整合化
+- [x] Step 4: gRPC テスト実行
+
+## Observations
+- `DeviceService` と `RegistryGrpcService` は `Program.cs` で `MapGrpcService` されており、`Grpc:Enabled` で有効化制御されている。
+- 既存の gRPC テストは `GetSnapshot` と `RegistryService` 中心で、`StreamUpdates` の入力バリデーション検証が欠けていた。
+- ドキュメントには「gRPC 未実装/無効化」とする古い記述が残っていた。
+
+## Decisions
+- 実装自体は既に有効のため、今回は機能追加ではなくテスト補強とドキュメント修正を優先する。
+- ストリーミング正常系は Orleans stream モックのコストが高いため、まずは境界条件（InvalidArgument）と認証失敗経路を優先して追加する。
+
+## Verification
+- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter "FullyQualifiedName~Grpc"`
+  - Result: Passed 9, Failed 0, Skipped 0
+- `dotnet build`
+  - Result: Succeeded (Warning 1: 既存の `CS8604` in `src/ApiGateway.Client/Program.cs`)
+- `dotnet test`
+  - Result: Succeeded (Failed 0, 全テスト通過)
+
+## Retrospective
+- 実装は想定より進んでいたが、ドキュメントが旧状態のままだった。
+- gRPC は実装済み機能の説明と、将来拡張計画を分離して記述する方針に整理した。
+
+---
+
 # plans.md: E2E Test Orleans Clustering Fix (2026-02-14)
 
 ## Purpose
@@ -211,6 +256,425 @@ AdoNet Clustering 実装後:
 - [ ] `docker-compose.yml` 更新
 - [ ] `SiloHost/Program.cs` clustering 設定追加
 - [ ] E2E テスト検証
+
+---
+
+# Appendix: Orleans Clustering Deep Dive (2026-02-14)
+
+## Overview: なぜ Clustering が必要なのか
+
+Orleans は分散アクターフレームワークです。複数の Silo（サーバーノード）が協調して動作するために、**Membership Protocol（メンバーシッププロトコル）** という仕組みでクラスター状態を管理します。
+
+### Orleans Cluster の基本構造
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Orleans Cluster                          │
+│                                                              │
+│  ┌──────────┐      ┌──────────┐      ┌──────────┐          │
+│  │  Silo 1  │◄────►│  Silo 2  │◄────►│  Silo 3  │          │
+│  │(Primary) │      │          │      │          │          │
+│  └─────┬────┘      └─────┬────┘      └─────┬────┘          │
+│        │                 │                 │                │
+│        └─────────────────┼─────────────────┘                │
+│                          │                                  │
+│                          ▼                                  │
+│              ┌───────────────────────┐                      │
+│              │  Membership Table     │                      │
+│              │ (誰がクラスターにいるか) │                      │
+│              └───────────────────────┘                      │
+│                                                              │
+│  ▲                                                           │
+│  │                                                           │
+└──┼───────────────────────────────────────────────────────────┘
+   │
+   │ Gateway Protocol
+   │
+┌──┴────────┐
+│  Client   │ (API Gateway, telemetry-client など)
+│ (外部接続)  │
+└───────────┘
+```
+
+### Membership Table の役割
+
+Membership Table は以下の情報を保持します：
+
+1. **Silo List**: クラスター内の全 silo の IP/Port/ID
+2. **Status**: 各 silo の状態（Active/Dead/Joining/Leaving）
+3. **Version**: クラスター構成の変更履歴
+4. **Gateway List**: Client が接続可能な Gateway endpoint
+
+**この情報がないと**：
+- Client がどの Silo に接続すればいいかわからない
+- Silo 同士が互いを認識できない
+- Grain の配置（どの Silo にどの Grain がいるか）が決定できない
+
+---
+
+## なぜ Docker 環境でエラーが起きるのか
+
+### 問題 1: `UseLocalhostClustering` の制約
+
+```csharp
+siloBuilder.UseLocalhostClustering(siloPort: 11111, gatewayPort: 30000);
+```
+
+**内部動作**:
+1. Silo は `127.0.0.1:11111` でリッスン開始
+2. Gateway は `127.0.0.1:30000` でリッスン開始
+3. Membership Table に `S127.0.0.1:11111` として自身を登録
+
+**Docker 環境での問題**:
+```
+┌─────────────────────────────────────────────┐
+│  Docker Network (172.18.0.0/16)             │
+│                                              │
+│  ┌────────────────┐      ┌────────────────┐ │
+│  │ silo container │      │ api container  │ │
+│  │ IP: 172.18.0.4 │      │ IP: 172.18.0.5 │ │
+│  │                │      │                │ │
+│  │ Listen:        │      │ Try connect:   │ │
+│  │ 127.0.0.1:30000│◄─────│ 172.18.0.4:30000│ │
+│  │ (localhost)    │  ✗   │ (silo の IP)   │ │
+│  └────────────────┘      └────────────────┘ │
+│                                              │
+└──────────────────────────────────────────────┘
+
+✗ 接続失敗: Connection Refused
+  理由: silo は 127.0.0.1 でしかリッスンしていない
+        他のコンテナからは 172.18.0.4 でアクセスする必要がある
+```
+
+### 問題 2: `UseDevelopmentClustering` の自己接続エラー
+
+```csharp
+var advertisedAddress = IPAddress.Parse("172.18.0.4"); // Docker の silo IP
+siloBuilder.UseDevelopmentClustering(new IPEndPoint(advertisedAddress, 11111));
+```
+
+**内部動作**:
+1. Silo は `0.0.0.0:11111` でリッスン開始（全インターフェース）
+2. Gateway は `0.0.0.0:30000` でリッスン開始
+3. Membership Table に **Primary Silo** として `S172.18.0.4:11111` を登録
+4. ⚠️ **問題発生**: Silo が Primary（自分自身）に Silo-to-Silo 接続を試みる
+
+**エラーログ**:
+```
+System.InvalidOperationException: Unexpected connection id 
+sys.silo/01111111-1111-1111-1111-111111111111 on proxy endpoint 
+from S127.0.0.1:11111:130046459
+```
+
+**なぜ自己接続が起きるのか**:
+```
+┌─────────────────────────────────────────────────────┐
+│  Silo (172.18.0.4)                                  │
+│                                                      │
+│  ┌──────────────────┐   ┌────────────────────────┐  │
+│  │ Gateway (30000)  │   │ Silo Component (11111) │  │
+│  └─────────┬────────┘   └───────┬────────────────┘  │
+│            │                    │                    │
+│            │  (1) 接続要求       │                    │
+│            │  to Primary Silo   │                    │
+│            │  172.18.0.4:11111  │                    │
+│            └────────────────────►│                    │
+│                                  │                    │
+│  ⚠️ 問題: Gateway が同じノード内の Silo に         │
+│           Silo-to-Silo プロトコルで接続しようとする    │
+│           → 想定外の動作（Gateway-to-Silo のみ許可） │
+└─────────────────────────────────────────────────────┘
+```
+
+`UseDevelopmentClustering` は **Primary Silo** という概念を使います：
+- Primary = クラスターの「最初の Silo」として特別扱い
+- 他の Silo は Primary に接続してクラスターに参加
+- **単一ノード**の場合、自分が Primary になるため自己接続が発生
+
+---
+
+## AdoNet Clustering が解決する理由
+
+### 仕組み
+
+PostgreSQL（または他の DB）に Membership Table を外部化します：
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  Docker Network                                             │
+│                                                              │
+│  ┌────────────┐         ┌────────────┐         ┌─────────┐ │
+│  │ silo       │         │ api        │         │postgres │ │
+│  │172.18.0.4  │         │172.18.0.5  │         │15432    │ │
+│  │            │         │            │         │         │ │
+│  │  Listen:   │         │            │         │         │ │
+│  │  0.0.0.0:  │         │  Client    │         │Membership│
+│  │  11111     │         │  connects  │         │ Table   │ │
+│  │  30000     │         │  via       │         │         │ │
+│  │            │         │  gateway   │         │         │ │
+│  │            │         │            │         │         │ │
+│  │ Register   │         │ Query      │         │         │ │
+│  │ self to DB │────────►│ silo list  │◄────────│         │ │
+│  └────────────┘         └────────────┘         └─────────┘ │
+│       │                       │                      ▲      │
+│       └───────────────────────┴──────────────────────┘      │
+│             All nodes talk to DB, not each other            │
+└────────────────────────────────────────────────────────────┘
+```
+
+### PostgreSQL の Membership Table
+
+```sql
+-- OrleansMembershipTable
+CREATE TABLE OrleansMembershipTable (
+    DeploymentId VARCHAR(150) NOT NULL,
+    Address VARCHAR(45) NOT NULL,        -- Silo IP
+    Port INT NOT NULL,                   -- Silo Port
+    Generation INT NOT NULL,             -- Silo 起動世代
+    SiloName VARCHAR(150) NOT NULL,
+    HostName VARCHAR(150) NOT NULL,
+    Status INT NOT NULL,                 -- 0=Active, 1=Dead, etc.
+    ProxyPort INT NOT NULL,              -- Gateway Port
+    StartTime TIMESTAMP NOT NULL,
+    IAmAliveTime TIMESTAMP NOT NULL,     -- Heartbeat 時刻
+    PRIMARY KEY (DeploymentId, Address, Port, Generation)
+);
+```
+
+### 動作フロー
+
+**1. Silo 起動時**:
+```csharp
+siloBuilder.UseAdoNetClustering(options => {
+    options.ConnectionString = "Host=postgres;Database=orleans;...";
+    options.Invariant = "Npgsql";
+});
+```
+
+Silo は：
+1. PostgreSQL に接続
+2. `OrleansMembershipTable` に自身を INSERT
+   ```sql
+   INSERT INTO OrleansMembershipTable (
+       DeploymentId, Address, Port, Status, ProxyPort, ...
+   ) VALUES (
+       'telemetry-cluster', '172.18.0.4', 11111, 0, 30000, ...
+   );
+   ```
+3. 定期的に `IAmAliveTime` を UPDATE（Heartbeat）
+
+**2. Client (API) 起動時**:
+```csharp
+clientBuilder.UseAdoNetClustering(options => {
+    options.ConnectionString = "Host=postgres;Database=orleans;...";
+});
+```
+
+Client は：
+1. PostgreSQL から Gateway リストを取得
+   ```sql
+   SELECT Address, ProxyPort 
+   FROM OrleansMembershipTable 
+   WHERE Status = 0;  -- Active のみ
+   ```
+2. 取得した Gateway (172.18.0.4:30000) に接続
+
+**3. なぜ自己接続が起きないか**:
+- Silo は **自分がクラスターに参加する**だけ
+- Primary/Secondary の区別なし（全 Silo が対等）
+- Orleans runtime が DB の情報を元に適切にルーティング
+
+---
+
+## ローカル開発 vs Docker vs Kubernetes の比較
+
+### 1. ローカル開発環境（単一プロセス）
+
+```
+┌──────────────────────────────┐
+│  同一マシン (localhost)       │
+│                               │
+│  ┌──────────┐   ┌──────────┐ │
+│  │  Silo    │   │  Client  │ │
+│  │127.0.0.1 │◄──│127.0.0.1 │ │
+│  │  :11111  │   │          │ │
+│  └──────────┘   └──────────┘ │
+└──────────────────────────────┘
+
+適切な設定:
+✓ UseLocalhostClustering()
+  → すべて 127.0.0.1 で完結
+  → Membership Table は in-memory
+```
+
+### 2. Docker Compose 環境（複数コンテナ）
+
+```
+┌─────────────────────────────────────────┐
+│  Docker Network (Bridge)                │
+│                                          │
+│  ┌───────────┐  ┌───────────┐  ┌─────┐ │
+│  │  silo     │  │  api      │  │ DB  │ │
+│  │172.18.0.4 │  │172.18.0.5 │  │(PG) │ │
+│  └───────────┘  └───────────┘  └─────┘ │
+│   異なるネットワーク空間                   │
+└─────────────────────────────────────────┘
+
+必要な設定:
+✓ UseAdoNetClustering(PostgreSQL)
+  → DB で Membership 共有
+  → 各コンテナは DB 経由で互いを発見
+
+✗ UseLocalhostClustering()
+  → 127.0.0.1 は各コンテナ内部のみ有効
+  → 他コンテナからアクセス不可
+```
+
+### 3. Kubernetes 環境（Pod ネットワーク）
+
+```
+┌───────────────────────────────────────────────┐
+│  Kubernetes Cluster                           │
+│                                                │
+│  ┌────────┐  ┌────────┐  ┌────────┐          │
+│  │ silo   │  │ silo   │  │ silo   │          │
+│  │ Pod 1  │  │ Pod 2  │  │ Pod 3  │          │
+│  │10.1.1.1│  │10.1.1.2│  │10.1.1.3│          │
+│  └────────┘  └────────┘  └────────┘          │
+│      │            │            │              │
+│      └────────────┼────────────┘              │
+│                   │                           │
+│              ┌────▼─────┐                     │
+│              │Kubernetes│                     │
+│              │   API    │                     │
+│              │(Service  │                     │
+│              │Discovery)│                     │
+│              └──────────┘                     │
+└───────────────────────────────────────────────┘
+
+適切な設定:
+✓ UseKubernetesClustering()
+  → Kubernetes API で Pod を自動発見
+  → StatefulSet で安定した Pod 名
+  → Headless Service で直接 Pod アクセス
+
+または:
+✓ UseAdoNetClustering()
+  → DB は別途必要だが、K8s 依存なし
+  → マルチクラスター対応可能
+```
+
+---
+
+## Kubernetes で解決できるか？
+
+### 答え: **部分的に可能だが、このプロジェクトには不向き**
+
+### Kubernetes Clustering の仕組み
+
+```csharp
+siloBuilder.UseKubernetesClustering(options => {
+    options.Namespace = "default";
+    options.Group = "orleans-cluster";
+});
+```
+
+**Kubernetes API を使った Service Discovery**:
+1. Orleans Silo が起動時に Kubernetes API に問い合わせ
+2. 同じ Namespace/Label の Pod 一覧を取得
+3. Pod の IP リストを Membership として使用
+4. Pod が増減すると自動的に検出
+
+**要件**:
+- Kubernetes クラスターが必要
+- Silo は `ServiceAccount` で K8s API にアクセス権限が必要
+- StatefulSet または特定の Label を持つ Deployment
+
+### なぜこのプロジェクトに不向きか
+
+#### 1. 開発環境の複雑化
+```
+現在: docker compose up
+       ↓ シンプル
+
+K8s:  minikube start / kind create cluster
+       kubectl apply -f manifests/
+       kubectl port-forward ...
+       ↓ 複雑度が大幅に増加
+```
+
+#### 2. サンプルプロジェクトの目的から逸脱
+- このプロジェクトは **Orleans + テレメトリー処理** のサンプル
+- Kubernetes デプロイは別の関心事（インフラ層）
+- **学習曲線が急激に高くなる**
+
+#### 3. Docker Compose で十分なケース
+- E2E テストは単一ノード Silo で検証可能
+- プロダクション環境への移行は別タスク
+- AdoNet Clustering で同じ目的を達成できる
+
+### Kubernetes が適している場合
+
+**プロダクション環境**:
+- 複数 Silo のスケールアウトが必要
+- 自動スケーリング (HPA) を使いたい
+- ローリングアップデートが必要
+
+**この場合の構成**:
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: orleans-silo
+spec:
+  serviceName: orleans-silo
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: silo
+        image: orleans-telemetry-sample-silo:latest
+        env:
+        - name: ORLEANS_CLUSTERING
+          value: "Kubernetes"
+```
+
+---
+
+## 結論: このプロジェクトの最適解
+
+### 推奨アプローチ
+
+```
+Environment       | Clustering Method      | Reason
+------------------|------------------------|---------------------------
+ローカル開発       | UseLocalhostClustering | シンプル、DB 不要
+Docker Compose    | UseAdoNetClustering    | コンテナ間通信対応
+Kubernetes (将来) | UseKubernetesClustering| ネイティブ K8s 統合
+```
+
+### AdoNet Clustering を選ぶ理由（再確認）
+
+✅ **メリット**:
+1. Docker Compose で完結（PostgreSQL コンテナ追加のみ）
+2. 学習曲線が適度（SQL DB は一般的）
+3. プロダクション環境でも使用可能
+4. Kubernetes に移行しても使える（DB を外部化すれば K8s + AdoNet も可）
+
+✅ **デメリットが小さい**:
+1. PostgreSQL コンテナ追加 → リソース増加は限定的
+2. DB スキーマ管理 → Orleans が提供する SQL スクリプトで自動化可能
+
+### 実装の優先順位
+
+**今すぐ実装すべき**: AdoNet Clustering
+- E2E テストを完全に動作させる
+- プロダクション環境への道筋をつける
+
+**後で検討**: Kubernetes サンプル
+- 別ブランチまたは別ドキュメントとして追加
+- `docs/kubernetes-deployment.md` で実装例を示す
+- 必須ではなくオプション扱い
 
 ---
 
@@ -2905,3 +3369,422 @@ MQTTコネクタを追加する際の実装方針を先に設計し、受け入�
 ## Retrospective
 - 期限超過時のgRPCステータスはテストホスト実行タイミングの揺らぎがあるため、許容ステータスを実運用上等価な失敗コードまで拡張して安定化した。
 - `dotnet test` 全体が通過し、今回のブロッカーを解消できた。
+# plans.md: AdoNet Clustering with PostgreSQL (2026-02-14)
+
+## Purpose
+`AdoNet Clustering with PostgreSQL` を実装し、Docker ベース E2E テストが Orleans 接続エラーで失敗する問題を解消する。
+
+## Success Criteria
+1. Silo が PostgreSQL の membership table を使って起動できる。
+2. API が `silo:30000` に接続でき、起動時クラッシュしない。
+3. `scripts/run-e2e.sh` の Docker E2E が再有効化され成功する。
+4. `dotnet build` と `dotnet test` が成功する。
+
+## Steps
+1. Orleans AdoNet clustering の依存関係と Silo 設定を追加する。
+2. `docker-compose.yml` と E2E スクリプトに PostgreSQL と schema 初期化を追加する。
+3. Docker E2E を再有効化して実行・検証する。
+4. build/test と結果を反映して本セクションを完了更新する。
+
+## Progress
+- [x] Step 1: 失敗ログ再現（`api` が gateway 接続拒否）
+- [ ] Step 2: AdoNet clustering 実装
+- [ ] Step 3: Docker E2E 再有効化と検証
+- [ ] Step 4: build/test と最終記録
+
+## Observations
+- 再現時の失敗は `ConnectionRefused` (`api` -> `S172.x.x.x:30000`)。
+- 現行 `UseLocalhostClustering` のままでは Docker コンテナ間接続が安定しない。
+
+## Decisions
+- Docker 環境では `UseAdoNetClustering` を使用し、ローカル開発は `UseLocalhostClustering` を維持する。
+- PostgreSQL は compose に追加し、起動時に Orleans membership schema を自動初期化する。
+
+---
+
+# plans.md: SPARQL Query Engine Implementation (2026-02-14)
+
+## Purpose
+インポートされた RDF データに対して SPARQL クエリを実行できる機能を実装する。
+- 組み込み SPARQL エンジン（dotNetRDF）を使用し、Orleans Grain として実装
+- API Gateway 経由でクエリを発行・回答を取得
+- デフォルトは無効、Silo 起動オプションで有効化可能
+- 将来的には外部 SPARQL Endpoint への連携も考慮した設計
+
+## Success Criteria
+1. SPARQL Grain が RDF データをロード・永続化できる
+2. API Gateway 経由で SPARQL クエリを実行でき、結果を取得できる
+3. マルチテナント対応（クエリ時にテナントフィルタ適用）
+4. 設定で SPARQL 機能を有効/無効化できる（デフォルト: 無効）
+5. Silo 起動時および REST API 経由で RDF の追加読み込みが可能
+6. 単体テスト、統合テスト、E2E テストが成功する
+7. 外部 SPARQL Endpoint への拡張を考慮した抽象化層が存在する
+
+## Design Decisions
+
+### クエリ対象
+**選択**: 元の RDF グラフ（import 時の状態をそのまま保持）
+
+**理由**:
+- Orleans グラフ状態は変換後のデータ構造であり、元の RDF セマンティクスが失われている
+- SPARQL クエリは RDF トリプルストアに対して実行されるべき
+- リアルタイム状態の反映は将来的な拡張として考慮（RDF 再構築の仕組みが必要）
+
+### マルチテナント戦略
+**選択**: 1つのGrainで全テナントを扱う（クエリ時にフィルタ）
+
+**理由**:
+- Grain 数を抑え、メモリ効率とアクティベーションコストを最適化
+- dotNetRDF のクエリ書き換え機能を活用してテナント分離を実現
+- シンプルな実装で複雑さを回避
+
+### RDF 追加読み込みタイミング
+**選択**: REST API 経由で動的に追加可能（Silo 起動時もサポート）
+
+**理由**:
+- 運用柔軟性の向上（再起動なしでデータ追加可能）
+- 現在の GraphSeedService パターンとの一貫性
+- 管理者が任意のタイミングで RDF をロードできる
+
+### パフォーマンス目標
+**目標**: 中規模データ（数万トリプル）で応答時間 < 5秒
+
+**理由**:
+- 開発・デバッグ用途として実用的な範囲
+- dotNetRDF のインメモリクエリエンジンの現実的な性能
+- 大規模データは外部 SPARQL Endpoint への移行を推奨
+
+### 技術選択
+**SPARQL ライブラリ**: dotNetRDF 3.2.0（既存依存関係）
+
+**理由**:
+- プロジェクトで既に使用中（追加依存なし）
+- SPARQL 1.1 完全サポート
+- .NET 標準の SPARQL ソリューション
+
+## Technical Context
+
+### 現在の RDF データフロー
+```
+RDF ファイル (Turtle/JSON-LD/etc)
+  ↓
+RdfAnalyzerService.AnalyzeRdfFileAsync()
+  ↓
+BuildingDataModel (C# オブジェクト)
+  ↓
+OrleansIntegrationService.ExtractGraphSeedDataAsync()
+  ↓
+GraphSeedData (Device/Point 定義)
+  ↓
+GraphNodeGrain / GraphIndexGrain (Orleans state)
+```
+
+現状、RDF は一度パースされて C# モデルに変換され、元の RDF グラフは破棄される。
+
+### SPARQL 対応後のデータフロー
+```
+RDF ファイル
+  ├→ RdfAnalyzerService → BuildingDataModel → Grains (既存フロー)
+  └→ SparqlQueryGrain.LoadRdfAsync() → TripleStore (SPARQL 用)
+```
+
+### 既存コンポーネント
+- **[src/DataModel.Analyzer/Services/RdfAnalyzerService.cs](src/DataModel.Analyzer/Services/RdfAnalyzerService.cs)**: RDF パーサー（dotNetRDF 使用）
+- **[src/SiloHost/GraphSeedService.cs](src/SiloHost/GraphSeedService.cs)**: Silo 起動時の RDF ロード（BackgroundService）
+- **[src/ApiGateway/Program.cs](src/ApiGateway/Program.cs)**: REST API エンドポイント定義
+- **Storage**: `AddMemoryGrainStorage("GraphStore")` 既存
+
+### Orleans Grain パターン
+```csharp
+public sealed class ExampleGrain : Grain, IExampleGrain
+{
+    private readonly IPersistentState<ExampleState> _state;
+    
+    public ExampleGrain([PersistentState("name", "StoreName")] IPersistentState<ExampleState> state)
+    {
+        _state = state;
+    }
+    
+    [GenerateSerializer]
+    public class ExampleState
+    {
+        [Id(0)] public string Data { get; set; } = "";
+    }
+}
+```
+
+### API Gateway 認証
+- JWT Bearer 認証（OIDC）
+- テナント解決: `TenantResolver.ResolveTenant(HttpContext)` → `tenant` claim から抽出
+
+## Implementation Steps
+
+### 1. SPARQL Grain Interface & Implementation
+**ファイル**: 
+- `src/SiloHost/ISparqlQueryGrain.cs`
+- `src/SiloHost/SparqlQueryGrain.cs`
+
+**実装内容**:
+```csharp
+// ISparqlQueryGrain.cs
+public interface ISparqlQueryGrain : IGrainWithStringKey
+{
+    Task LoadRdfAsync(string rdfContent, string format, string? tenantId);
+    Task<SparqlResultSet> ExecuteQueryAsync(string sparqlQuery, string? tenantId);
+    Task<int> GetTripleCountAsync(string? tenantId);
+    Task ClearAsync(string? tenantId);
+}
+
+// SparqlQueryGrain.cs 主要機能
+// - PersistentState: SparqlState (シリアライズされた RDF グラフ)
+// - OnActivateAsync: state からトリプルストアを復元
+// - LoadRdfAsync: RDF パース → テナントタグ追加 → ストアにマージ → 永続化
+// - ExecuteQueryAsync: クエリ書き換え（テナントフィルタ注入） → 実行 → 結果返却
+// - IInMemoryQueryableStore (dotNetRDF) 使用
+```
+
+**dotNetRDF 使用例**:
+```csharp
+var store = new TripleStore();
+var graph = new Graph();
+graph.LoadFromString(rdfContent, new TurtleParser());
+
+// テナントタグ追加
+var tenantNode = graph.CreateUriNode(new Uri("http://example.org/tenant"));
+var tenantValue = graph.CreateLiteralNode(tenantId);
+foreach (var triple in graph.Triples.ToList())
+{
+    // 各トリプルの主語にテナント情報を関連付け
+}
+
+store.Add(graph);
+
+// SPARQL 実行
+var queryProcessor = new LeviathanQueryProcessor(store);
+var results = queryProcessor.ProcessQuery(new SparqlQueryParser().ParseFromString(query));
+```
+
+### 2. Configuration Support
+**ファイル**: 
+- `src/SiloHost/Configuration/SparqlOptions.cs`
+- `src/SiloHost/appsettings.json`
+
+**設定例**:
+```json
+{
+  "Sparql": {
+    "Enabled": false,
+    "MaxTripleCount": 100000,
+    "QueryTimeoutSeconds": 30
+  }
+}
+```
+
+**登録**: `src/SiloHost/Program.cs` 
+```csharp
+builder.Services.Configure<SparqlOptions>(builder.Configuration.GetSection("Sparql"));
+```
+
+### 3. Silo Startup Integration
+**ファイル**: `src/SiloHost/GraphSeedService.cs`
+
+**変更内容**:
+- `StartAsync` メソッドで `IOptions<SparqlOptions>` をチェック
+- `Enabled = true` の場合、`ISparqlQueryGrain` を取得（Grain ID: `"sparql"`）
+- 既存の RDF 読み込み後、`LoadRdfAsync` を呼び出し
+- エラー時はログ出力（Grain シードは失敗させない）
+
+### 4. REST API Endpoints
+**ファイル**: 
+- `src/ApiGateway/Sparql/SparqlQueryRequest.cs` (DTO)
+- `src/ApiGateway/Sparql/SparqlQueryResponse.cs` (DTO)
+- `src/ApiGateway/Sparql/SparqlEndpoints.cs` (エンドポイント実装)
+
+**エンドポイント定義**: `src/ApiGateway/Program.cs`
+```csharp
+var sparqlGroup = app.MapGroup("/api/sparql").RequireAuthorization();
+sparqlGroup.MapPost("/query", SparqlEndpoints.ExecuteQuery);
+sparqlGroup.MapPost("/load", SparqlEndpoints.LoadRdf);
+sparqlGroup.MapGet("/stats", SparqlEndpoints.GetStats);
+```
+
+**機能**:
+- `POST /api/sparql/query`: SPARQL クエリ実行（JSON body: `{query: "SELECT ..."}`）
+- `POST /api/sparql/load`: RDF アップロード（JSON body: `{content: "...", format: "turtle"}`）
+- `GET /api/sparql/stats`: トリプル数などの統計情報取得
+
+**セキュリティ**:
+- 全エンドポイントで JWT 認証必須
+- テナント ID は JWT の `tenant` claim から抽出
+- ユーザーは自分のテナントデータのみアクセス可能
+
+### 5. External Endpoint Abstraction
+**ファイル**: 
+- `src/ApiGateway/Sparql/ISparqlQueryService.cs` (抽象化)
+- `src/ApiGateway/Sparql/OrleansSparqlQueryService.cs` (Grain 使用)
+- `src/ApiGateway/Sparql/HttpSparqlQueryService.cs` (外部 HTTP endpoint 使用)
+
+**目的**: 将来的に外部 SPARQL Endpoint（Blazegraph, Stardog など）へ切り替え可能にする
+
+**DI 登録**: `src/ApiGateway/Program.cs`
+```csharp
+var sparqlConfig = builder.Configuration.GetSection("Sparql");
+if (sparqlConfig.GetValue<bool>("UseExternalEndpoint", false))
+    builder.Services.AddSingleton<ISparqlQueryService, HttpSparqlQueryService>();
+else
+    builder.Services.AddSingleton<ISparqlQueryService, OrleansSparqlQueryService>();
+```
+
+### 6. Unit Tests
+**ファイル**: `src/SiloHost.Tests/SparqlQueryGrainTests.cs`
+
+**テストケース**:
+1. `LoadRdfAsync_ParsesTurtleAndStoresTriples`: Turtle 形式の RDF をロード、トリプル数を検証
+2. `ExecuteQueryAsync_FiltersByTenant`: 2つのテナントデータをロード、クエリがテナント分離されることを確認
+3. `ExecuteQueryAsync_ReturnsBindings`: SELECT クエリを実行、結果の構造を検証
+4. `ClearAsync_RemovesTenantTriples`: ロード → クリア、トリプル数が0になることを確認
+
+**テストヘルパー**: `TestPersistentState<T>` を使用して Grain state をモック
+
+### 7. Integration Tests
+**ファイル**: `src/ApiGateway.Tests/SparqlEndpointTests.cs`
+
+**テストケース**:
+1. `POST_api_sparql_load_with_valid_rdf_returns_200`: RDF アップロードが成功
+2. `POST_api_sparql_query_with_select_returns_results`: SELECT クエリが結果を返す
+3. `POST_api_sparql_query_without_auth_returns_401`: 認証なしでは 401 エラー
+
+**テスト環境**: `WebApplicationFactory<Program>` + インメモリ Orleans クラスタ
+
+### 8. E2E Tests
+**ファイル**: `src/Telemetry.E2E.Tests/SparqlE2ETests.cs`
+
+**テストシナリオ**:
+```csharp
+[Fact]
+public async Task Sparql_LoadAndQuery_ReturnsExpectedBindings()
+{
+    // Arrange: SPARQL 有効化でクラスタ起動
+    var configOverrides = new Dictionary<string, string>
+    {
+        ["Sparql:Enabled"] = "true"
+    };
+    
+    // Act: seed.ttl をロード
+    var loadResponse = await apiClient.PostAsync("/api/sparql/load", ...);
+    
+    // Act: Building を検索する SPARQL クエリ
+    var queryResponse = await apiClient.PostAsync("/api/sparql/query", 
+        new { query = "SELECT ?s WHERE { ?s a <https://brickschema.org/schema/Brick#Building> }" });
+    
+    // Assert: 結果に Building URI が含まれる
+    var results = await queryResponse.Content.ReadFromJsonAsync<SparqlQueryResponse>();
+    results.Results.Should().NotBeEmpty();
+}
+```
+
+### 9. Documentation
+**新規ファイル**: `docs/sparql-query-service.md`
+
+**内容**:
+- アーキテクチャ概要（Grain 設計、テナントフィルタリング戦略）
+- 設定リファレンス（appsettings.json の各項目説明）
+- REST API 使用例（curl コマンド、クエリサンプル）
+- パフォーマンス考慮事項（トリプル数制限、タイムアウト設定）
+- 外部 Endpoint への移行ガイド
+
+**既存ファイル更新**:
+- `PROJECT_OVERVIEW.md`: SPARQL サービスをアーキテクチャ図に追加
+- `README.md`: SPARQL 機能の有効化手順を追加
+- `docs/api-gateway-apis.md`: SPARQL エンドポイントを API リファレンスに追加
+
+## Progress
+- [ ] Step 1: SPARQL Grain 実装
+- [ ] Step 2: Configuration サポート
+- [ ] Step 3: Silo 起動時統合
+- [ ] Step 4: REST API エンドポイント
+- [ ] Step 5: 外部 Endpoint 抽象化
+- [ ] Step 6: 単体テスト
+- [ ] Step 7: 統合テスト
+- [ ] Step 8: E2E テスト
+- [ ] Step 9: ドキュメント更新
+
+## Verification Steps
+
+### ビルド検証
+```bash
+dotnet build
+# 期待: エラーなし、警告なし（既存の CS8604 を除く）
+```
+
+### 単体テスト
+```bash
+dotnet test --filter FullyQualifiedName~SparqlQueryGrainTests
+# 期待: 4 tests passed
+```
+
+### 統合テスト
+```bash
+dotnet test --filter FullyQualifiedName~SparqlEndpointTests
+# 期待: 3 tests passed
+```
+
+### E2E テスト
+```bash
+dotnet test --filter FullyQualifiedName~Sparql_LoadAndQuery
+# 期待: 1 test passed
+```
+
+### 手動検証（Docker Compose）
+```bash
+# 1. SPARQL 有効化
+export SPARQL_ENABLED=true
+
+# 2. 起動
+docker compose up --build
+
+# 3. RDF ロード
+curl -X POST http://localhost:8080/api/sparql/load \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "@prefix brick: <https://brickschema.org/schema/Brick#> . <urn:building1> a brick:Building .", "format": "turtle"}'
+
+# 4. SPARQL クエリ実行
+curl -X POST http://localhost:8080/api/sparql/query \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 10"}'
+
+# 期待: JSON レスポンスに bindings 配列が含まれる
+```
+
+### 機能フラグテスト
+```bash
+# SPARQL 無効時
+export SPARQL_ENABLED=false
+docker compose up --build
+
+curl -X POST http://localhost:8080/api/sparql/query \
+  -H "Authorization: Bearer <token>" \
+  -d '{"query": "SELECT * WHERE { ?s ?p ?o }"}'
+
+# 期待: 404 Not Found または機能無効エラー
+```
+
+## Observations
+（実装中に発見した問題や予期しない動作をここに記録）
+
+## Retrospective
+（実装完了後、学んだこと、改善点、次のステップをここに記録）
+
+## Related Issues
+- Orleans Clustering Strategy: RDF データの永続化戦略は AdoNet Clustering 実装と連携する可能性あり
+- Graph Seeding: 現在の GraphSeedService が SPARQL Grain のデータソースとなる
+
+## Future Enhancements
+1. **リアルタイム RDF 更新**: Grain 状態変更時に RDF を動的に再構築
+2. **SPARQL Update**: INSERT/DELETE DATA による RDF 更新サポート
+3. **推論エンジン**: dotNetRDF の推論機能を活用した semantic reasoning
+4. **外部 Endpoint 統合**: Blazegraph, Stardog, GraphDB などとの連携
+5. **GraphQL ゲートウェイ**: SPARQL → GraphQL 変換レイヤー
+6. **クエリキャッシュ**: 頻繁に実行されるクエリ結果のメモリキャッシュ

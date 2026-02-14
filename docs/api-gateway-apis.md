@@ -162,9 +162,9 @@ ApiGateway は Orleans の最新状態・グラフ・履歴データを REST API
   - `404 NotFound`
   - `410 Gone`
 
-## gRPC API（計画仕様）
+## gRPC API（現状と拡張計画）
 
-gRPC は REST と等価な機能を提供する前提で設計します。以下は「実装時にあるべき」仕様の整理です。
+gRPC は `devices.proto` ベースで一部実装済みです。現状の提供 API と、将来的な拡張計画を以下に整理します。
 
 ### gRPC 認証・テナント
 
@@ -375,8 +375,8 @@ service TelemetryService {
 
 ### 実装メモ
 
-- 現行コードでは gRPC 実装が無効化されています。gRPC を有効にするには `DeviceService` の `DeviceServiceBase` 継承・実装を戻し、`Program.cs` の `MapGrpcService` が有効に動作するようにする必要があります。
-- 上記 proto は REST と等価な API を gRPC で提供するための設計案であり、実装完了時点で正式版に更新します。
+- 現行コードでは `Program.cs` で `DeviceService` と `RegistryGrpcService` を `MapGrpcService` 済みです（`Grpc:Enabled=true` の場合）。
+- `src/ApiGateway/Protos/devices.proto` が実装済み契約であり、上記の大きな proto は将来拡張の設計案です。
 
 ## OpenAPI/Swagger 出力
 
