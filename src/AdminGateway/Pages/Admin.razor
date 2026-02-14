@@ -351,7 +351,19 @@ else
                                 }
 
                                 <MudText Typo="Typo.subtitle2" Class="mt-4">Telemetry Trend</MudText>
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                                <div class="point-trend-controls mt-2">
+                                    <label>
+                                        Query Range
+                                        <select class="graph-input"
+                                                value="@_selectedTrendRangeKey"
+                                                @onchange="OnTrendRangeChanged"
+                                                disabled="_pointTrendLoading">
+                                            @foreach (var option in TrendRangeOptions)
+                                            {
+                                                <option value="@option.Key">@option.Label</option>
+                                            }
+                                        </select>
+                                    </label>
                                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_pointTrendLoading" OnClick="LoadPointTrendAsync">
                                         @if (_pointTrendLoading)
                                         {
@@ -364,9 +376,9 @@ else
                                     </MudButton>
                                     @if (_pointTrendRequested && !_pointTrendLoading && string.IsNullOrWhiteSpace(_pointTrendError))
                                     {
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Loaded latest telemetry trend.</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@_pointTrendStatusText</MudText>
                                     }
-                                </MudStack>
+                                </div>
 
                                 @if (_pointTrendLoading)
                                 {
@@ -494,7 +506,16 @@ else
     private bool _pointTrendRequested;
     private bool _pointTrendLoading;
     private string? _pointTrendError;
+    private string? _pointTrendStatusText;
+    private string _selectedTrendRangeKey = "15m";
     private const long DefaultGraphUploadLimitBytes = 10 * 1024 * 1024;
+    private static readonly IReadOnlyList<TrendRangeOption> TrendRangeOptions = new[]
+    {
+        new TrendRangeOption("5m", "Last 5 minutes", TimeSpan.FromMinutes(5), 120),
+        new TrendRangeOption("15m", "Last 15 minutes", TimeSpan.FromMinutes(15), 180),
+        new TrendRangeOption("1h", "Last 1 hour", TimeSpan.FromHours(1), 240),
+        new TrendRangeOption("6h", "Last 6 hours", TimeSpan.FromHours(6), 360)
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -646,7 +667,7 @@ else
 
     private async Task LoadPointTrendAsync()
     {
-        if (_selectedGraphNodeDetails?.PointGrainKey is null)
+        if (_selectedGraphNodeDetails?.PointGrainKey is null || string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             return;
         }
@@ -654,11 +675,37 @@ else
         _pointTrendRequested = true;
         _pointTrendLoading = true;
         _pointTrendError = null;
+        _pointTrendStatusText = null;
         _pointTrendSamples = Array.Empty<PointTrendSample>();
 
         try
         {
-            _pointTrendSamples = await Metrics.SamplePointTrendAsync(_selectedGraphNodeDetails.PointGrainKey);
+            if (!TryResolvePointQueryContext(
+                _selectedGraphNodeDetails,
+                _selectedGraphTenant!,
+                out var tenantId,
+                out var deviceId,
+                out var pointId))
+            {
+                _pointTrendError = "Point trend context is missing required IDs.";
+                return;
+            }
+
+            var range = GetSelectedTrendRange();
+            _pointTrendSamples = await Metrics.QueryPointTrendAsync(
+                tenantId,
+                deviceId,
+                pointId,
+                range.Duration,
+                range.MaxSamples);
+
+            if (_pointTrendSamples.Count == 0)
+            {
+                _pointTrendStatusText = $"No samples for {range.Label}.";
+                return;
+            }
+
+            _pointTrendStatusText = $"Loaded {_pointTrendSamples.Count} samples ({range.Label}).";
             if (_pointTrendSamples.All(sample => !sample.Value.HasValue))
             {
                 _pointTrendError = "Telemetry values are non-numeric and cannot be charted.";
@@ -726,7 +773,59 @@ else
         _pointTrendRequested = false;
         _pointTrendLoading = false;
         _pointTrendError = null;
+        _pointTrendStatusText = null;
     }
+
+    private void OnTrendRangeChanged(ChangeEventArgs args)
+    {
+        if (args.Value is string value && TrendRangeOptions.Any(option => option.Key == value))
+        {
+            _selectedTrendRangeKey = value;
+        }
+    }
+
+    private TrendRangeOption GetSelectedTrendRange()
+        => TrendRangeOptions.FirstOrDefault(option => option.Key == _selectedTrendRangeKey)
+           ?? TrendRangeOptions[1];
+
+    private static bool TryResolvePointQueryContext(
+        GraphNodeDetailView details,
+        string tenantId,
+        out string resolvedTenant,
+        out string deviceId,
+        out string pointId)
+    {
+        resolvedTenant = tenantId;
+        deviceId = string.Empty;
+        pointId = string.Empty;
+
+        var attributes = details.Snapshot.Node.Attributes;
+        if (attributes.TryGetValue("DeviceId", out var device) && !string.IsNullOrWhiteSpace(device))
+        {
+            deviceId = device;
+        }
+
+        if (attributes.TryGetValue("PointId", out var point) && !string.IsNullOrWhiteSpace(point))
+        {
+            pointId = point;
+        }
+        else if (!string.IsNullOrWhiteSpace(details.PointGrainKey))
+        {
+            var separator = details.PointGrainKey.IndexOf(':');
+            pointId = separator >= 0 && separator < details.PointGrainKey.Length - 1
+                ? details.PointGrainKey[(separator + 1)..]
+                : details.PointGrainKey;
+        }
+
+        if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(pointId))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private sealed record TrendRangeOption(string Key, string Label, TimeSpan Duration, int MaxSamples);
 
     private static string GetNodeLabel(GraphNodeSnapshot snapshot)
     {

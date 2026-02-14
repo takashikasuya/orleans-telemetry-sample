@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Orleans;
 using Orleans.Runtime;
 using Telemetry.Ingest;
+using Telemetry.Storage;
 
 namespace AdminGateway.Services;
 
@@ -19,17 +20,20 @@ internal sealed class AdminMetricsService
 {
     private readonly IClusterClient _client;
     private readonly TelemetryStorageScanner _storageScanner;
+    private readonly ITelemetryStorageQuery _storageQuery;
     private readonly TelemetryIngestOptions _ingestOptions;
     private readonly ILogger<AdminMetricsService> _logger;
 
     public AdminMetricsService(
         IClusterClient client,
         TelemetryStorageScanner storageScanner,
+        ITelemetryStorageQuery storageQuery,
         IOptions<TelemetryIngestOptions> ingestOptions,
         ILogger<AdminMetricsService> logger)
     {
         _client = client;
         _storageScanner = storageScanner;
+        _storageQuery = storageQuery;
         _ingestOptions = ingestOptions.Value;
         _logger = logger;
     }
@@ -476,6 +480,51 @@ internal sealed class AdminMetricsService
         return results;
     }
 
+    public async Task<IReadOnlyList<PointTrendSample>> QueryPointTrendAsync(
+        string tenantId,
+        string deviceId,
+        string pointId,
+        TimeSpan duration,
+        int maxSamples = 240,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) ||
+            string.IsNullOrWhiteSpace(deviceId) ||
+            string.IsNullOrWhiteSpace(pointId))
+        {
+            return Array.Empty<PointTrendSample>();
+        }
+
+        var safeDuration = duration <= TimeSpan.Zero ? TimeSpan.FromMinutes(5) : duration;
+        var safeMaxSamples = Math.Max(10, maxSamples);
+        var to = DateTimeOffset.UtcNow;
+        var from = to - safeDuration;
+        var request = new TelemetryQueryRequest(
+            tenantId,
+            deviceId,
+            from,
+            to,
+            pointId,
+            safeMaxSamples * 4);
+
+        var items = await _storageQuery.QueryAsync(request, ct);
+        if (items.Count == 0)
+        {
+            return Array.Empty<PointTrendSample>();
+        }
+
+        var ordered = items
+            .OrderBy(item => item.OccurredAt)
+            .Select(item =>
+            {
+                var (value, raw) = NormalizeValueJson(item.ValueJson);
+                return new PointTrendSample(item.OccurredAt, value, raw ?? item.ValueJson);
+            })
+            .ToList();
+
+        return DownsampleTrend(ordered, safeMaxSamples);
+    }
+
     public async Task<IReadOnlyList<GrainHierarchyNode>> GetGrainHierarchyAsync(
         int maxTypesPerSilo = 20,
         int maxGrainsPerType = 50)
@@ -920,5 +969,48 @@ internal sealed class AdminMetricsService
             default:
                 return (null, element.ToString());
         }
+    }
+
+    private static (double? Value, string? Raw) NormalizeValueJson(string? valueJson)
+    {
+        if (string.IsNullOrWhiteSpace(valueJson))
+        {
+            return (null, null);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(valueJson);
+            var normalized = NormalizeNumericValue(document.RootElement.Clone());
+            return normalized.Raw is null ? (normalized.Value, valueJson) : normalized;
+        }
+        catch (JsonException)
+        {
+            if (double.TryParse(valueJson, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return (parsed, valueJson);
+            }
+
+            return (null, valueJson);
+        }
+    }
+
+    private static IReadOnlyList<PointTrendSample> DownsampleTrend(IReadOnlyList<PointTrendSample> samples, int maxSamples)
+    {
+        if (samples.Count <= maxSamples)
+        {
+            return samples;
+        }
+
+        var step = (double)(samples.Count - 1) / (maxSamples - 1);
+        var reduced = new List<PointTrendSample>(maxSamples);
+        for (var i = 0; i < maxSamples; i++)
+        {
+            var index = (int)Math.Round(i * step);
+            index = Math.Clamp(index, 0, samples.Count - 1);
+            reduced.Add(samples[index]);
+        }
+
+        return reduced;
     }
 }

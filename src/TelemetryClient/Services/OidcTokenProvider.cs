@@ -30,6 +30,7 @@ public sealed class OidcTokenProvider
     {
         if (IsTokenValid())
         {
+            _logger.LogDebug("Using cached OIDC token");
             return _accessToken;
         }
 
@@ -38,6 +39,7 @@ public sealed class OidcTokenProvider
         {
             if (IsTokenValid())
             {
+                _logger.LogDebug("Using cached OIDC token (after lock)");
                 return _accessToken;
             }
 
@@ -52,6 +54,8 @@ public sealed class OidcTokenProvider
             {
                 tokenEndpoint = $"{_options.Authority.TrimEnd('/')}/token";
             }
+
+            _logger.LogInformation("Requesting OIDC token from {TokenEndpoint}", tokenEndpoint);
 
             var form = new List<KeyValuePair<string, string>>
             {
@@ -110,6 +114,8 @@ public sealed class OidcTokenProvider
             _accessToken = accessToken;
             _expiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn - skew);
 
+            _logger.LogInformation("Successfully obtained OIDC token, expires in {ExpiresIn} seconds", expiresIn);
+            
             return _accessToken;
         }
         finally

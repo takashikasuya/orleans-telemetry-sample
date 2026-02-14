@@ -262,10 +262,15 @@ public sealed class AdminPageTests : TestContext
                 IndexPath = "./not-used-index"
             }),
             NullLogger<TelemetryStorageScanner>.Instance);
+        var storageQuery = new Mock<ITelemetryStorageQuery>();
+        storageQuery
+            .Setup(q => q.QueryAsync(It.IsAny<TelemetryQueryRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<TelemetryQueryResult>());
 
         return new AdminMetricsService(
             client.Object,
             storageScanner,
+            storageQuery.Object,
             Options.Create(new TelemetryIngestOptions()),
             NullLogger<AdminMetricsService>.Instance);
     }

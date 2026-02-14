@@ -3967,6 +3967,7 @@ Publisher が RabbitMQ 切断時に停止せず、一定間隔を空けながら
 
 ## Verification
 - `dotnet build` : 成功（0 errors / 0 warnings）
+- `dotnet test` : 成功（全テスト pass）
 - `dotnet test` : 成功（全テスト pass、`Publisher.Tests` は 10 件）
 
 ## Retrospective
@@ -4009,3 +4010,80 @@ Publisher README に RDF 起動コマンドと、RDF 駆動時に RabbitMQ へ p
 
 ## Retrospective
 - README へ具体例を追加することで、RDF モード利用時の設定と出力イメージをすぐ確認できる状態になった。
+
+---
+
+# plans.md: Admin UI Telemetry Trend UX Improvements (2026-02-14)
+
+## Purpose
+Admin UI の `Load Telemetry` でチャート描画がペインからあふれる問題を解消し、期間選択・軸線・Tooltip を追加して可読性を改善する。
+
+## Success Criteria
+1. Telemetry trend のクエリ期間を UI から選択できること。
+2. チャートが表示ペイン内に収まり、リサイズ時にも破綻しないこと。
+3. グリッド線（軸線）を表示し、ホバー時に時刻と値の Tooltip を表示できること。
+4. `dotnet build` が成功すること。
+
+## Steps
+1. `Admin.razor` に期間選択 UI と選択値を反映した trend 読み込み処理を追加する。
+2. `AdminMetricsService` に期間指定の trend クエリを実装する（Parquet クエリ経由）。
+3. `chart.js` と `app.css` を更新し、レスポンシブ描画・軸線・Tooltip を実装する。
+4. `dotnet build` でビルド確認する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+## Observations
+- 既存の trend 取得は `SamplePointTrendAsync` で point grain をポーリングしており、クエリ期間を広げると待機時間が長くなる構造だった。
+- 既存チャート実装は `canvas.height = 400` 固定で、コンテナの `320px` 高さを超えて描画があふれていた。
+- Graph point ノードの属性には `DeviceId` / `PointId` が含まれるため、Parquet クエリのキーとして利用できた。
+
+## Decisions
+- クエリ期間は `Last 5 minutes / 15 minutes / 1 hour / 6 hours` のプリセット選択にし、履歴は `ITelemetryStorageQuery` で取得する方式に変更した。
+- チャートは既存の canvas 実装を維持しつつ、`ResizeObserver` ベースのレスポンシブ描画、グリッド線、Tooltip を追加する方針を採用した。
+- サンプル数が過大な場合は UI レンダリング負荷を抑えるために均等間引き（downsample）する。
+
+## Verification
+- `dotnet build` : 成功（0 errors / 0 warnings）
+
+## Retrospective
+- 期間指定の履歴クエリと視認性改善を同時に導入でき、`Load Telemetry` の実運用性が上がった。
+- 今後は `dotnet test` と実ブラウザ操作で tooltip・期間別表示の挙動確認を追加するとさらに堅牢になる。
+
+---
+
+# plans.md: Spatial Hierarchy Order and Storage Zero Root Cause (2026-02-14)
+
+## Purpose
+Admin UI の表示順で `Spatial Hierarchy` を上部に配置し、`Storage` が常に 0 となる原因を特定して説明する。
+
+## Success Criteria
+1. `Spatial Hierarchy` が UI 上で先頭セクションとして表示されること。
+2. `Storage` が 0 の原因をコード・設定ベースで説明できること。
+
+## Steps
+1. レイアウト定義を確認し、`Spatial Hierarchy` の表示順を上部へ調整する。
+2. `TelemetryStorage` 設定と Docker Compose のマウント設定を確認し、`Storage` が 0 になる条件を特定する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+
+## Observations
+- `layout-content` は縦方向 flex レイアウトで、`.graph-card` に `order` を付与するとセクション順を変更できる。
+- `SiloHost` 設定では `TelemetryIngest:EventSinks:Enabled` が `Logging` のみで、`ParquetStorage` が有効化されていない。
+- `docker-compose.yml` の `admin` サービスは `graph-uploads` のみマウントし、`storage/*` を参照するボリュームがない。
+
+## Decisions
+- マークアップの大移動は避け、`.graph-card { order: -1; }` で最小変更にする。
+- `Storage` 0 の説明は「データ未生成（ParquetStorage無効）」と「Admin側参照不可（volume未共有）」の2点で整理する。
+
+## Verification
+- `dotnet build` : 成功（0 errors / 0 warnings）
+
+## Retrospective
+- UI 表示順は CSS の最小変更で対応できた。
+- Storage 表示は設定とデプロイ構成の両方が揃って初めて非ゼロになることが確認できた。

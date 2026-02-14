@@ -22,15 +22,40 @@ public class RegistryService
     {
         try
         {
+            _logger.LogInformation("Fetching sites for tenant {TenantId}", tenantId);
             var response = await _httpClient.GetAsync($"/api/registry/sites?tenantId={tenantId}", cancellationToken);
-            response.EnsureSuccessStatusCode();
+            
+            _logger.LogInformation("Registry sites response: {StatusCode}", response.StatusCode);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Registry sites request failed with {StatusCode}: {Content}", response.StatusCode, errorContent);
+                return new List<GraphNodeDto>();
+            }
             
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            var result = JsonSerializer.Deserialize<RegistryResponse>(content, JsonOptions);
+            _logger.LogDebug("Registry sites response content: {Content}", content);
+            
+            var result = JsonSerializer.Deserialize<RegistryQueryResponse>(content, JsonOptions);
 
-            return result?.Nodes
-                ?? result?.Items
-                ?? new List<GraphNodeDto>();
+            // Handle both inline results and empty results
+            if (result?.Items == null || result.Items.Count == 0)
+            {
+                _logger.LogInformation("Registry returned {Count} sites (result is null: {IsNull})", result?.TotalCount ?? 0, result == null);
+                return new List<GraphNodeDto>();
+            }
+
+            _logger.LogInformation("Successfully fetched {Count} sites", result.Items.Count);
+            
+            // Convert RegistryNodeSummary to GraphNodeDto
+            return result.Items.Select(item => new GraphNodeDto(
+                item.NodeId,
+                item.NodeType,
+                item.DisplayName, // Use DisplayName as Name
+                item.DisplayName,
+                item.Attributes?.ToDictionary(k => k.Key, k => (object)k.Value)
+            )).ToList();
         }
         catch (Exception ex)
         {
@@ -47,11 +72,20 @@ public class RegistryService
             response.EnsureSuccessStatusCode();
             
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            var result = JsonSerializer.Deserialize<RegistryResponse>(content, JsonOptions);
+            var result = JsonSerializer.Deserialize<RegistryQueryResponse>(content, JsonOptions);
 
-            return result?.Nodes
-                ?? result?.Items
-                ?? new List<GraphNodeDto>();
+            if (result?.Items == null || result.Items.Count == 0)
+            {
+                return new List<GraphNodeDto>();
+            }
+
+            return result.Items.Select(item => new GraphNodeDto(
+                item.NodeId,
+                item.NodeType,
+                item.DisplayName,
+                item.DisplayName,
+                item.Attributes?.ToDictionary(k => k.Key, k => (object)k.Value)
+            )).ToList();
         }
         catch (Exception ex)
         {
@@ -59,11 +93,20 @@ public class RegistryService
             return new List<GraphNodeDto>();
         }
     }
+QueryResponse>(content, JsonOptions);
 
-    public async Task<List<GraphNodeDto>> GetDevicesAsync(string tenantId, CancellationToken cancellationToken = default)
-    {
-        try
-        {
+            if (result?.Items == null || result.Items.Count == 0)
+            {
+                return new List<GraphNodeDto>();
+            }
+
+            return result.Items.Select(item => new GraphNodeDto(
+                item.NodeId,
+                item.NodeType,
+                item.DisplayName,
+                item.DisplayName,
+                item.Attributes?.ToDictionary(k => k.Key, k => (object)k.Value)
+            )).ToList
             var response = await _httpClient.GetAsync($"/api/registry/devices?tenantId={tenantId}", cancellationToken);
             response.EnsureSuccessStatusCode();
             
@@ -78,10 +121,20 @@ public class RegistryService
         {
             _logger.LogError(ex, "Failed to fetch devices for tenant {TenantId}", tenantId);
             return new List<GraphNodeDto>();
-        }
-    }
+// API response types matching ApiGateway's RegistryQueryResponse
+public record RegistryQueryResponse(
+    string Mode,
+    int Count,
+    int TotalCount,
+    List<RegistryNodeSummary>? Items,
+    string? Url,
+    DateTimeOffset? ExpiresAt);
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+public record RegistryNodeSummary(
+    string NodeId,
+    string NodeType,
+    string DisplayName,
+    IReadOnlyDictionary<string, string>? Attributesadonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
