@@ -43,12 +43,23 @@ internal static class Program
         var spaceId = Environment.GetEnvironmentVariable("SPACE_ID") ?? "floor-1/room-1";
         var rand = new Random();
 
+        var profile = EmulatorProfileLoader.TryLoad(args);
+        if (profile is not null)
+        {
+            tenant = profile.TenantId ?? tenant;
+            buildingName = profile.Site?.BuildingName ?? buildingName;
+            spaceId = profile.Site?.SpaceId ?? spaceId;
+            baseIntervalMs = profile.Timing?.IntervalMs ?? baseIntervalMs;
+        }
+
         var rdfPath = Environment.GetEnvironmentVariable("RDF_SEED_PATH");
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddSimpleConsole());
         var logger = loggerFactory.CreateLogger("Publisher");
         var rdfGenerator = await TryCreateRdfGeneratorAsync(rdfPath, logger, loggerFactory);
         var useRdf = rdfGenerator is not null && rdfGenerator.DeviceCount > 0;
         var rdfDevices = rdfGenerator?.Devices ?? Array.Empty<RdfTelemetryGenerator.RdfDeviceDefinition>();
+        var profileGenerator = profile is null ? null : new ProfileTelemetryGenerator(profile);
+        var profileDevices = profile?.Devices ?? Array.Empty<EmulatorDeviceProfile>();
 
         var factory = new ConnectionFactory
         {
@@ -66,7 +77,9 @@ internal static class Program
 
         var sequences = new Dictionary<string, long>();
         var controlOverrides = new ConcurrentDictionary<(string DeviceId, string PointId), object?>();
-        var pointRegistry = BuildPointRegistry(rdfDevices);
+        var pointRegistry = profileGenerator is not null && profileDevices.Count > 0
+            ? BuildPointRegistryFromProfile(profileDevices)
+            : BuildPointRegistry(rdfDevices);
         var controlConsumer = new AsyncEventingBasicConsumer(controlChannel);
         controlConsumer.Received += (_, args) => ProcessControlMessage(args, controlChannel, controlOverrides, pointRegistry, logger);
         controlChannel.BasicConsume(controlQueue, autoAck: false, consumer: controlConsumer);
@@ -87,7 +100,18 @@ internal static class Program
                 nextBurstSwitch = DateTimeOffset.UtcNow + (inBurst ? burstDuration : burstPause);
             }
 
-            if (useRdf)
+            if (profileGenerator is not null && profileDevices.Count > 0)
+            {
+                foreach (var device in profileDevices)
+                {
+                    var seq = NextSequence(sequences, device.DeviceId);
+                    var msg = profileGenerator.CreateTelemetry(tenant, buildingName, spaceId, device, seq);
+                    ApplyControlOverrides(msg, controlOverrides, pointRegistry, logger);
+                    PublishMessage(channel, msg);
+                    await Task.Delay(inBurst ? burstInterval : baseInterval);
+                }
+            }
+            else if (useRdf)
             {
                 foreach (var device in rdfDevices)
                 {
@@ -216,21 +240,35 @@ internal static class Program
         return bool.TryParse(value, out var parsed) && parsed;
     }
 
-    private static IReadOnlyDictionary<(string DeviceId, string PointId), RdfTelemetryGenerator.RdfPointDefinition> BuildPointRegistry(IEnumerable<RdfTelemetryGenerator.RdfDeviceDefinition> devices)
+    private static IReadOnlyDictionary<(string DeviceId, string PointId), PointRegistryEntry> BuildPointRegistry(IEnumerable<RdfTelemetryGenerator.RdfDeviceDefinition> devices)
     {
-        var registry = new Dictionary<(string DeviceId, string PointId), RdfTelemetryGenerator.RdfPointDefinition>();
+        var registry = new Dictionary<(string DeviceId, string PointId), PointRegistryEntry>();
         foreach (var device in devices)
         {
             foreach (var point in device.Points)
             {
-                registry[(device.DeviceId, point.PointId)] = point;
+                registry[(device.DeviceId, point.PointId)] = new PointRegistryEntry(point.PointId, point.Writable);
             }
         }
 
         return registry;
     }
 
-    private static void ApplyControlOverrides(TelemetryMsg msg, ConcurrentDictionary<(string DeviceId, string PointId), object?> overrides, IReadOnlyDictionary<(string DeviceId, string PointId), RdfTelemetryGenerator.RdfPointDefinition> registry, ILogger logger)
+    private static IReadOnlyDictionary<(string DeviceId, string PointId), PointRegistryEntry> BuildPointRegistryFromProfile(IEnumerable<EmulatorDeviceProfile> devices)
+    {
+        var registry = new Dictionary<(string DeviceId, string PointId), PointRegistryEntry>();
+        foreach (var device in devices)
+        {
+            foreach (var point in device.Points)
+            {
+                registry[(device.DeviceId, point.Id)] = new PointRegistryEntry(point.Id, point.Writable);
+            }
+        }
+
+        return registry;
+    }
+
+    private static void ApplyControlOverrides(TelemetryMsg msg, ConcurrentDictionary<(string DeviceId, string PointId), object?> overrides, IReadOnlyDictionary<(string DeviceId, string PointId), PointRegistryEntry> registry, ILogger logger)
     {
         foreach (var kvp in overrides)
         {
@@ -255,7 +293,7 @@ internal static class Program
         }
     }
 
-    private static Task ProcessControlMessage(BasicDeliverEventArgs args, IModel channel, ConcurrentDictionary<(string DeviceId, string PointId), object?> overrides, IReadOnlyDictionary<(string DeviceId, string PointId), RdfTelemetryGenerator.RdfPointDefinition> registry, ILogger logger)
+    private static Task ProcessControlMessage(BasicDeliverEventArgs args, IModel channel, ConcurrentDictionary<(string DeviceId, string PointId), object?> overrides, IReadOnlyDictionary<(string DeviceId, string PointId), PointRegistryEntry> registry, ILogger logger)
     {
         try
         {
@@ -375,6 +413,9 @@ internal static class Program
             _ => element.GetRawText()
         };
     }
+
+
+    private sealed record PointRegistryEntry(string PointId, bool Writable);
 
     private sealed record ControlCommand(string DeviceId, string PointId, object? Value, bool Clear);
 }

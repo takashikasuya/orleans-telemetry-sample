@@ -38,6 +38,15 @@ dotnet run --project src/Publisher
 - `--burst-interval-ms`
 - `--burst-duration-sec`
 - `--burst-pause-sec`
+- `--profile <name>` (`profiles/<name>.json` を探索)
+- `--profile-file <path>` (任意パスの profile JSON を直接指定)
+
+プロファイル関連環境変数:
+
+- `PUBLISH_PROFILE` (`--profile` 未指定時に使用)
+
+選択優先順位は **`--profile-file` > `--profile` > `PUBLISH_PROFILE`** です。
+どれも未指定の場合は、従来どおり `RDF_SEED_PATH` 有無で RDF/ランダム生成を切り替えます。
 
 ---
 
