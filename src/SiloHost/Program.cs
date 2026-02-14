@@ -34,6 +34,7 @@ internal static class Program
             var ingestSection = context.Configuration.GetSection("TelemetryIngest");
             var storageSection = context.Configuration.GetSection("TelemetryStorage");
             services.AddTelemetryIngest(ingestSection);
+            services.AddSingleton<ITelemetryPointRegistrationFilter, GraphRegisteredTelemetryPointFilter>();
             // Connector registration stays in code; config controls which ones are enabled.
             services.AddKafkaIngest(ingestSection.GetSection("Kafka"));
             services.AddRabbitMqIngest(ingestSection.GetSection("RabbitMq"));

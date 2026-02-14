@@ -94,6 +94,7 @@ internal static class Program
                 connectors,
                 new[] { sink },
                 router,
+                new AllowAllTelemetryPointRegistrationFilter(),
                 options,
                 NullLogger<TelemetryIngestCoordinator>.Instance);
 

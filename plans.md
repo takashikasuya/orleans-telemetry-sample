@@ -1552,7 +1552,7 @@ GraphNodeGrain と PointGrain の関連めEAPI で活用し、`/api/nodes/{nodeI
 - [x] Step 1: 付与ルールの整琁E
 - [x] Step 2: Graph から Point 解決の設訁E
 - [x] Step 3: ApiGateway 実裁E
-- [ ] Step 4: DataModel/Graph 属性整傁E
+- [x] Step 4: DataModel/Graph 属性整傁E
 - [x] Step 5: チE��ト追加/更新
 - [ ] Step 6: 検証
 
@@ -2131,7 +2131,7 @@ RDFから抽出される `CustomTags` をGraphノード属性へ反映し、タ�
 - [x] Step 1: 既存構成確認と属性方針確定
 - [ ] Step 2: CustomTags反映
 - [ ] Step 3: REST/gRPC公開
-- [ ] Step 4: テスト追加
+- [x] Step 4: テスト追加
 - [ ] Step 5: 検証記録
 
 ## Observations
@@ -2181,7 +2181,7 @@ RDFから抽出される `CustomTags` をGraphノード属性へ反映し、タ�
 - [x] Step 1: 方針確定
 - [ ] Step 2: Grain追加
 - [ ] Step 3: サービス/テスト更新
-- [ ] Step 4: 検証
+- [x] Step 4: 検証
 
 ## Decisions
 - 逆引きGrainは `ByTag` と `TagsByNode` の双方向状態を持ち、同一 nodeId の再インデックス時に差分更新できるようにする。
@@ -2228,7 +2228,7 @@ README の情報量を一般的なリポジトリ案内レベルに整理し、�
 - [x] Step 1: 冗長セクション棚卸し
 - [ ] Step 2: docs へ移管
 - [ ] Step 3: README 再構成
-- [ ] Step 4: build/test 検証
+- [x] Step 4: build/test 検証
 
 ## Observations
 - README がアーキテクチャ詳細、設定 JSON、運用手順、各種シーケンス図まで含んでおり、初見導線としては情報過多。
@@ -2443,3 +2443,40 @@ ApiGateway が Orleans Gateway 起動前に落ちる問題を防ぐため、起�
 
 ## Retrospective
 - PointGrainKey 仕様変更に追随していなかったテスト期待値のみを最小修正し、実装意図とテスト整合性を回復した。
+
+---
+
+# plans.md: Filter unregistered telemetry at ingest (2026-02-13)
+
+## Purpose
+RDF/Graph に未登録の telemetry を ingest で除外し、ルーティング・ストレージ保存対象を登録済み Point のみに制限する。あわせて telemetry 同定は tenantId/deviceId/pointId を基準とし、spaceId 非必須前提で判定する。
+
+## Success Criteria
+1. Ingest ループで未登録ポイントを破棄できる（router/sink に流れない）。
+2. 登録判定は tenantId/deviceId/pointId を利用し、spaceId に依存しない。
+3. `dotnet build` と `dotnet test` が成功する。
+
+## Steps
+1. Ingest に登録判定インターフェースを追加し、Route/Sink 前にフィルタを適用する。
+2. SiloHost で Graph registry を参照する判定実装を追加し DI で差し替える。
+3. Ingest テストを拡張し、未登録メッセージが router/sink に流れないことを検証する。
+4. build/test を実行する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+## Observations
+- 既存実装は connector から受信した TelemetryPointMsg を無条件で router/sink に渡していた。
+- Graph node には PointId/DeviceId 属性が seed 時点で付与されるため、登録判定に利用可能。
+
+## Decisions
+- 登録判定は `ITelemetryPointRegistrationFilter` として抽象化し、Telemetry.Ingest 側の既定は AllowAll にして後方互換を維持。
+- SiloHost では Graph 登録済み Point を参照する `GraphRegisteredTelemetryPointFilter` を DI で上書き登録する。
+
+## Retrospective
+- 登録フィルタを ingest coordinator の入口に追加し、未登録データは router/sink の双方に到達しないようにできた。
+- SiloHost では Graph seed の PointId/DeviceId 属性を参照して登録判定を行う実装を導入し、spaceId 非依存の同定要件に合わせた。
+- `dotnet build` と `dotnet test` は成功。
