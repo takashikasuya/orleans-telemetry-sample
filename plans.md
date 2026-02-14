@@ -2529,3 +2529,88 @@ Telemetry.Ingest のコネクタ拡張ポイントを明確化するため、フ
 ## Retrospective (2026-02-14)
 - コネクタ拡張点がフォルダ構成で明確になり、実装者が追加時に参照すべき場所が分かりやすくなった。
 - Telemetry.Ingest.Tests は 6 件→12 件になり、Coordinator + Simulator に加えて RabbitMQ/Kafka の変換ロジックを直接検証できるようになった。
+
+---
+
+# plans.md: MQTT Connector Design + Backpressure Test Plan (2026-02-14)
+
+## Purpose
+MQTTコネクタを追加する際の実装方針を先に設計し、受け入れtopic/必須パラメータを外部化可能にしたうえで、バックプレッシャー機能を検証できるテスト計画を定義する。
+
+## Success Criteria
+1. MQTTコネクタの設計ドキュメントが追加され、topic受け入れ仕様と設定外部化方針が明文化されている。
+2. backpressure（channel満杯時）で期待すべき挙動と観測メトリクス、テストケースが定義されている。
+3. docs インデックス（コネクタ説明）から MQTT 設計ドキュメントへ辿れる。
+4. `dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. 既存の ingest connector 設計（RabbitMQ/Kafka/Simulator）を確認し、MQTTに適用する共通方針を整理する。
+2. MQTT コネクタ設計ドキュメントを追加し、topic binding とオプション外部化仕様を定義する。
+3. backpressure の試験観点を unit / integration / load で定義する。
+4. `dotnet build` / `dotnet test` を実行してリポジトリ整合を確認する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+## Observations
+- 既存コネクタは `Connectors/<Name>/` 配下に実装されており、MQTTも同構造が自然。
+- backpressure の実体は `TelemetryIngestCoordinator` が読む channel 容量に依存するため、MQTT 側は内部無制限キューを持たない設計が重要。
+- build/test は成功（既存 warning は継続）。
+
+## Decisions
+- MQTT 受け入れ topic は `TopicBindings[]` で複数定義し、tenant/device/point の抽出元を Topic/Payload から選択可能にする。
+- backpressure ポリシーは `Block` を既定とし、`DropNewest` 等を設定で切替可能にする設計案を採用。
+- 検証は unit（変換ロジック）/integration（実 broker）/backpressure load（満杯時挙動）を分離して計画する。
+
+## Retrospective
+- 実装前に topic スキーマと backpressure 検証計画を明文化できたため、後続実装での仕様ぶれを抑制できる。
+- docs 側に MQTT 設計への導線を追加し、コネクタ拡張資料として参照しやすくなった。
+
+## Update (2026-02-14, feedback)
+- 追加フィードバック「バックプレッシャーの意図と実装をもう少し解説」に対応。
+- `docs/mqtt-connector-design.md` に以下を追記:
+  - 意図（壊れずに遅くなる、OOM 回避、可観測性優先）
+  - 実装イメージ（`WriteAsync` 待機点、ポリシー別挙動、QoSとの関係、停止時drain）
+- これにより「なぜその設計か」と「実装時にどこで効かせるか」が読み手に分かる形へ強化。
+
+---
+
+# plans.md: MQTT Connector Implementation (2026-02-14)
+
+## Purpose
+設計済みの MQTT コネクタ仕様を実装へ落とし込み、topic 正規表現による ID 抽出、`value`/`datetime` payload 取り込み、backpressure ポリシーを実コードで動作させる。
+
+## Success Criteria
+1. `Telemetry.Ingest` に MQTT コネクタ実装（Options/DI/Connector）が追加される。
+2. tenant/device/point は topic regex（named group）から抽出され、payload は `value`/`datetime` として処理される。
+3. backpressure ポリシー（`Block`/`DropNewest`/`FailFast`）の少なくとも主要分岐をテストで検証する。
+4. SiloHost から MQTT コネクタを登録可能で、設定例が appsettings に存在する。
+5. `dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. MQTT options と connector クラスを追加し、regex 抽出 + payload 解析 + write policy を実装する。
+2. DI 拡張と SiloHost 登録、appsettings の Mqtt セクションを追加する。
+3. `Telemetry.Ingest.Tests` に MQTT コネクタのユニットテストを追加する。
+4. build/test 実行で検証し、結果を記録する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+## Observations
+- MQTTnet の受信イベントで `ChannelWriter` へ直接書き込む構造は、既存 coordinator の bounded channel と整合しやすい。
+- `FailFast` は timeout を `TimeoutException` に統一して扱い、運用上の判別を容易にした。
+
+## Decisions
+- 実装初版は payload schema を `value`/`datetime` に限定し、ID は topic regex のみを正とした。
+- backpressure は connector 内部キューを持たず、coordinator channel を唯一のバッファとして扱う。
+
+## Retrospective
+- MQTT connectorの実装（Options/DI/Connector）を追加し、topic regex + payload(value/datetime) の取り込み経路を実コード化した。
+- backpressure の `DropNewest` / `FailFast` をユニットテストで検証し、チャネル満杯時の挙動を固定化できた。
+- `dotnet build` / `dotnet test` は成功（既存 warning は継続）。
