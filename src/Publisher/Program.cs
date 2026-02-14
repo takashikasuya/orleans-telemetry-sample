@@ -34,6 +34,12 @@ internal static class Program
         var burstPauseSeconds = GetIntArgValue(args, "--burst-pause-sec")
             ?? GetIntEnvValue("BURST_PAUSE_SEC")
             ?? 20;
+        var reconnectInitialMs = GetIntArgValue(args, "--reconnect-initial-ms")
+            ?? GetIntEnvValue("RABBITMQ_RECONNECT_INITIAL_MS")
+            ?? 1000;
+        var reconnectMaxMs = GetIntArgValue(args, "--reconnect-max-ms")
+            ?? GetIntEnvValue("RABBITMQ_RECONNECT_MAX_MS")
+            ?? 30000;
 
         var randomDeviceIds = Enumerable.Range(1, Math.Max(1, deviceCount))
             .Select(i => $"dev-{i}")
@@ -68,21 +74,13 @@ internal static class Program
             UserName = Environment.GetEnvironmentVariable("RABBITMQ_USER") ?? "user",
             Password = Environment.GetEnvironmentVariable("RABBITMQ_PASS") ?? "password",
         };
-        using var conn = factory.CreateConnection();
-        using var channel = conn.CreateModel();
-        channel.QueueDeclare(queue: "telemetry", durable: false, exclusive: false, autoDelete: false);
-        using var controlChannel = conn.CreateModel();
         var controlQueue = Environment.GetEnvironmentVariable("CONTROL_QUEUE") ?? "telemetry-control";
-        controlChannel.QueueDeclare(queue: controlQueue, durable: false, exclusive: false, autoDelete: false);
 
         var sequences = new Dictionary<string, long>();
         var controlOverrides = new ConcurrentDictionary<(string DeviceId, string PointId), object?>();
         var pointRegistry = profileGenerator is not null && profileDevices.Count > 0
             ? BuildPointRegistryFromProfile(profileDevices)
             : BuildPointRegistry(rdfDevices);
-        var controlConsumer = new AsyncEventingBasicConsumer(controlChannel);
-        controlConsumer.Received += (_, args) => ProcessControlMessage(args, controlChannel, controlOverrides, pointRegistry, logger);
-        controlChannel.BasicConsume(controlQueue, autoAck: false, consumer: controlConsumer);
 
         var useBurst = burstEnabled && burstIntervalMs > 0;
         var baseInterval = TimeSpan.FromMilliseconds(Math.Max(1, baseIntervalMs));
@@ -91,48 +89,95 @@ internal static class Program
         var burstPause = TimeSpan.FromSeconds(Math.Max(1, burstPauseSeconds));
         var nextBurstSwitch = DateTimeOffset.UtcNow + burstPause;
         var inBurst = false;
+        var reconnectAttempts = 0;
 
         while (true)
         {
-            if (useBurst && DateTimeOffset.UtcNow >= nextBurstSwitch)
+            try
             {
-                inBurst = !inBurst;
-                nextBurstSwitch = DateTimeOffset.UtcNow + (inBurst ? burstDuration : burstPause);
-            }
+                using var conn = factory.CreateConnection();
+                using var channel = conn.CreateModel();
+                channel.QueueDeclare(queue: "telemetry", durable: false, exclusive: false, autoDelete: false);
+                using var controlChannel = conn.CreateModel();
+                controlChannel.QueueDeclare(queue: controlQueue, durable: false, exclusive: false, autoDelete: false);
 
-            if (profileGenerator is not null && profileDevices.Count > 0)
-            {
-                foreach (var device in profileDevices)
+                var controlConsumer = new AsyncEventingBasicConsumer(controlChannel);
+                controlConsumer.Received += (_, args) => ProcessControlMessage(args, controlChannel, controlOverrides, pointRegistry, logger);
+                controlChannel.BasicConsume(controlQueue, autoAck: false, consumer: controlConsumer);
+
+                reconnectAttempts = 0;
+                logger.LogInformation(
+                    "Connected to RabbitMQ {Host}:{Port}. Reconnect backoff initial={InitialMs}ms max={MaxMs}ms.",
+                    factory.HostName,
+                    factory.Port,
+                    Math.Max(1, reconnectInitialMs),
+                    Math.Max(1, reconnectMaxMs));
+
+                while (true)
                 {
-                    var seq = NextSequence(sequences, device.DeviceId);
-                    var msg = profileGenerator.CreateTelemetry(tenant, buildingName, spaceId, device, seq);
-                    ApplyControlOverrides(msg, controlOverrides, pointRegistry, logger);
-                    PublishMessage(channel, msg);
-                    await Task.Delay(inBurst ? burstInterval : baseInterval);
+                    if (useBurst && DateTimeOffset.UtcNow >= nextBurstSwitch)
+                    {
+                        inBurst = !inBurst;
+                        nextBurstSwitch = DateTimeOffset.UtcNow + (inBurst ? burstDuration : burstPause);
+                    }
+
+                    if (profileGenerator is not null && profileDevices.Count > 0)
+                    {
+                        foreach (var device in profileDevices)
+                        {
+                            var seq = NextSequence(sequences, device.DeviceId);
+                            var msg = profileGenerator.CreateTelemetry(tenant, buildingName, spaceId, device, seq);
+                            ApplyControlOverrides(msg, controlOverrides, pointRegistry, logger);
+                            PublishMessage(channel, msg);
+                            await Task.Delay(inBurst ? burstInterval : baseInterval);
+                        }
+                    }
+                    else if (useRdf)
+                    {
+                        foreach (var device in rdfDevices)
+                        {
+                            var seq = NextSequence(sequences, device.DeviceId);
+                            var msg = rdfGenerator!.CreateTelemetry(tenant, device, seq);
+                            ApplyControlOverrides(msg, controlOverrides, pointRegistry, logger);
+                            PublishMessage(channel, msg);
+                            await Task.Delay(inBurst ? burstInterval : baseInterval);
+                        }
+                    }
+                    else
+                    {
+                        foreach (var deviceId in randomDeviceIds)
+                        {
+                            var seq = NextSequence(sequences, deviceId);
+                            var msg = BuildRandomTelemetryMsg(tenant, deviceId, seq, rand, buildingName, spaceId);
+                            PublishMessage(channel, msg);
+                            await Task.Delay(inBurst ? burstInterval : baseInterval);
+                        }
+                    }
                 }
             }
-            else if (useRdf)
+            catch (Exception ex)
             {
-                foreach (var device in rdfDevices)
-                {
-                    var seq = NextSequence(sequences, device.DeviceId);
-                    var msg = rdfGenerator!.CreateTelemetry(tenant, device, seq);
-                    ApplyControlOverrides(msg, controlOverrides, pointRegistry, logger);
-                    PublishMessage(channel, msg);
-                    await Task.Delay(inBurst ? burstInterval : baseInterval);
-                }
-            }
-            else
-            {
-                foreach (var deviceId in randomDeviceIds)
-                {
-                    var seq = NextSequence(sequences, deviceId);
-                    var msg = BuildRandomTelemetryMsg(tenant, deviceId, seq, rand, buildingName, spaceId);
-                    PublishMessage(channel, msg);
-                    await Task.Delay(inBurst ? burstInterval : baseInterval);
-                }
+                var reconnectDelay = ComputeReconnectDelay(reconnectAttempts, reconnectInitialMs, reconnectMaxMs);
+                reconnectAttempts++;
+                logger.LogWarning(
+                    ex,
+                    "RabbitMQ connection/publish failed. Reconnecting in {DelayMs}ms (attempt {Attempt}).",
+                    (int)reconnectDelay.TotalMilliseconds,
+                    reconnectAttempts);
+                await Task.Delay(reconnectDelay);
             }
         }
+    }
+
+    internal static TimeSpan ComputeReconnectDelay(int attempt, int initialMs, int maxMs)
+    {
+        var safeInitial = Math.Max(250, initialMs);
+        var safeMax = Math.Max(safeInitial, maxMs);
+        var exponent = Math.Min(Math.Max(0, attempt), 16);
+        var multiplier = 1L << exponent;
+        var rawDelay = safeInitial * multiplier;
+        var boundedDelay = Math.Min(rawDelay, safeMax);
+        return TimeSpan.FromMilliseconds(boundedDelay);
     }
 
     private static TelemetryMsg BuildRandomTelemetryMsg(string tenantId, string deviceId, long sequence, Random rand, string buildingName, string spaceId)
@@ -339,7 +384,14 @@ internal static class Program
         }
         finally
         {
-            channel.BasicAck(args.DeliveryTag, false);
+            try
+            {
+                channel.BasicAck(args.DeliveryTag, false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to ack control message (deliveryTag: {DeliveryTag}).", args.DeliveryTag);
+            }
         }
 
         return Task.CompletedTask;

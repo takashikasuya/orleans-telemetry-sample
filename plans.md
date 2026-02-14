@@ -3927,3 +3927,85 @@ Publisher の設計方針（profile 指定による生成切替）に基づき�
 ## Retrospective
 - profile 駆動の最小実装を追加したことで、README の設計方針に対して実装の足場（読み込み・分岐・生成・テスト）を用意できた。
 - 引数なし実行時の挙動を変えないことを最優先にしたため、既存利用者への影響を抑えつつ拡張可能性を高められた。
+
+---
+
+# plans.md: Publisher RabbitMQ Reconnect Retry (2026-02-14)
+
+## Purpose
+Publisher が RabbitMQ 切断時に停止せず、一定間隔を空けながら自動再接続を試行できるようにする。
+
+## Success Criteria
+1. 初回接続失敗時に Publisher がクラッシュせず、待機後に再接続を継続すること。
+2. 接続確立後に切断/Publish 失敗が起きても、再接続ループへ戻ること。
+3. 再接続間隔が設定可能で、上限付きバックオフが適用されること。
+4. `dotnet build` と `dotnet test` が成功すること。
+
+## Steps
+1. `src/Publisher/Program.cs` の接続処理を見直し、接続/切断を扱う再接続ループを実装する。
+2. 再接続間隔の設定（CLI/ENV）とバックオフ計算ロジックを追加する。
+3. バックオフ計算のユニットテストを `src/Publisher.Tests` に追加する。
+4. `src/Publisher/README.md` に再接続設定を追記する。
+5. build/test を実行して結果を記録する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+- [x] Step 5
+
+## Observations
+- 既存の `Program.cs` は `CreateConnection()` を起動時に 1 回だけ実行し、切断時にプロセス全体が例外で終了する構造だった。
+- 接続ループ化により、`CreateConnection` / `BasicPublish` / チャネル操作で例外が発生しても catch 節で待機し、次の接続試行へ戻る挙動に変更できた。
+- コントロールキューの `BasicAck` も切断タイミングで失敗し得るため、ack 失敗をログ化して落とさないようにした。
+
+## Decisions
+- 再接続間隔は固定値ではなく、`initial/max` 指定可能な指数バックオフとした（急な再接続連打を防ぎつつ、復旧時は早めに再接続できるため）。
+- 最小再接続間隔は 250ms にクランプし、異常設定（0 や極小値）でも busy loop にならないようにした。
+- バックオフ計算は `Program.ComputeReconnectDelay` として分離し、`Publisher.Tests` から直接テストする構成にした。
+
+## Verification
+- `dotnet build` : 成功（0 errors / 0 warnings）
+- `dotnet test` : 成功（全テスト pass、`Publisher.Tests` は 10 件）
+
+## Retrospective
+- 再接続要件を満たす最小変更を `Publisher` 単体に閉じて実装できた。
+- 今後は運用時の要件に応じて、再接続時ログの抑制（例: 一定回数ごとの要約ログ）やキャンセル対応（graceful shutdown）を追加検討できる。
+
+---
+
+# plans.md: Publisher README RDF Usage and Telemetry Sample (2026-02-14)
+
+## Purpose
+Publisher README に RDF 起動コマンドと、RDF 駆動時に RabbitMQ へ publish されるテレメトリサンプルを明記する。あわせて、ログ/トレース機能の現状を確認して回答する。
+
+## Success Criteria
+1. `src/Publisher/README.md` に RDF 起動コマンド（ローカル実行想定）が追記されていること。
+2. `src/Publisher/README.md` に RDF 駆動時のテレメトリ JSON サンプルが追記されていること。
+3. ログ/トレース機能の有無を、実装/ドキュメントの確認結果に基づいて説明できること。
+
+## Steps
+1. Publisher README の現状と RDF 関連設定を確認する。
+2. README に RDF 起動コマンドとサンプル payload を追記する。
+3. observability 関連ドキュメントとコードを確認し、ログ/トレース機能の現状を整理する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+
+## Observations
+- `Program.cs` は `RDF_SEED_PATH` が設定されると RDF 解析を行い、`TelemetryMsg` を RabbitMQ `telemetry` キューへ publish している。
+- publish payload は `TenantId`, `DeviceId`, `Sequence`, `Timestamp`, `Properties`, `BuildingName`, `SpaceId` を含み、RDF モードでは `_pointMetadata` を含む。
+- リポジトリ内に OpenTelemetry SDK の導入コード（`AddOpenTelemetry` など）は存在せず、`docs/observability-opentelemetry.md` は方針ドキュメントとして存在する。
+
+## Decisions
+- README には最小実行に直結するローカル起動コマンドを明記し、必要な環境変数だけを記載する。
+- テレメトリサンプルは `TelemetryMsg` 実体に合わせて PascalCase の JSON で提示する。
+
+## Verification
+- ドキュメント変更のみのため、実行系コマンドは未実施。
+
+## Retrospective
+- README へ具体例を追加することで、RDF モード利用時の設定と出力イメージをすぐ確認できる状態になった。

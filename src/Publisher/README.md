@@ -18,12 +18,73 @@
 dotnet run --project src/Publisher
 ```
 
+### RDF シードを使って起動するコマンド
+
+```bash
+RDF_SEED_PATH=./data/seed-complex.ttl \
+RABBITMQ_HOST=localhost \
+RABBITMQ_PORT=5672 \
+RABBITMQ_USER=guest \
+RABBITMQ_PASS=guest \
+TENANT_ID=t1 \
+dotnet run --project src/Publisher
+```
+
+Docker Compose 利用時（`publisher` サービスのみ起動）:
+
+```bash
+docker compose up --build publisher
+```
+
+### RDF 駆動時のテレメトリサンプル
+
+Publisher は RabbitMQ `telemetry` キューに `TelemetryMsg` を JSON で publish します。例:
+
+```json
+{
+  "DeviceId": "ahu-01",
+  "Sequence": 42,
+  "Properties": {
+    "supply_air_temp": 22.384,
+    "fan_status": true,
+    "_pointMetadata": {
+      "supply_air_temp": {
+        "PointType": "TemperatureSensor",
+        "Unit": "degC",
+        "MinValue": 16.0,
+        "MaxValue": 30.0,
+        "Writable": true
+      },
+      "fan_status": {
+        "PointType": "BinarySwitch",
+        "Unit": null,
+        "MinValue": 0.0,
+        "MaxValue": 1.0,
+        "Writable": false
+      }
+    }
+  },
+  "TenantId": "t1",
+  "Timestamp": "2026-02-14T21:30:15.1234567+00:00",
+  "BuildingName": "Building A",
+  "SpaceId": "Building A/Level 1/Mechanical Room"
+}
+```
+
+Publish 成功時の標準出力例:
+
+```text
+Published ahu-01 seq 42
+```
+
 主な環境変数:
 
 - `RABBITMQ_HOST` (`localhost`)
 - `RABBITMQ_PORT` (`5672`)
 - `RABBITMQ_USER` (`user`)
 - `RABBITMQ_PASS` (`password`)
+- `RABBITMQ_RECONNECT_INITIAL_MS` (`1000`)
+- `RABBITMQ_RECONNECT_MAX_MS` (`30000`)
 - `TENANT_ID` (`t1`)
 - `BUILDING_NAME` (`bldg-1`)
 - `SPACE_ID` (`floor-1/room-1`)
@@ -38,6 +99,8 @@ dotnet run --project src/Publisher
 - `--burst-interval-ms`
 - `--burst-duration-sec`
 - `--burst-pause-sec`
+- `--reconnect-initial-ms`
+- `--reconnect-max-ms`
 - `--profile <name>` (`profiles/<name>.json` を探索)
 - `--profile-file <path>` (任意パスの profile JSON を直接指定)
 

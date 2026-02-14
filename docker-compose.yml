@@ -135,10 +135,14 @@ services:
       - mq
     environment:
       RABBITMQ_HOST: mq
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
       TENANT: t1
       RDF_SEED_PATH: /seed/seed.ttl
     volumes:
       - ./data/seed-complex.ttl:/seed/seed.ttl:ro
+    restart: on-failure
+    command: /bin/sh -c "sleep 5 && dotnet Publisher.dll"
 
   # Mock OIDC provider for local development
   mock-oidc:

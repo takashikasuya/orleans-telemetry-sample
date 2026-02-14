@@ -113,21 +113,23 @@ internal static class Program
             // Configure endpoints and networking.
             if (useAdoNetClustering)
             {
-                // Force final endpoint values for container networking after Orleans applies provider defaults.
-                siloBuilder.ConfigureServices(services =>
+                // For AdoNet clustering, explicitly configure endpoints to enable gateway
+                if (advertisedAddress != null)
                 {
-                    services.PostConfigure<EndpointOptions>(options =>
+                    // Container environment: advertise specific address and listen on all interfaces
+                    siloBuilder.ConfigureEndpoints(advertisedAddress, siloPort, gatewayPort, listenOnAnyHostAddress: true);
+                }
+                else
+                {
+                    // Local environment: let Orleans determine the best address
+                    siloBuilder.Configure<EndpointOptions>(options =>
                     {
                         options.SiloPort = siloPort;
                         options.GatewayPort = gatewayPort;
                         options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, siloPort);
                         options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, gatewayPort);
-                        if (advertisedAddress != null)
-                        {
-                            options.AdvertisedIPAddress = advertisedAddress;
-                        }
                     });
-                });
+                }
             }
             else if (advertisedAddress != null)
             {
