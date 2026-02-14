@@ -10,6 +10,7 @@ public static class TelemetryIngestServiceCollectionExtensions
         IConfiguration configuration)
     {
         services.Configure<TelemetryIngestOptions>(configuration);
+        services.AddSingleton<ITelemetryPointRegistrationFilter, AllowAllTelemetryPointRegistrationFilter>();
         services.AddHostedService<TelemetryIngestCoordinator>();
         return services;
     }

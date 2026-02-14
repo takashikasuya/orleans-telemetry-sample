@@ -27,6 +27,7 @@ public sealed class TelemetryIngestCoordinatorTests
             new[] { connector },
             Array.Empty<ITelemetryEventSink>(),
             router,
+            new AllowAllFilter(),
             options,
             NullLogger<TelemetryIngestCoordinator>.Instance);
 
@@ -55,6 +56,7 @@ public sealed class TelemetryIngestCoordinatorTests
             new[] { connector },
             Array.Empty<ITelemetryEventSink>(),
             router,
+            new AllowAllFilter(),
             options,
             NullLogger<TelemetryIngestCoordinator>.Instance);
 
@@ -83,6 +85,7 @@ public sealed class TelemetryIngestCoordinatorTests
             new[] { throwing },
             Array.Empty<ITelemetryEventSink>(),
             router,
+            new AllowAllFilter(),
             options,
             NullLogger<TelemetryIngestCoordinator>.Instance);
 
@@ -116,6 +119,7 @@ public sealed class TelemetryIngestCoordinatorTests
             new[] { connector },
             new[] { sink },
             router,
+            new AllowAllFilter(),
             options,
             NullLogger<TelemetryIngestCoordinator>.Instance);
 
@@ -124,6 +128,45 @@ public sealed class TelemetryIngestCoordinatorTests
         var received = await router.WaitForMessagesAsync(TimeSpan.FromSeconds(2));
         received.Should().HaveCount(3);
         received.Select(x => x.PointId).Should().BeEquivalentTo(new[] { "p1", "p2", "p3" });
+
+        await coordinator.StopAsync(CancellationToken.None);
+    }
+
+
+    [Fact]
+    public async Task CoordinatorDropsUnregisteredTelemetryBeforeRoutingAndSinks()
+    {
+        var options = Options.Create(new TelemetryIngestOptions
+        {
+            Enabled = new[] { "Fake" },
+            BatchSize = 10,
+            ChannelCapacity = 8,
+            EventSinks = new TelemetryIngestEventSinkOptions
+            {
+                Enabled = new[] { "CollectingSink" }
+            }
+        });
+
+        var router = new FakeRouter(expectedCount: 2);
+        var connector = new FakeConnector(messageCount: 3);
+        var sink = new CollectingSink();
+        var filter = new SelectiveFilter(new[] { "p1", "p3" });
+
+        var coordinator = new TelemetryIngestCoordinator(
+            new[] { connector },
+            new ITelemetryEventSink[] { sink },
+            router,
+            filter,
+            options,
+            NullLogger<TelemetryIngestCoordinator>.Instance);
+
+        await coordinator.StartAsync(CancellationToken.None);
+
+        var received = await router.WaitForMessagesAsync(TimeSpan.FromSeconds(2));
+        received.Select(x => x.PointId).Should().BeEquivalentTo(new[] { "p1", "p3" });
+
+        sink.Batches.Should().NotBeEmpty();
+        sink.Batches.SelectMany(x => x).Select(x => x.PointId).Should().BeEquivalentTo(new[] { "p1", "p3" });
 
         await coordinator.StopAsync(CancellationToken.None);
     }
@@ -235,6 +278,44 @@ public sealed class TelemetryIngestCoordinatorTests
         public Task WriteBatchAsync(IReadOnlyList<TelemetryEventEnvelope> batch, CancellationToken ct)
         {
             throw new InvalidOperationException("Sink batch write failure");
+        }
+    }
+
+
+    private sealed class AllowAllFilter : ITelemetryPointRegistrationFilter
+    {
+        public Task<bool> IsRegisteredAsync(TelemetryPointMsg message, CancellationToken cancellationToken)
+            => Task.FromResult(true);
+    }
+
+    private sealed class SelectiveFilter : ITelemetryPointRegistrationFilter
+    {
+        private readonly HashSet<string> _allowed;
+
+        public SelectiveFilter(IEnumerable<string> allowedPointIds)
+        {
+            _allowed = new HashSet<string>(allowedPointIds, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public Task<bool> IsRegisteredAsync(TelemetryPointMsg message, CancellationToken cancellationToken)
+            => Task.FromResult(_allowed.Contains(message.PointId));
+    }
+
+    private sealed class CollectingSink : ITelemetryEventSink
+    {
+        public string Name => "CollectingSink";
+        public List<IReadOnlyList<TelemetryEventEnvelope>> Batches { get; } = new();
+
+        public Task WriteAsync(TelemetryEventEnvelope envelope, CancellationToken ct)
+        {
+            Batches.Add(new[] { envelope });
+            return Task.CompletedTask;
+        }
+
+        public Task WriteBatchAsync(IReadOnlyList<TelemetryEventEnvelope> batch, CancellationToken ct)
+        {
+            Batches.Add(batch);
+            return Task.CompletedTask;
         }
     }
 }

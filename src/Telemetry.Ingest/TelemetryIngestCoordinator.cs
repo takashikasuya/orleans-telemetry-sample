@@ -14,18 +14,21 @@ public sealed class TelemetryIngestCoordinator : BackgroundService
     private readonly ILogger<TelemetryIngestCoordinator> _logger;
     private readonly Channel<TelemetryPointMsg> _channel;
     private readonly IReadOnlyList<ITelemetryEventSink> _eventSinks;
+    private readonly ITelemetryPointRegistrationFilter _registrationFilter;
     private IReadOnlyList<ITelemetryEventSink> _activeEventSinks = Array.Empty<ITelemetryEventSink>();
 
     public TelemetryIngestCoordinator(
         IEnumerable<ITelemetryIngestConnector> connectors,
         IEnumerable<ITelemetryEventSink> eventSinks,
         ITelemetryRouterGrain router,
+        ITelemetryPointRegistrationFilter registrationFilter,
         IOptions<TelemetryIngestOptions> options,
         ILogger<TelemetryIngestCoordinator> logger)
     {
         _connectors = connectors.ToList();
         _eventSinks = eventSinks.ToList();
         _router = router;
+        _registrationFilter = registrationFilter;
         _options = options.Value;
         _logger = logger;
         var capacity = Math.Max(1, _options.ChannelCapacity);
@@ -96,7 +99,19 @@ public sealed class TelemetryIngestCoordinator : BackgroundService
             {
                 while (_channel.Reader.TryRead(out var msg))
                 {
-                    batch.Add(msg);
+                    if (await _registrationFilter.IsRegisteredAsync(msg, ct))
+                    {
+                        batch.Add(msg);
+                    }
+                    else
+                    {
+                        _logger.LogDebug(
+                            "Dropped unregistered telemetry message. TenantId={TenantId}, DeviceId={DeviceId}, PointId={PointId}",
+                            msg.TenantId,
+                            msg.DeviceId,
+                            msg.PointId);
+                    }
+
                     if (batch.Count < batchSize)
                     {
                         continue;
