@@ -47,6 +47,7 @@ graph LR
 
 機能別ドキュメント:
 - [API Gateway API](docs/api-gateway-apis.md)
+- [API Gateway 遠隔制御メモ](docs/api-gateway-remote-control.md)
 - [SPARQL クエリ機能](docs/sparql-query-service.md)
 - [コネクタ & テレメトリーインジェスト](docs/telemetry-connector-ingest.md)
 - [MQTT コネクタ設計](docs/mqtt-connector-design.md)
