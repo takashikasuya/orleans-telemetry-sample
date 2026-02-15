@@ -1,3 +1,161 @@
+# plans.md: 未消化タスク消化（AuthenticationTests 追加拡充） (2026-02-15)
+
+## Purpose
+未消化タスクの継続対応として、`ApiGateway Test Coverage Expansion` の未完了項目だった `AuthenticationTests` を 5 ケース以上に拡充し、認証系境界挙動の回帰防止を強化する。
+
+## Success Criteria
+1. `AuthenticationTests.cs` が 5 ケース以上を持つ。
+2. tenant 指定あり/なし、認証ヘッダ不正、複合 Authorization 値の tenant 解析分岐をカバーする。
+3. `dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. 既存 `AuthenticationTests` の不足ケースを特定する。
+2. 追加 2 ケース（default tenant 経路、複合ヘッダ tenant 解析経路）を実装する。
+3. plans のチェックを更新し、build/test を実行する。
+
+## Progress
+- [x] Step 1: 不足ケース特定
+- [x] Step 2: テスト追加
+- [x] Step 3: plans 更新 + build/test
+
+## Observations
+- 既存 3 ケースでは「tenant 未指定時の既定値利用」と「複合 Authorization 値の tenant 解析」が未検証だった。
+- `tenant=...;role=...` 形式のヘッダを追加し、解析境界を API レイヤで確認できる。
+
+## Decisions
+- 既存の `TestAuthHandler` を活用し、実 JWT 導入は行わず最小変更で計画達成を優先する。
+
+## Verification
+- `dotnet build`
+  - Result: Succeeded（0 warnings / 0 errors）
+- `dotnet test`
+  - Result: Succeeded（Failed 0）
+
+## Retrospective
+- 認証系のテストが計画値（5件以上）に到達し、未消化項目を1つ削減できた。
+
+---
+
+# plans.md: 未消化タスク消化（ApiGateway Test Coverage Expansion 継続） (2026-02-15)
+
+## Purpose
+未消化タスクのうち高優先度だった ApiGateway テスト拡張を前進させるため、`RegistryExportTests` を追加し、registry export endpoint の分岐をテスト可能な構造へ整理する。
+
+## Success Criteria
+1. `RegistryExportTests.cs` に 5 件以上のテスト（404/410/200/tenant isolation/concurrency）を追加する。
+2. `/api/registry/exports/{exportId}` のハンドリングを専用 endpoint へ切り出し、既存挙動を維持する。
+3. `dotnet build` と `dotnet test` が成功する。
+
+## Steps
+1. 既存の registry export 実装と telemetry export endpoint の構造を確認する。
+2. Registry export endpoint を専用クラス化して Program から委譲する。
+3. `RegistryExportTests.cs` を作成し、主要分岐をテストする。
+4. build/test を実行し、plans を更新する。
+
+## Progress
+- [x] Step 1: 実装確認
+- [x] Step 2: endpoint 分離
+- [x] Step 3: テスト追加
+- [x] Step 4: build/test 実行
+
+## Observations
+- 既存の `/api/registry/exports/{exportId}` は `Program.cs` へインライン実装されており、ユニットテストが書きづらかった。
+- `TelemetryExportEndpoint` と同型に揃えることで、endpoint 単位で 404/410/200 の分岐を直接検証できる。
+
+## Decisions
+- 挙動変更を避けるため、レスポンス仕様（404/410/file naming/content-type）は既存に合わせる。
+- テナント分離と同一 export 連続アクセスは endpoint テストで担保する。
+
+## Verification
+- `dotnet build`
+  - Result: Succeeded（Warning 2: 既存の TestAuthHandler obsolete warning のみ）
+- `dotnet test`
+  - Result: Succeeded（Failed 0, Passed 107）
+
+## Retrospective
+- registry export のテスト不足を最小変更で補完できた。
+- 次は同じ high 優先度群として、残る RegistryEndpoints/Authentication の計画チェックを順次解消する。
+
+---
+
+# plans.md: 未消化タスク/リファクタリング対象の棚卸し (2026-02-15)
+
+## Purpose
+`plans.md` 全体を横断し、未完了チェック項目とリファクタリング候補を抽出して、次の着手順序を明確化する。
+
+## Success Criteria
+1. `plans.md` 内の未完了チェックボックスを重複なく抽出できている。
+2. 実装優先度（高/中/低）を付与した未消化タスクリストが記録されている。
+3. リファクタリング候補（設計負債/テスト負債）を 3 件以上明示している。
+
+## Steps
+1. `plans.md` の未完了チェックボックス (`- [ ]`) を抽出する。
+2. 各項目を関連セクションごとに集約し、優先度を付ける。
+3. 依存関係の強い項目を「先行着手タスク」として整理する。
+4. 棚卸し結果を本セクションへ記録し、build/test で非破壊を確認する。
+
+## Progress
+- [x] Step 1: 未完了チェックボックスの抽出
+- [x] Step 2: セクション別集約と優先度付け
+- [x] Step 3: 先行着手タスクの整理
+- [x] Step 4: 棚卸し結果記録と build/test 実行
+
+## Observations
+- `plans.md` には複数日付の計画が積み上がっており、完了済みタスクと未着手タスクが混在している。
+- 未消化項目は「Docker E2E クラスタリング」「ApiGateway テスト拡張」「SPARQL 実装の後半工程」に集中している。
+- 一部の古い計画（README 再編など）は後続セクションで実質完了している可能性があり、計画文書の状態同期が必要。
+
+## Decisions
+- 次の先行着手は **Docker E2E 復旧（AdoNet Clustering）** と **テスト負債の返済（ApiGateway/SPARQL）** を最優先にする。
+- ドキュメント側の未消化チェックは、実装完了後に「完了マーク更新」までを DoD に含める。
+
+## Inventory (未消化タスク)
+### High Priority
+1. Orleans Clustering Strategy for Docker Environments
+   - AdoNet clustering 実装タスク一式（PostgreSQL schema / compose / Silo 設定 / E2E 検証）
+2. SPARQL Query Engine Implementation
+   - Configuration サポート、単体/統合/E2E テスト、外部 endpoint 抽象化、ドキュメント更新
+3. ApiGateway Test Coverage Expansion
+   - Registry/Auth/gRPC 系の追加テストスイート作成
+
+### Medium Priority
+1. Test Coverage Gaps (Device/Point Grains + E2E Reliability)
+   - edge case 拡充、multi-device E2E シナリオ追加
+2. Point Properties on Node/Device APIs
+   - Step 6 検証記録の完了
+3. Admin UI Graph RDF Import File Picker / Upload Path 改善
+   - upload handling、manual path 廃止、compose volume 反映、docs 更新
+
+### Low Priority
+1. Windows PowerShell Script Wrappers
+   - 手動検証手順の追記
+2. README Slim化とドキュメント再編
+   - docs への移管 Step の完了表示
+3. 旧計画の検証ログ更新
+   - `dotnet build` 実行記録の欠落補完
+
+## Refactoring Targets
+1. **plans.md の保守性改善**
+   - 日付別セクションを「Active / Archived」に分割し、未完了のみ上部に集約する。
+2. **テスト構成の再編**
+   - ApiGateway.Tests の責務別ファイル分割（Registry/Auth/gRPC）を進め、未実装テスト計画と実ファイル構成を一致させる。
+3. **Docker/E2E 設定の一本化**
+   - clustering mode 切替条件と compose override をテンプレート化し、環境差分起因の失敗を減らす。
+4. **ドキュメント完了状態の同期**
+   - 実装済み項目を plans.md のチェックに反映する定期メンテ手順を追加する。
+
+## Verification
+- `dotnet build`
+  - Result: Succeeded（Warning 2: 既存の TestAuthHandler obsolete warning のみ）
+- `dotnet test`
+  - Result: Succeeded（Failed 0, Passed 107）
+
+## Retrospective
+- 未消化項目の大半は「実装そのもの」より「検証・記録の取り切り」に偏っていた。
+- 次回以降は機能実装PRごとに plans.md の Progress 更新を必須化し、後追い棚卸しコストを下げる。
+
+---
+
 # plans.md: Docker Compose ローカルクラスタ実装検討と 1/複数 Silo 負荷試験設計 (2026-02-15)
 
 ## Purpose
@@ -2050,8 +2208,8 @@ Current state: E2E tests cover basic telemetry flow but do not systematically ex
 - [x] Create `GraphTraversalTests.cs` with ≥5 test cases
 - [ ] Create `RegistryEndpointsTests.cs` with ≥10 test cases (2 per endpoint)
 - [x] Create `TelemetryExportTests.cs` with ≥5 test cases
-- [ ] Create `RegistryExportTests.cs` with ≥5 test cases
-- [ ] Create `AuthenticationTests.cs` with ≥5 test cases
+- [x] Create `RegistryExportTests.cs` with ≥5 test cases
+- [x] Create `AuthenticationTests.cs` with ≥5 test cases
 - [ ] Create `GrpcDeviceServiceTests.cs` with ≥3 test cases
 - [x] Run `dotnet test` to verify all new tests pass
 - [x] Verify no regressions in existing tests
@@ -3923,7 +4081,9 @@ RDF シード読み込み時にテナントIDに加えてテナント名を指�
 
 ## Verification
 - `dotnet build`
+  - Result: Succeeded（Warning 2: 既存の TestAuthHandler obsolete warning のみ）
 - `dotnet test`
+  - Result: Succeeded（Failed 0, Passed 107）
 
 ## Retrospective
 - 今回は設計方針の文書化に集中し、次の実装フェーズ（Profile Reader 導入）へ直接つながるアウトラインを用意できた。
@@ -3964,7 +4124,9 @@ Publisher の設計方針（profile 指定による生成切替）に基づき�
 
 ## Verification
 - `dotnet build`
+  - Result: Succeeded（Warning 2: 既存の TestAuthHandler obsolete warning のみ）
 - `dotnet test`
+  - Result: Succeeded（Failed 0, Passed 107）
 
 ## Retrospective
 - profile 駆動の最小実装を追加したことで、README の設計方針に対して実装の足場（読み込み・分岐・生成・テスト）を用意できた。
