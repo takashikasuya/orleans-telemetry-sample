@@ -172,6 +172,33 @@ else
         </section>
 
         <section>
+            <div class="graph-card-header">
+                <h2>Grain Placement (Detailed Stats)</h2>
+                <button class="refresh-button button-ghost" @onclick="LoadGrainHierarchyAsync">Refresh Placement</button>
+            </div>
+            @if (_loadingGrainHierarchy)
+            {
+                <p class="status">Loading grain placement...</p>
+            }
+            else if (!string.IsNullOrWhiteSpace(_grainHierarchyError))
+            {
+                <p class="status error">@_grainHierarchyError</p>
+            }
+            else if (_grainHierarchy.Count == 0)
+            {
+                <p class="status muted">No detailed grain placement data available.</p>
+            }
+            else
+            {
+                <div class="grain-tree">
+                    <MudTreeView T="GrainHierarchyNode" Hover="true" Class="grain-tree-view">
+                        @RenderGrainHierarchy(_grainHierarchy)
+                    </MudTreeView>
+                </div>
+            }
+        </section>
+
+        <section>
             <h2>Client Connections</h2>
             @if (_silos.Length == 0)
             {
@@ -545,6 +572,9 @@ else
     private SiloSummary[] _silos = Array.Empty<SiloSummary>();
     private StorageOverview? _storage;
     private IngestSummary? _ingest;
+    private IReadOnlyList<GrainHierarchyNode> _grainHierarchy = Array.Empty<GrainHierarchyNode>();
+    private bool _loadingGrainHierarchy;
+    private string? _grainHierarchyError;
     private bool _loading = true;
     private string? _error;
     private string _graphTenant = "default";
@@ -599,6 +629,7 @@ else
             _silos = await Metrics.GetSiloSummariesAsync();
             _storage = await Metrics.GetStorageOverviewAsync(CancellationToken.None);
             _ingest = Metrics.GetIngestSummary();
+            await LoadGrainHierarchyAsync();
             _graphStatus = await Metrics.GetLastGraphSeedStatusAsync();
             await LoadGraphTenantOptionsAsync();
             await LoadSpatialHierarchyAsync();
@@ -741,6 +772,44 @@ else
         StateHasChanged();
     }
 
+    private async Task LoadGrainHierarchyAsync()
+    {
+        _loadingGrainHierarchy = true;
+        _grainHierarchyError = null;
+        try
+        {
+            _grainHierarchy = await Metrics.GetGrainHierarchyAsync();
+        }
+        catch (Exception ex)
+        {
+            _grainHierarchyError = $"Failed to load grain placement: {ex.Message}";
+        }
+        finally
+        {
+            _loadingGrainHierarchy = false;
+            StateHasChanged();
+        }
+    }
+
+    private RenderFragment RenderGrainHierarchy(IReadOnlyList<GrainHierarchyNode> nodes) => builder =>
+    {
+        var sequence = 0;
+        foreach (var node in nodes)
+        {
+            builder.OpenComponent<MudTreeViewItem<GrainHierarchyNode>>(sequence++);
+            builder.AddAttribute(sequence++, "Value", node);
+            builder.AddAttribute(sequence++, "Text", node.Label);
+            builder.AddAttribute(sequence++, "Icon", GetGrainHierarchyIcon(node.Kind));
+            builder.AddAttribute(sequence++, "CanExpand", node.Children.Count > 0);
+            builder.AddAttribute(sequence++, "Expanded", node.Kind is GrainHierarchyNodeKind.Silo or GrainHierarchyNodeKind.GrainType);
+            if (node.Children.Count > 0)
+            {
+                builder.AddAttribute(sequence++, "ChildContent", RenderGrainHierarchy(node.Children));
+            }
+            builder.CloseComponent();
+        }
+    };
+
     private RenderFragment RenderGraphTree(IReadOnlyList<GraphTreeNode> nodes) => builder =>
     {
         var sequence = 0;
@@ -842,6 +911,16 @@ else
             StateHasChanged();
         }
     }
+
+    private static string GetGrainHierarchyIcon(GrainHierarchyNodeKind kind)
+        => kind switch
+        {
+            GrainHierarchyNodeKind.Silo => Icons.Material.Filled.Storage,
+            GrainHierarchyNodeKind.GrainType => Icons.Material.Filled.Category,
+            GrainHierarchyNodeKind.GrainId => Icons.Material.Filled.Memory,
+            GrainHierarchyNodeKind.Info => Icons.Material.Filled.MoreHoriz,
+            _ => Icons.Material.Filled.DeviceHub
+        };
 
     private static string GetTreeIcon(GraphNodeType type)
         => type switch

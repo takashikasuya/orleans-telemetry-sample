@@ -2828,7 +2828,7 @@ RDFから抽出される `CustomTags` をGraphノード属性へ反映し、タ�
 
 ## Progress
 - [x] Step 1: 既存構成確認と属性方針確定
-- [ ] Step 2: CustomTags反映
+- [x] Step 2: CustomTags反映
 - [x] Step 3: REST/gRPC公開
 - [x] Step 4: テスト追加
 - [ ] Step 5: 検証記録
@@ -3718,10 +3718,10 @@ public async Task Sparql_LoadAndQuery_ReturnsExpectedBindings()
 - `docs/api-gateway-apis.md`: SPARQL エンドポイントを API リファレンスに追加
 
 ## Progress
-- [ ] Step 1: SPARQL Grain 実装
+- [x] Step 1: SPARQL Grain 実装
 - [ ] Step 2: Configuration サポート
-- [ ] Step 3: Silo 起動時統合
-- [ ] Step 4: REST API エンドポイント
+- [x] Step 3: Silo 起動時統合
+- [x] Step 4: REST API エンドポイント
 - [ ] Step 5: 外部 Endpoint 抽象化
 - [ ] Step 6: 単体テスト
 - [ ] Step 7: 統合テスト
