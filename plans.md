@@ -4129,3 +4129,147 @@ Admin UI の表示順で `Spatial Hierarchy` を上部に配置し、`Storage` �
 ## Retrospective
 - 破損ファイルはコンパイラエラーが連鎖して見えるため、まず最初の構文エラー近傍を確認するのが有効だった。
 - 重複ロジックを最小整理したことで今後の同種の修正時にも差分を小さく保ちやすい。
+
+---
+
+# plans.md: ApiGateway 遠隔制御（Remote Control）調査ドキュメント整備 (2026-02-15)
+
+## Purpose
+ApiGateway 経由の遠隔制御機能について、実装実態（受け付け範囲・処理フロー・制約）を調査し、参照しやすい形でドキュメント化する。
+
+## Success Criteria
+1. ApiGateway の制御エンドポイント仕様と内部フローをコードベースで説明できる。
+2. 実装上の制約（キュー連携状況、状態遷移、未実装点）を明記したドキュメントを `docs/` に追加する。
+3. README の Documentation Map から新規ドキュメントに到達できる。
+4. `dotnet build` と `dotnet test` が成功する。
+
+## Steps
+1. 既存ドキュメントと実装コード（ApiGateway/SiloHost/Publisher）を確認して実態を整理する。
+2. ApiGateway 遠隔制御の調査結果ドキュメントを新規作成する。
+3. README の Documentation Map にリンクを追加する。
+4. build/test で整合性を確認する。
+
+## Progress
+- [x] Step 1: 実装・既存ドキュメント調査
+- [x] Step 2: `docs/api-gateway-remote-control.md` 作成
+- [x] Step 3: README Documentation Map 更新
+- [x] Step 4: `dotnet build` / `dotnet test` 実行
+
+## Observations
+- `POST /api/devices/{deviceId}/control` は ApiGateway で実装され、入力検証後に `IPointControlGrain.SubmitAsync` を呼んで `202 Accepted` を返す。
+- `PointControlGrain` は `ControlStore` に `Accepted` スナップショットを保存するが、現時点で API から Publisher の `telemetry-control` キューへ直接 publish するコードは見当たらない。
+- `Location` ヘッダに `/api/devices/{deviceId}/control/{commandId}` を返すが、同パスの GET エンドポイントは未実装。
+
+## Decisions
+- 既存の `docs/api-gateway-apis.md` は API カタログ中心のため、遠隔制御の実装差分と運用上の注意点をまとめた専用ドキュメントを追加する。
+- 機能変更は行わず、調査結果の可視化に限定する。
+
+## Verification
+- `dotnet build`
+  - Result: Succeeded (0 errors, warnings は既存の CS1591/CS8604/CS0618 が継続)
+- `dotnet test`
+  - Result: Succeeded (Failed 0, 全テスト通過)
+
+## Retrospective
+- API カタログ（`docs/api-gateway-apis.md`）は存在していたが、遠隔制御の「どこまで実装済みか」を追うには情報が分散していた。
+- 専用の調査メモを追加したことで、実装済み範囲（受理・記録）と未接続範囲（queue egress）が一目で分かるようになった。
+
+---
+
+# plans.md: ApiGateway 遠隔制御コネクタルーティング実装 (2026-02-15)
+
+## Purpose
+遠隔制御時に対象ポイントがどのコネクタ配下か判別できない課題を解消するため、`GatewayId` とポイント情報に基づくコネクタルーティングを ApiGateway に実装する。
+
+## Success Criteria
+1. `POST /api/devices/{deviceId}/control` が `GatewayId` / point 情報を使ってコネクタを決定できる。
+2. ルーティング設定ファイルを追加し、正規表現ベースでルール定義できる。
+3. ルーティング不一致時に API が `400` を返して曖昧な制御を防止する。
+4. ルーティングを検証する自動テストを追加し、`dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. 現行の制御 API と Graph 属性から `GatewayId` を解決する方法を設計する。
+2. 設定ファイル + 正規表現ルールを読み込むルータを実装する。
+3. 制御エンドポイントでルータを適用し、`ConnectorName` を metadata へ反映する。
+4. ApiGateway.Tests にルーティング成功/失敗ケースを追加する。
+5. ドキュメント更新と build/test 実行。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+- [x] Step 5
+
+## Observations
+- Graph の point ノードは必ずしも `GatewayId` を持たないため、`Equipment(DeviceId, GatewayId)` と `hasPoint` エッジを辿る解決が必要だった。
+- 制御専用ゲートウェイ（テレメトリと別系統）を想定すると、`GatewayPattern` による明示マッピングを設定で持つ方が安全。
+- ルール未一致時に既定コネクタへ無条件フォールバックすると誤配送のリスクがあるため、既定未設定時は `400` を返す挙動が有効。
+
+## Decisions
+- `PointGatewayResolver` を追加し、`tenant/device/point` 単位で `GatewayId` を5分キャッシュする。
+- `ControlConnectorRouter` を追加し、正規表現を起動時にコンパイルして順序評価する。
+- 設定ファイルは `config/control-routing.json` とし、`ControlRouting:ConfigPath` で差し替え可能にする。
+
+## Verification
+- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter "FullyQualifiedName~ControlRoutingEndpointTests"`
+  - Result: Passed (2/2)
+- `dotnet build`
+  - Result: Succeeded (0 errors; 既存 warning のみ)
+- `dotnet test`
+  - Result: Succeeded (Failed 0)
+
+## Retrospective
+- ルーティング仕様を API 層に閉じ込めたことで、将来的に queue egress を追加しても制御先選択ロジックを再利用できる形になった。
+- 今後は connector ごとの配送アダプタ実装と、配送結果による `Applied/Failed` 更新を繋ぐことで遠隔制御を完結できる。
+
+---
+
+# plans.md: Control Routing 明示マッピング + Admin UI 編集対応 (2026-02-15)
+
+## Purpose
+GatewayId が命名ルールに従わないケースでも安全に遠隔制御できるよう、connector↔gateway の明示マッピングを導入し、Admin UI から確認・変更できるようにする。
+
+## Success Criteria
+1. ApiGateway の制御ルーティングが `ConnectorGatewayMappings`（明示マップ）を優先して解決できる。
+2. `config/control-routing.json` が connector↔gateway マッピング形式を持つ。
+3. Admin UI で「登録コネクタ」と「対応ゲートウェイ」を確認でき、設定 JSON を保存できる。
+4. 変更に対応するテストが追加され、`dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. ルーティングオプション・ルータを拡張して明示マッピングを追加する。
+2. 設定ファイルをマッピング形式へ更新する。
+3. AdminMetricsService と Admin UI に設定表示・保存機能を追加する。
+4. ApiGateway/AdminGateway テストを更新・追加する。
+5. build/test 実行とドキュメント更新を行う。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+- [x] Step 5
+
+## Observations
+- gateway 命名に一貫性がない環境では、regex だけに依存すると誤配送リスクがある。
+- 明示マッピング（ハッシュ lookup）を優先することで、性能と安全性の両立がしやすい。
+- Admin UI には既存で ingest connector 情報があるため、対応ゲートウェイとの照合表示を追加しやすかった。
+
+## Decisions
+- `ControlConnectorRouter` は `ConnectorGatewayMappings` 完全一致を最優先とし、未一致時のみ regex ルールにフォールバックする。
+- Admin UI では操作コストを抑えるため、まずは JSON editor + マッピング一覧表示で実装する。
+- 設定ファイルの保存先は `ControlRouting:ConfigPath`（未指定時 `config/control-routing.json`）を採用し、環境差分対応を維持する。
+
+## Verification
+- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter "FullyQualifiedName~ControlRoutingEndpointTests"`
+  - Result: Passed
+- `dotnet test src/AdminGateway.Tests/AdminGateway.Tests.csproj --filter "FullyQualifiedName~ShowsControlRoutingMappings"`
+  - Result: Passed
+- `dotnet build`
+  - Result: Succeeded
+- `dotnet test`
+  - Result: Succeeded
+
+## Retrospective
+- ルーティング根拠を「推測ルール」から「明示マップ中心」に寄せたことで、運用者が意図通りに制御先を管理しやすくなった。
+- 今後は Admin UI で JSON 直接編集だけでなく、行単位 CRUD にも拡張すると入力ミスを減らせる。
