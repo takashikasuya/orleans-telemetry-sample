@@ -71,3 +71,46 @@ dotnet run --project src/Telemetry.Ingest.LoadTest -- --quick --batch-sweep --ab
 - JSON レポート: `telemetry-ingest-backpressure-<RunId>.json`
 - `RunId` は UTC 時刻の `yyyyMMdd-HHmmss` 形式。
 - レポートにはステージ別のスループット、待ち時間統計、ステージ構成が含まれます。
+
+
+## Docker Compose ローカルクラスタでの性能比較（1 Silo vs 複数 Silo）
+
+本リポジトリの負荷試験は、以下 2 シナリオを同一条件で比較する運用を推奨します。
+
+- **Scenario A (Baseline)**: `docker-compose.yml` の単一 `silo`
+- **Scenario B (Scale-out)**: `docker-compose.silo-multi.yml` 併用で複数 `silo-*`
+
+### 比較手順（推奨）
+
+1. クラスタ起動
+   - 単一 Silo: `docker compose up --build -d`
+   - 複数 Silo: `docker compose -f docker-compose.yml -f docker-compose.silo-multi.yml up --build -d`
+2. 同一パラメータで `Telemetry.Ingest.LoadTest` を実行
+3. 生成される `reports/*.md` / `reports/*.json` をシナリオ別に保存
+4. 下記 KPI を横並び比較
+
+### KPI（最低限）
+
+- Throughput (events/sec)
+- End-to-end latency（p50/p95/p99）
+- Backpressure 発生率（ステージ内の遅延増加・滞留）
+- エラー率（ingest failure, connector failure）
+
+### 公平な比較のための固定条件
+
+- RabbitMQ キュー名・prefetch・publisher レートを固定
+- RDF seed（デバイス/ポイント数）を固定
+- 試験時間（warm-up / measure / cool-down）を固定
+- 実行ホスト（CPU/メモリ制限）を固定
+
+### 判定例
+
+- **スケール有効**: 複数 Silo で Throughput が増加し、p95/p99 が悪化しない
+- **改善余地あり**: Throughput 増加が小さく、p95/p99 が大幅悪化
+- **要調査**: 複数 Silo でエラー率やバックプレッシャーが増加
+
+### 追加観測（任意）
+
+- `docker stats` によるコンテナ別 CPU/Memory
+- Orleans membership 変化（起動/停止時）
+- API 側の REST/gRPC 応答時間の変化
