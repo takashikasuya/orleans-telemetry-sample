@@ -7,6 +7,7 @@ using ApiControlRequest = ApiGateway.Contracts.PointControlRequest;
 using ApiControlResponse = ApiGateway.Contracts.PointControlResponse;
 using ApiGateway.Infrastructure;
 using ApiGateway.Services;
+using ApiGateway.Registry;
 using ApiGateway.Sparql;
 using ApiGateway.Telemetry;
 using Grains.Abstractions;
@@ -388,23 +389,7 @@ app.MapGet("/api/registry/exports/{exportId}", async (
     RegistryExportService registryExports,
     HttpContext http) =>
 {
-    var tenant = TenantResolver.ResolveTenant(http);
-    var result = await registryExports.TryOpenExportAsync(exportId, tenant, DateTimeOffset.UtcNow, http.RequestAborted);
-    if (result.Status == RegistryExportOpenStatus.NotFound)
-    {
-        return Results.NotFound();
-    }
-
-    if (result.Status == RegistryExportOpenStatus.Expired)
-    {
-        return Results.StatusCode(StatusCodes.Status410Gone);
-    }
-
-    var metadata = result.Metadata;
-    return Results.File(
-        result.Stream!,
-        metadata?.ContentType ?? "application/x-ndjson",
-        $"registry_{exportId}.jsonl");
+    return await RegistryExportEndpoint.HandleOpenExportAsync(exportId, registryExports, http, DateTimeOffset.UtcNow);
 }).RequireAuthorization();
 
 app.MapGet("/api/telemetry/{deviceId}", async (
