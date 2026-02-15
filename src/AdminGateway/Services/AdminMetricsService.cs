@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using AdminGateway.Models;
 using Grains.Abstractions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans;
@@ -22,6 +25,8 @@ internal sealed class AdminMetricsService
     private readonly TelemetryStorageScanner _storageScanner;
     private readonly ITelemetryStorageQuery _storageQuery;
     private readonly TelemetryIngestOptions _ingestOptions;
+    private readonly IConfiguration _configuration;
+    private readonly IHostEnvironment _environment;
     private readonly ILogger<AdminMetricsService> _logger;
 
     public AdminMetricsService(
@@ -29,12 +34,16 @@ internal sealed class AdminMetricsService
         TelemetryStorageScanner storageScanner,
         ITelemetryStorageQuery storageQuery,
         IOptions<TelemetryIngestOptions> ingestOptions,
+        IConfiguration configuration,
+        IHostEnvironment environment,
         ILogger<AdminMetricsService> logger)
     {
         _client = client;
         _storageScanner = storageScanner;
         _storageQuery = storageQuery;
         _ingestOptions = ingestOptions.Value;
+        _configuration = configuration;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -118,6 +127,151 @@ internal sealed class AdminMetricsService
         var sinks = _ingestOptions.EventSinks.Enabled ?? Array.Empty<string>();
         return new IngestSummary(connectors, sinks, _ingestOptions.BatchSize, _ingestOptions.ChannelCapacity);
     }
+
+
+    public async Task<ControlRoutingView> GetControlRoutingViewAsync(CancellationToken cancellationToken = default)
+    {
+        var configPath = ResolveControlRoutingConfigPath();
+        var rawJson = await SafeReadAllTextAsync(configPath, cancellationToken);
+
+        var connectorMappings = ParseConnectorMappings(rawJson)
+            .Select(mapping => new ControlRoutingConnectorView(
+                mapping.Connector,
+                mapping.GatewayIds,
+                IsConnectorEnabled(mapping.Connector)))
+            .OrderBy(mapping => mapping.Connector, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var defaultConnector = ParseDefaultConnector(rawJson);
+
+        return new ControlRoutingView(configPath, defaultConnector, connectorMappings, rawJson);
+    }
+
+    public async Task<ControlRoutingView> SaveControlRoutingConfigAsync(string rawJson, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(rawJson))
+        {
+            throw new InvalidOperationException("Control routing JSON cannot be empty.");
+        }
+
+        // Validate JSON structure before writing.
+        _ = JsonDocument.Parse(rawJson);
+
+        var configPath = ResolveControlRoutingConfigPath();
+        var directory = Path.GetDirectoryName(configPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await File.WriteAllTextAsync(configPath, rawJson, cancellationToken);
+        return await GetControlRoutingViewAsync(cancellationToken);
+    }
+
+    private bool IsConnectorEnabled(string connector)
+    {
+        if (string.IsNullOrWhiteSpace(connector))
+        {
+            return false;
+        }
+
+        return (_ingestOptions.Enabled ?? Array.Empty<string>())
+            .Any(enabled => string.Equals(enabled, connector, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private string ResolveControlRoutingConfigPath()
+    {
+        var configured = _configuration["ControlRouting:ConfigPath"];
+        var path = string.IsNullOrWhiteSpace(configured) ? "config/control-routing.json" : configured;
+        return Path.IsPathRooted(path) ? path : Path.GetFullPath(path, _environment.ContentRootPath);
+    }
+
+    private static async Task<string> SafeReadAllTextAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            return "{}";
+        }
+
+        return await File.ReadAllTextAsync(path, cancellationToken);
+    }
+
+    private static string? ParseDefaultConnector(string rawJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(rawJson);
+            if (!document.RootElement.TryGetProperty("ControlRouting", out var controlRouting))
+            {
+                return null;
+            }
+
+            if (!controlRouting.TryGetProperty("DefaultConnector", out var defaultConnectorElement))
+            {
+                return null;
+            }
+
+            var value = defaultConnectorElement.GetString();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static IReadOnlyList<ParsedConnectorMapping> ParseConnectorMappings(string rawJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(rawJson);
+            if (!document.RootElement.TryGetProperty("ControlRouting", out var controlRouting)
+                || !controlRouting.TryGetProperty("ConnectorGatewayMappings", out var mappings)
+                || mappings.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<ParsedConnectorMapping>();
+            }
+
+            var results = new List<ParsedConnectorMapping>();
+            foreach (var mapping in mappings.EnumerateArray())
+            {
+                if (!mapping.TryGetProperty("Connector", out var connectorElement))
+                {
+                    continue;
+                }
+
+                var connector = connectorElement.GetString();
+                if (string.IsNullOrWhiteSpace(connector))
+                {
+                    continue;
+                }
+
+                var gatewayIds = new List<string>();
+                if (mapping.TryGetProperty("GatewayIds", out var gatewayIdsElement)
+                    && gatewayIdsElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var gateway in gatewayIdsElement.EnumerateArray())
+                    {
+                        var gatewayId = gateway.GetString();
+                        if (!string.IsNullOrWhiteSpace(gatewayId))
+                        {
+                            gatewayIds.Add(gatewayId);
+                        }
+                    }
+                }
+
+                results.Add(new ParsedConnectorMapping(connector, gatewayIds));
+            }
+
+            return results;
+        }
+        catch
+        {
+            return Array.Empty<ParsedConnectorMapping>();
+        }
+    }
+
+    private sealed record ParsedConnectorMapping(string Connector, IReadOnlyList<string> GatewayIds);
 
     private static SiloSummary CreateSummary(string address, SiloStatus status, SiloRuntimeStatistics? stats)
     {

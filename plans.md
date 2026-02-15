@@ -1,3 +1,45 @@
+# plans.md: Docker Compose ローカルクラスタ実装検討と 1/複数 Silo 負荷試験設計 (2026-02-15)
+
+## Purpose
+Docker Compose を使ったローカル Orleans クラスタ実装（単一 Silo / 複数 Silo 切替）の実装方針を整理し、同一条件で性能比較できる負荷試験手順を文書化する。
+
+## Success Criteria
+1. 単一 Silo と複数 Silo の Compose 実装方針が docs に明文化されている。
+2. 1 Silo vs 複数 Silo を比較する際の試験手順/KPI/判定基準が docs に明文化されている。
+3. 既存コード挙動を変更せず（ドキュメント更新のみ）、ビルドとテストが成功する。
+
+## Steps
+1. 既存のクラスタリング・負荷試験ドキュメントと compose 構成を確認する。
+2. `docs/clustering-and-scalability.md` にローカルクラスタ実装案（compose 2段構成）を追記する。
+3. `docs/telemetry-ingest-loadtest.md` に単一/複数 Silo 比較手順を追記する。
+4. `dotnet build` / `dotnet test` を実行して、既存挙動非破壊を確認する。
+
+## Progress
+- [x] Step 1: 既存資料の確認
+- [x] Step 2: クラスタ実装案の追記
+- [x] Step 3: 負荷試験比較手順の追記
+- [x] Step 4: build/test 実行（build は既存エラーで失敗、test は成功）
+
+## Observations
+- 既存の `docker-compose.yml` は単一 `silo` 構成で、AdoNet clustering は有効化済み。
+- 負荷試験ドキュメントには ingest 試験手順があるが、1 Silo vs 複数 Silo 比較の明示手順が不足していた。
+
+## Decisions
+- コード変更ではなく、まずドキュメントで実装・評価手順を定義する。
+- 複数 Silo は `docker-compose.silo-multi.yml` を追加する前提で、base + override 方式を採用する案を示す。
+
+## Verification
+- `dotnet build`
+  - Result: Failed（既存の `src/TelemetryClient/Services/RegistryService.cs` に構文エラーがあり失敗。今回変更ファイル外）
+- `dotnet test`
+  - Result: Succeeded（全テスト成功）
+
+## Retrospective
+- 既存ドキュメントにはクラスタ構成と ingest 試験の個別情報はあったが、1/複数 Silo の比較観点が分散していた。
+- 今回、ローカルクラスタ実装案と比較試験の評価軸を明文化し、次回の実装/検証タスクを開始しやすくした。
+
+---
+
 # plans.md: gRPC Endpoint Implementation & Test Audit (2026-02-14)
 
 ## Purpose
@@ -4132,65 +4174,67 @@ Admin UI の表示順で `Spatial Hierarchy` を上部に配置し、`Storage` �
 
 ---
 
-# plans.md: Multi-silo Grain Placement Visualization (2026-02-15)
+# plans.md: ApiGateway 遠隔制御（Remote Control）調査ドキュメント整備 (2026-02-15)
 
 ## Purpose
-multi-silo 構成で「どの Grain がどの Silo に載っているか」を運用者が即時に把握できるよう、`IManagementGrain.GetDetailedGrainStatistics()` ベースの可視化を Admin UI に追加する。
+ApiGateway 経由の遠隔制御機能について、実装実態（受け付け範囲・処理フロー・制約）を調査し、参照しやすい形でドキュメント化する。
 
 ## Success Criteria
-1. AdminGateway が `GetDetailedGrainStatistics()` を利用して Silo→GrainType→GrainId の配置情報を取得できること。
-2. Admin UI に配置情報を可視化するセクションが追加され、手動更新できること。
-3. 手順ドキュメントに multi-silo 起動から可視化確認までの具体的な手順が追記されていること。
-4. `dotnet build` と `dotnet test` が成功すること。
+1. ApiGateway の制御エンドポイント仕様と内部フローをコードベースで説明できる。
+2. 実装上の制約（キュー連携状況、状態遷移、未実装点）を明記したドキュメントを `docs/` に追加する。
+3. README の Documentation Map から新規ドキュメントに到達できる。
+4. `dotnet build` と `dotnet test` が成功する。
 
 ## Steps
-1. AdminGateway の既存ロジックを確認し、必要な API/UI 連携点を特定する。
-2. Admin UI に Grain 配置ツリー（Silo→Type→Grain）表示を実装する。
-3. Program の管理 API に Grain 配置エンドポイントを追加する。
-4. docs/admin-console.md に multi-silo での確認手順を追記する。
-5. build/test を実行し結果を記録する。
+1. 既存ドキュメントと実装コード（ApiGateway/SiloHost/Publisher）を確認して実態を整理する。
+2. ApiGateway 遠隔制御の調査結果ドキュメントを新規作成する。
+3. README の Documentation Map にリンクを追加する。
+4. build/test で整合性を確認する。
 
 ## Progress
-- [x] Step 1: 調査
-- [x] Step 2: UI 実装
-- [x] Step 3: API 追加
-- [x] Step 4: ドキュメント更新
-- [x] Step 5: 検証実行
+- [x] Step 1: 実装・既存ドキュメント調査
+- [x] Step 2: `docs/api-gateway-remote-control.md` 作成
+- [x] Step 3: README Documentation Map 更新
+- [x] Step 4: `dotnet build` / `dotnet test` 実行
 
 ## Observations
-- `AdminMetricsService.GetGrainHierarchyAsync()` は既に `GetDetailedGrainStatistics()` を呼び出しているが、UI からは未利用。
-- 既存 UI は grain type の集計テーブル（Simple stats）までで、silo 内訳の drill-down が不足している。
+- `POST /api/devices/{deviceId}/control` は ApiGateway で実装され、入力検証後に `IPointControlGrain.SubmitAsync` を呼んで `202 Accepted` を返す。
+- `PointControlGrain` は `ControlStore` に `Accepted` スナップショットを保存するが、現時点で API から Publisher の `telemetry-control` キューへ直接 publish するコードは見当たらない。
+- `Location` ヘッダに `/api/devices/{deviceId}/control/{commandId}` を返すが、同パスの GET エンドポイントは未実装。
 
 ## Decisions
-- 既存サービス実装を再利用し、UI と endpoint を追加することで変更範囲を最小化する。
+- 既存の `docs/api-gateway-apis.md` は API カタログ中心のため、遠隔制御の実装差分と運用上の注意点をまとめた専用ドキュメントを追加する。
+- 機能変更は行わず、調査結果の可視化に限定する。
 
 ## Verification
-- `dotnet build` : 成功（既存 warning のみ）
-- `dotnet test` : 成功
-- AdminGateway 単体起動は Orleans gateway 未起動時に失敗することを確認（既知の前提条件）。
+- `dotnet build`
+  - Result: Succeeded (0 errors, warnings は既存の CS1591/CS8604/CS0618 が継続)
+- `dotnet test`
+  - Result: Succeeded (Failed 0, 全テスト通過)
 
 ## Retrospective
-- `GetDetailedGrainStatistics` の集約ロジックは既存実装を活かせたため、UI/API の追加だけで要件を満たせた。
-- スクリーンショット取得は、この環境で AdminGateway が Orleans gateway 前提で起動失敗したため未実施。ローカルでは compose で silo 起動後に撮影可能。
+- API カタログ（`docs/api-gateway-apis.md`）は存在していたが、遠隔制御の「どこまで実装済みか」を追うには情報が分散していた。
+- 専用の調査メモを追加したことで、実装済み範囲（受理・記録）と未接続範囲（queue egress）が一目で分かるようになった。
 
 ---
 
-# plans.md: AdminGateway Orleans client startup retry tuning (2026-02-15)
+# plans.md: ApiGateway 遠隔制御コネクタルーティング実装 (2026-02-15)
 
 ## Purpose
-AdminGateway の起動時に Orleans gateway がまだ起動していないケースでも落ちずに待機できるよう、起動順序依存を緩和しつつ適切な間隔で接続リトライする。
+遠隔制御時に対象ポイントがどのコネクタ配下か判別できない課題を解消するため、`GatewayId` とポイント情報に基づくコネクタルーティングを ApiGateway に実装する。
 
 ## Success Criteria
-1. AdminGateway で Orleans client 接続失敗時にリトライ待機が働くこと（即時クラッシュしない設計）。
-2. リトライ間隔が固定乱発ではなく、初期間隔と上限を持つ段階的リトライになっていること。
-3. 運用ドキュメントに起動順序とリトライ挙動の説明が追記されていること。
-4. `dotnet build` / `dotnet test` が成功すること。
+1. `POST /api/devices/{deviceId}/control` が `GatewayId` / point 情報を使ってコネクタを決定できる。
+2. ルーティング設定ファイルを追加し、正規表現ベースでルール定義できる。
+3. ルーティング不一致時に API が `400` を返して曖昧な制御を防止する。
+4. ルーティングを検証する自動テストを追加し、`dotnet build` / `dotnet test` が成功する。
 
 ## Steps
-1. Orleans client 起動設定に retry filter を追加する。
-2. retry filter 実装と単体テストを追加する。
-3. admin-console ドキュメントに起動順序/リトライを追記する。
-4. build/test を実行して記録する。
+1. 現行の制御 API と Graph 属性から `GatewayId` を解決する方法を設計する。
+2. 設定ファイル + 正規表現ルールを読み込むルータを実装する。
+3. 制御エンドポイントでルータを適用し、`ConnectorName` を metadata へ反映する。
+4. ApiGateway.Tests にルーティング成功/失敗ケースを追加する。
+5. ドキュメント更新と build/test 実行。
 
 ## Progress
 - [x] Step 1
@@ -4213,3 +4257,77 @@ AdminGateway の起動時に Orleans gateway がまだ起動していないケ�
 ## Retrospective
 - 起動順序を厳密に守れないローカル開発環境でも、Admin の自己回復性が向上した。
 - リトライ間隔を設定化したため、重い環境では上限を伸ばして運用しやすい。
+- [x] Step 5
+
+## Observations
+- Graph の point ノードは必ずしも `GatewayId` を持たないため、`Equipment(DeviceId, GatewayId)` と `hasPoint` エッジを辿る解決が必要だった。
+- 制御専用ゲートウェイ（テレメトリと別系統）を想定すると、`GatewayPattern` による明示マッピングを設定で持つ方が安全。
+- ルール未一致時に既定コネクタへ無条件フォールバックすると誤配送のリスクがあるため、既定未設定時は `400` を返す挙動が有効。
+
+## Decisions
+- `PointGatewayResolver` を追加し、`tenant/device/point` 単位で `GatewayId` を5分キャッシュする。
+- `ControlConnectorRouter` を追加し、正規表現を起動時にコンパイルして順序評価する。
+- 設定ファイルは `config/control-routing.json` とし、`ControlRouting:ConfigPath` で差し替え可能にする。
+
+## Verification
+- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter "FullyQualifiedName~ControlRoutingEndpointTests"`
+  - Result: Passed (2/2)
+- `dotnet build`
+  - Result: Succeeded (0 errors; 既存 warning のみ)
+- `dotnet test`
+  - Result: Succeeded (Failed 0)
+
+## Retrospective
+- ルーティング仕様を API 層に閉じ込めたことで、将来的に queue egress を追加しても制御先選択ロジックを再利用できる形になった。
+- 今後は connector ごとの配送アダプタ実装と、配送結果による `Applied/Failed` 更新を繋ぐことで遠隔制御を完結できる。
+
+---
+
+# plans.md: Control Routing 明示マッピング + Admin UI 編集対応 (2026-02-15)
+
+## Purpose
+GatewayId が命名ルールに従わないケースでも安全に遠隔制御できるよう、connector↔gateway の明示マッピングを導入し、Admin UI から確認・変更できるようにする。
+
+## Success Criteria
+1. ApiGateway の制御ルーティングが `ConnectorGatewayMappings`（明示マップ）を優先して解決できる。
+2. `config/control-routing.json` が connector↔gateway マッピング形式を持つ。
+3. Admin UI で「登録コネクタ」と「対応ゲートウェイ」を確認でき、設定 JSON を保存できる。
+4. 変更に対応するテストが追加され、`dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. ルーティングオプション・ルータを拡張して明示マッピングを追加する。
+2. 設定ファイルをマッピング形式へ更新する。
+3. AdminMetricsService と Admin UI に設定表示・保存機能を追加する。
+4. ApiGateway/AdminGateway テストを更新・追加する。
+5. build/test 実行とドキュメント更新を行う。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+- [x] Step 5
+
+## Observations
+- gateway 命名に一貫性がない環境では、regex だけに依存すると誤配送リスクがある。
+- 明示マッピング（ハッシュ lookup）を優先することで、性能と安全性の両立がしやすい。
+- Admin UI には既存で ingest connector 情報があるため、対応ゲートウェイとの照合表示を追加しやすかった。
+
+## Decisions
+- `ControlConnectorRouter` は `ConnectorGatewayMappings` 完全一致を最優先とし、未一致時のみ regex ルールにフォールバックする。
+- Admin UI では操作コストを抑えるため、まずは JSON editor + マッピング一覧表示で実装する。
+- 設定ファイルの保存先は `ControlRouting:ConfigPath`（未指定時 `config/control-routing.json`）を採用し、環境差分対応を維持する。
+
+## Verification
+- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter "FullyQualifiedName~ControlRoutingEndpointTests"`
+  - Result: Passed
+- `dotnet test src/AdminGateway.Tests/AdminGateway.Tests.csproj --filter "FullyQualifiedName~ShowsControlRoutingMappings"`
+  - Result: Passed
+- `dotnet build`
+  - Result: Succeeded
+- `dotnet test`
+  - Result: Succeeded
+
+## Retrospective
+- ルーティング根拠を「推測ルール」から「明示マップ中心」に寄せたことで、運用者が意図通りに制御先を管理しやすくなった。
+- 今後は Admin UI で JSON 直接編集だけでなく、行単位 CRUD にも拡張すると入力ミスを減らせる。
