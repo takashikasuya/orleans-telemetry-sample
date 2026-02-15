@@ -39,9 +39,11 @@ Operators extending the UI (e.g., wiring file pickers or RDF validation hints) c
 
 Admin UI では `IManagementGrain.GetDetailedGrainStatistics()` ベースで、**Silo → Grain Type → Grain Id** の階層を可視化できます。実運用で multi-silo を起動した際に、どの grain がどの silo へアクティベートされているかを確認する手順は次の通りです。
 
-1. **multi-silo で起動する**
+1. **起動順序を意識して multi-silo で起動する**
+   - 推奨順序: `mq` → `silo` (複数) → `api/admin`。
    - 例: `docker compose up --build --scale silo=2`
    - 起動後、`docker compose ps` で `silo` が複数起動していることを確認します。
+   - AdminGateway は Orleans gateway 接続に失敗した場合でも、`Orleans:ClientRetry:InitialDelaySeconds`（既定2秒）から指数バックオフし、`Orleans:ClientRetry:MaxDelaySeconds`（既定30秒）を上限に再試行します。
 2. **テレメトリを流して Grain を活性化する**
    - 例: publisher を起動して `DeviceGrain` / `PointGrain` のアクティベーションを発生させます。
 3. **Admin UI を開く**

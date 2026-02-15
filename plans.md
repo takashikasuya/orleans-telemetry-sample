@@ -2786,7 +2786,7 @@ RDFから抽出される `CustomTags` をGraphノード属性へ反映し、タ�
 
 ## Progress
 - [x] Step 1: 既存構成確認と属性方針確定
-- [ ] Step 2: CustomTags反映
+- [x] Step 2: CustomTags反映
 - [x] Step 3: REST/gRPC公開
 - [x] Step 4: テスト追加
 - [ ] Step 5: 検証記録
@@ -3676,10 +3676,10 @@ public async Task Sparql_LoadAndQuery_ReturnsExpectedBindings()
 - `docs/api-gateway-apis.md`: SPARQL エンドポイントを API リファレンスに追加
 
 ## Progress
-- [ ] Step 1: SPARQL Grain 実装
+- [x] Step 1: SPARQL Grain 実装
 - [ ] Step 2: Configuration サポート
-- [ ] Step 3: Silo 起動時統合
-- [ ] Step 4: REST API エンドポイント
+- [x] Step 3: Silo 起動時統合
+- [x] Step 4: REST API エンドポイント
 - [ ] Step 5: 外部 Endpoint 抽象化
 - [ ] Step 6: 単体テスト
 - [ ] Step 7: 統合テスト
@@ -4172,3 +4172,44 @@ multi-silo 構成で「どの Grain がどの Silo に載っているか」を�
 ## Retrospective
 - `GetDetailedGrainStatistics` の集約ロジックは既存実装を活かせたため、UI/API の追加だけで要件を満たせた。
 - スクリーンショット取得は、この環境で AdminGateway が Orleans gateway 前提で起動失敗したため未実施。ローカルでは compose で silo 起動後に撮影可能。
+
+---
+
+# plans.md: AdminGateway Orleans client startup retry tuning (2026-02-15)
+
+## Purpose
+AdminGateway の起動時に Orleans gateway がまだ起動していないケースでも落ちずに待機できるよう、起動順序依存を緩和しつつ適切な間隔で接続リトライする。
+
+## Success Criteria
+1. AdminGateway で Orleans client 接続失敗時にリトライ待機が働くこと（即時クラッシュしない設計）。
+2. リトライ間隔が固定乱発ではなく、初期間隔と上限を持つ段階的リトライになっていること。
+3. 運用ドキュメントに起動順序とリトライ挙動の説明が追記されていること。
+4. `dotnet build` / `dotnet test` が成功すること。
+
+## Steps
+1. Orleans client 起動設定に retry filter を追加する。
+2. retry filter 実装と単体テストを追加する。
+3. admin-console ドキュメントに起動順序/リトライを追記する。
+4. build/test を実行して記録する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+## Observations
+- AdminGateway は Orleans client の初回接続失敗でホスト起動が止まるため、起動順序に依存しやすい。
+- Orleans の `IClientConnectionRetryFilter` で接続再試行制御が可能。
+
+## Decisions
+- リトライは固定間隔ではなく、初期値・上限値を持つ指数バックオフにする。
+- 初期値/上限値は設定で調整可能にし、既定は 2s / 30s とする。
+
+## Verification
+- `dotnet build` : 成功
+- `dotnet test` : 成功
+
+## Retrospective
+- 起動順序を厳密に守れないローカル開発環境でも、Admin の自己回復性が向上した。
+- リトライ間隔を設定化したため、重い環境では上限を伸ばして運用しやすい。
