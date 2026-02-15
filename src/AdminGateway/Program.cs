@@ -62,6 +62,14 @@ app.MapGet("/admin/grains", async (AdminMetricsService metrics) =>
     return Results.Ok(result);
 }).RequireAuthorization();
 
+app.MapGet("/admin/grains/hierarchy", async (AdminMetricsService metrics, int? maxTypesPerSilo, int? maxGrainsPerType) =>
+{
+    var typeLimit = maxTypesPerSilo is > 0 ? maxTypesPerSilo.Value : 20;
+    var grainLimit = maxGrainsPerType is > 0 ? maxGrainsPerType.Value : 50;
+    var result = await metrics.GetGrainHierarchyAsync(typeLimit, grainLimit);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
 app.MapGet("/admin/clients", async (AdminMetricsService metrics) =>
 {
     var result = await metrics.GetSiloSummariesAsync();

@@ -4129,3 +4129,46 @@ Admin UI の表示順で `Spatial Hierarchy` を上部に配置し、`Storage` �
 ## Retrospective
 - 破損ファイルはコンパイラエラーが連鎖して見えるため、まず最初の構文エラー近傍を確認するのが有効だった。
 - 重複ロジックを最小整理したことで今後の同種の修正時にも差分を小さく保ちやすい。
+
+---
+
+# plans.md: Multi-silo Grain Placement Visualization (2026-02-15)
+
+## Purpose
+multi-silo 構成で「どの Grain がどの Silo に載っているか」を運用者が即時に把握できるよう、`IManagementGrain.GetDetailedGrainStatistics()` ベースの可視化を Admin UI に追加する。
+
+## Success Criteria
+1. AdminGateway が `GetDetailedGrainStatistics()` を利用して Silo→GrainType→GrainId の配置情報を取得できること。
+2. Admin UI に配置情報を可視化するセクションが追加され、手動更新できること。
+3. 手順ドキュメントに multi-silo 起動から可視化確認までの具体的な手順が追記されていること。
+4. `dotnet build` と `dotnet test` が成功すること。
+
+## Steps
+1. AdminGateway の既存ロジックを確認し、必要な API/UI 連携点を特定する。
+2. Admin UI に Grain 配置ツリー（Silo→Type→Grain）表示を実装する。
+3. Program の管理 API に Grain 配置エンドポイントを追加する。
+4. docs/admin-console.md に multi-silo での確認手順を追記する。
+5. build/test を実行し結果を記録する。
+
+## Progress
+- [x] Step 1: 調査
+- [x] Step 2: UI 実装
+- [x] Step 3: API 追加
+- [x] Step 4: ドキュメント更新
+- [x] Step 5: 検証実行
+
+## Observations
+- `AdminMetricsService.GetGrainHierarchyAsync()` は既に `GetDetailedGrainStatistics()` を呼び出しているが、UI からは未利用。
+- 既存 UI は grain type の集計テーブル（Simple stats）までで、silo 内訳の drill-down が不足している。
+
+## Decisions
+- 既存サービス実装を再利用し、UI と endpoint を追加することで変更範囲を最小化する。
+
+## Verification
+- `dotnet build` : 成功（既存 warning のみ）
+- `dotnet test` : 成功
+- AdminGateway 単体起動は Orleans gateway 未起動時に失敗することを確認（既知の前提条件）。
+
+## Retrospective
+- `GetDetailedGrainStatistics` の集約ロジックは既存実装を活かせたため、UI/API の追加だけで要件を満たせた。
+- スクリーンショット取得は、この環境で AdminGateway が Orleans gateway 前提で起動失敗したため未実施。ローカルでは compose で silo 起動後に撮影可能。

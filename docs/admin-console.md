@@ -33,3 +33,26 @@ The Blazor Server admin console (`src/AdminGateway`) ministers immediate operati
    - For Docker, mount the same upload directory in both `admin` and `silo` containers so the silo can access the uploaded RDF file path.
 
 Operators extending the UI (e.g., wiring file pickers or RDF validation hints) can keep relying on the same `/admin/*` endpoints and data contracts, so automation or scripting can continue to call the REST surface even if the Blazor layout changes.
+
+
+## Multi-silo grain placement visualization (GetDetailedGrainStatistics)
+
+Admin UI では `IManagementGrain.GetDetailedGrainStatistics()` ベースで、**Silo → Grain Type → Grain Id** の階層を可視化できます。実運用で multi-silo を起動した際に、どの grain がどの silo へアクティベートされているかを確認する手順は次の通りです。
+
+1. **multi-silo で起動する**
+   - 例: `docker compose up --build --scale silo=2`
+   - 起動後、`docker compose ps` で `silo` が複数起動していることを確認します。
+2. **テレメトリを流して Grain を活性化する**
+   - 例: publisher を起動して `DeviceGrain` / `PointGrain` のアクティベーションを発生させます。
+3. **Admin UI を開く**
+   - `http://localhost:8082/`（ポートは compose 設定に従う）
+   - JWT 認証を通過後、`Grain Placement (Detailed Stats)` セクションを表示します。
+4. **配置情報を更新・確認する**
+   - `Refresh Placement` を押すと `GetDetailedGrainStatistics()` を再取得します。
+   - ツリーで Silo ノードを展開し、配下の Grain Type / Grain Id を確認します。
+   - これにより、同一 grain type の分散状況と、特定 grain id の配置先 silo を確認できます。
+5. **API で機械確認する（任意）**
+   - `GET /admin/grains/hierarchy?maxTypesPerSilo=20&maxGrainsPerType=50`
+   - 自動化ツールから同じ階層データを取得可能です。
+
+> 補足: `GetDetailedGrainStatistics()` が空を返す場合、まだ該当 grain がアクティベートされていない可能性があります。先に publisher で負荷を与えてから再取得してください。
