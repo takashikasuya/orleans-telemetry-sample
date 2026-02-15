@@ -3,6 +3,7 @@ using AdminGateway.Models;
 using AdminGateway.Services;
 using Grains.Abstractions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using Orleans;
@@ -33,6 +34,9 @@ builder.Services.AddSingleton<TelemetryStorageScanner>();
 builder.Services.AddSingleton<ITelemetryStorageQuery, ParquetTelemetryStorageQuery>();
 builder.Services.AddScoped<AdminMetricsService>();
 
+var retryInitialSeconds = Math.Max(1, builder.Configuration.GetValue("Orleans:ClientRetry:InitialDelaySeconds", 2));
+var retryMaxSeconds = Math.Max(retryInitialSeconds, builder.Configuration.GetValue("Orleans:ClientRetry:MaxDelaySeconds", 30));
+
 var orleansHost = builder.Configuration["Orleans:GatewayHost"] ?? "127.0.0.1";
 var orleansAddresses = Dns.GetHostAddresses(orleansHost);
 var orleansAddress = orleansAddresses.Length > 0 ? orleansAddresses[0] : IPAddress.Loopback;
@@ -45,6 +49,14 @@ builder.Host.UseOrleansClient(client =>
     {
         opts.ClusterId = "telemetry-cluster";
         opts.ServiceId = "telemetry-service";
+    });
+    client.ConfigureServices(services =>
+    {
+        services.AddSingleton<IClientConnectionRetryFilter>(sp =>
+            new AdminClientConnectionRetryFilter(
+                sp.GetRequiredService<ILogger<AdminClientConnectionRetryFilter>>(),
+                TimeSpan.FromSeconds(retryInitialSeconds),
+                TimeSpan.FromSeconds(retryMaxSeconds)));
     });
     client.AddMemoryStreams("DeviceUpdates");
 });
@@ -59,6 +71,14 @@ app.UseAuthorization();
 app.MapGet("/admin/grains", async (AdminMetricsService metrics) =>
 {
     var result = await metrics.GetGrainActivationsAsync();
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/admin/grains/hierarchy", async (AdminMetricsService metrics, int? maxTypesPerSilo, int? maxGrainsPerType) =>
+{
+    var typeLimit = maxTypesPerSilo is > 0 ? maxTypesPerSilo.Value : 20;
+    var grainLimit = maxGrainsPerType is > 0 ? maxGrainsPerType.Value : 50;
+    var result = await metrics.GetGrainHierarchyAsync(typeLimit, grainLimit);
     return Results.Ok(result);
 }).RequireAuthorization();
 
