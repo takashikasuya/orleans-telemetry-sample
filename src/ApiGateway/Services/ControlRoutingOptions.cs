@@ -6,7 +6,16 @@ public sealed class ControlRoutingOptions
 {
     public string? DefaultConnector { get; set; }
 
+    public List<ControlConnectorGatewayMappingOptions> ConnectorGatewayMappings { get; set; } = new();
+
     public List<ControlRoutingRuleOptions> Rules { get; set; } = new();
+}
+
+public sealed class ControlConnectorGatewayMappingOptions
+{
+    public string Connector { get; set; } = string.Empty;
+
+    public List<string> GatewayIds { get; set; } = new();
 }
 
 public sealed class ControlRoutingRuleOptions

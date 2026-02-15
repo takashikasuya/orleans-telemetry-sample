@@ -59,9 +59,11 @@ ApiGateway は Orleans の最新状態・グラフ・履歴データを REST API
 - エラー:
   - `400 BadRequest`: `deviceId` 不一致、`pointId` 不足、またはコネクタルーティング不一致
 - ルーティング:
-  - Graph の `GatewayId` と `config/control-routing.json` の正規表現ルール（`GatewayPattern` / `DevicePattern` / `PointPattern`）で `ConnectorName` を解決します。
-  - 一致しない場合は曖昧な配送を避けるため `400 BadRequest` を返します。
+  - Graph の `GatewayId` をキーに、`config/control-routing.json` の `ConnectorGatewayMappings`（明示マッピング）を優先して `ConnectorName` を解決します。
+  - 明示マッピングで解決できない場合は `GatewayPattern` / `DevicePattern` / `PointPattern` の正規表現ルールを評価します。
+  - いずれにも一致しない場合は曖昧な配送を避けるため `400 BadRequest` を返します。
 - 備考: 現状は制御要求の受付と状態記録までで、実際の機器書き込みは Publisher 側の対応に依存します。
+- 運用: Admin Gateway では `Control Routing` セクションからマッピング設定（JSON）を確認・更新できます。
 
 ### ノード情報
 

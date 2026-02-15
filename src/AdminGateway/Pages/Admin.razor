@@ -79,6 +79,67 @@ else
         </section>
 
         <section>
+            <h2>Control Routing</h2>
+            @if (_controlRoutingLoading)
+            {
+                <p class="status muted">Loading control routing config...</p>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Connector</th>
+                                <th>Mapped Gateway IDs</th>
+                                <th>Enabled</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_controlRoutingConnectors.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="3" class="muted">No connector-gateway mappings defined.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var mapping in _controlRoutingConnectors)
+                                {
+                                    <tr>
+                                        <td>@mapping.Connector</td>
+                                        <td>@(mapping.GatewayIds.Count == 0 ? "-" : string.Join(", ", mapping.GatewayIds))</td>
+                                        <td>@(mapping.IsEnabled ? "Yes" : "No")</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="control-routing-editor">
+                    <label for="control-routing-json">Routing Config JSON</label>
+                    <textarea id="control-routing-json" class="graph-input" rows="14" @bind="_controlRoutingJson"></textarea>
+                    <div class="graph-import-actions">
+                        <button class="refresh-button button-ghost" @onclick="ReloadControlRoutingAsync" disabled="_controlRoutingSaving">Reload</button>
+                        <button class="refresh-button" @onclick="SaveControlRoutingAsync" disabled="_controlRoutingSaving">
+                            @(_controlRoutingSaving ? "Saving..." : "Save Routing Config")
+                        </button>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_controlRoutingMessage))
+                {
+                    <p class="status muted">@_controlRoutingMessage</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(_controlRoutingError))
+                {
+                    <p class="status error">@_controlRoutingError</p>
+                }
+            }
+        </section>
+
+        <section>
             <h2>Activation Explorer (@_grains.Length types)</h2>
             @if (_grains.Length == 0)
             {
@@ -492,6 +553,12 @@ else
     private bool _isImporting;
     private string? _graphFeedback;
     private string[] _graphTenants = Array.Empty<string>();
+    private bool _controlRoutingLoading;
+    private bool _controlRoutingSaving;
+    private string _controlRoutingJson = "{}";
+    private string? _controlRoutingMessage;
+    private string? _controlRoutingError;
+    private List<ControlRoutingConnectorView> _controlRoutingConnectors = new();
     private string? _selectedGraphTenant;
     private List<GraphTreeNode> _graphTreeNodes = new();
     private GraphNodeDetailView? _selectedGraphNodeDetails;
@@ -535,6 +602,7 @@ else
             _graphStatus = await Metrics.GetLastGraphSeedStatusAsync();
             await LoadGraphTenantOptionsAsync();
             await LoadSpatialHierarchyAsync();
+            await LoadControlRoutingAsync();
         }
         catch (Exception ex)
         {
@@ -603,6 +671,59 @@ else
             {
                 _graphTenantName = _selectedGraphTenant;
             }
+        }
+    }
+
+    private async Task LoadControlRoutingAsync()
+    {
+        _controlRoutingLoading = true;
+        _controlRoutingError = null;
+        _controlRoutingMessage = null;
+
+        try
+        {
+            var routing = await Metrics.GetControlRoutingViewAsync();
+            _controlRoutingJson = routing.RawJson;
+            _controlRoutingConnectors = routing.ConnectorMappings.ToList();
+            _controlRoutingMessage = $"Config path: {routing.ConfigPath}";
+        }
+        catch (Exception ex)
+        {
+            _controlRoutingError = $"Failed to load control routing: {ex.Message}";
+        }
+        finally
+        {
+            _controlRoutingLoading = false;
+        }
+    }
+
+    private async Task ReloadControlRoutingAsync()
+    {
+        await LoadControlRoutingAsync();
+        StateHasChanged();
+    }
+
+    private async Task SaveControlRoutingAsync()
+    {
+        _controlRoutingSaving = true;
+        _controlRoutingError = null;
+        _controlRoutingMessage = null;
+
+        try
+        {
+            var routing = await Metrics.SaveControlRoutingConfigAsync(_controlRoutingJson);
+            _controlRoutingJson = routing.RawJson;
+            _controlRoutingConnectors = routing.ConnectorMappings.ToList();
+            _controlRoutingMessage = $"Saved: {routing.ConfigPath}";
+        }
+        catch (Exception ex)
+        {
+            _controlRoutingError = $"Failed to save control routing: {ex.Message}";
+        }
+        finally
+        {
+            _controlRoutingSaving = false;
+            StateHasChanged();
         }
     }
 

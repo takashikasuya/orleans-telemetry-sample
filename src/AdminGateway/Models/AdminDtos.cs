@@ -78,3 +78,14 @@ public sealed record PointTrendSample(
     DateTimeOffset Timestamp,
     double? Value,
     string? RawValue);
+
+public sealed record ControlRoutingConnectorView(
+    string Connector,
+    IReadOnlyList<string> GatewayIds,
+    bool IsEnabled);
+
+public sealed record ControlRoutingView(
+    string ConfigPath,
+    string? DefaultConnector,
+    IReadOnlyList<ControlRoutingConnectorView> ConnectorMappings,
+    string RawJson);

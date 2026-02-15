@@ -4222,3 +4222,54 @@ ApiGateway 経由の遠隔制御機能について、実装実態（受け付け
 ## Retrospective
 - ルーティング仕様を API 層に閉じ込めたことで、将来的に queue egress を追加しても制御先選択ロジックを再利用できる形になった。
 - 今後は connector ごとの配送アダプタ実装と、配送結果による `Applied/Failed` 更新を繋ぐことで遠隔制御を完結できる。
+
+---
+
+# plans.md: Control Routing 明示マッピング + Admin UI 編集対応 (2026-02-15)
+
+## Purpose
+GatewayId が命名ルールに従わないケースでも安全に遠隔制御できるよう、connector↔gateway の明示マッピングを導入し、Admin UI から確認・変更できるようにする。
+
+## Success Criteria
+1. ApiGateway の制御ルーティングが `ConnectorGatewayMappings`（明示マップ）を優先して解決できる。
+2. `config/control-routing.json` が connector↔gateway マッピング形式を持つ。
+3. Admin UI で「登録コネクタ」と「対応ゲートウェイ」を確認でき、設定 JSON を保存できる。
+4. 変更に対応するテストが追加され、`dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. ルーティングオプション・ルータを拡張して明示マッピングを追加する。
+2. 設定ファイルをマッピング形式へ更新する。
+3. AdminMetricsService と Admin UI に設定表示・保存機能を追加する。
+4. ApiGateway/AdminGateway テストを更新・追加する。
+5. build/test 実行とドキュメント更新を行う。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+- [x] Step 5
+
+## Observations
+- gateway 命名に一貫性がない環境では、regex だけに依存すると誤配送リスクがある。
+- 明示マッピング（ハッシュ lookup）を優先することで、性能と安全性の両立がしやすい。
+- Admin UI には既存で ingest connector 情報があるため、対応ゲートウェイとの照合表示を追加しやすかった。
+
+## Decisions
+- `ControlConnectorRouter` は `ConnectorGatewayMappings` 完全一致を最優先とし、未一致時のみ regex ルールにフォールバックする。
+- Admin UI では操作コストを抑えるため、まずは JSON editor + マッピング一覧表示で実装する。
+- 設定ファイルの保存先は `ControlRouting:ConfigPath`（未指定時 `config/control-routing.json`）を採用し、環境差分対応を維持する。
+
+## Verification
+- `dotnet test src/ApiGateway.Tests/ApiGateway.Tests.csproj --filter "FullyQualifiedName~ControlRoutingEndpointTests"`
+  - Result: Passed
+- `dotnet test src/AdminGateway.Tests/AdminGateway.Tests.csproj --filter "FullyQualifiedName~ShowsControlRoutingMappings"`
+  - Result: Passed
+- `dotnet build`
+  - Result: Succeeded
+- `dotnet test`
+  - Result: Succeeded
+
+## Retrospective
+- ルーティング根拠を「推測ルール」から「明示マップ中心」に寄せたことで、運用者が意図通りに制御先を管理しやすくなった。
+- 今後は Admin UI で JSON 直接編集だけでなく、行単位 CRUD にも拡張すると入力ミスを減らせる。

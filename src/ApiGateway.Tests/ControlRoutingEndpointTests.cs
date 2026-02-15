@@ -16,7 +16,7 @@ namespace ApiGateway.Tests;
 public sealed class ControlRoutingEndpointTests
 {
     [Fact]
-    public async Task PostControl_RoutesConnectorByGatewayRegex()
+    public async Task PostControl_RoutesConnectorByGatewayMapping()
     {
         var tenant = "tenant-a";
         var deviceId = "ahu-01";
@@ -66,9 +66,8 @@ public sealed class ControlRoutingEndpointTests
         var extraConfig = new Dictionary<string, string?>
         {
             ["ControlRouting:DefaultConnector"] = "RabbitMq",
-            ["ControlRouting:Rules:0:Name"] = "mqtt-rule",
-            ["ControlRouting:Rules:0:Connector"] = "Mqtt",
-            ["ControlRouting:Rules:0:GatewayPattern"] = "^mqtt-"
+            ["ControlRouting:ConnectorGatewayMappings:0:Connector"] = "Mqtt",
+            ["ControlRouting:ConnectorGatewayMappings:0:GatewayIds:0"] = "mqtt-east-01"
         };
 
         await using var factory = new ApiGatewayTestFactory(clusterMock, extraConfig);
@@ -142,10 +141,7 @@ public sealed class ControlRoutingEndpointTests
 
         var extraConfig = new Dictionary<string, string?>
         {
-            ["ControlRouting:DefaultConnector"] = "",
-            ["ControlRouting:Rules:0:Name"] = "mqtt-rule",
-            ["ControlRouting:Rules:0:Connector"] = "Mqtt",
-            ["ControlRouting:Rules:0:GatewayPattern"] = "^mqtt-"
+            ["ControlRouting:DefaultConnector"] = ""
         };
 
         await using var factory = new ApiGatewayTestFactory(clusterMock, extraConfig);

@@ -2,27 +2,29 @@
   "ControlRouting": {
     "ConfigPath": "config/control-routing.json",
     "DefaultConnector": "RabbitMq",
-    "Rules": [
+    "ConnectorGatewayMappings": [
       {
-        "Name": "bacnet-by-gateway",
         "Connector": "RabbitMq",
-        "GatewayPattern": "^(bacnet|bms)-"
+        "GatewayIds": [
+          "bacnet-gw-01",
+          "ctrl-gw-01"
+        ]
       },
       {
-        "Name": "mqtt-by-gateway",
         "Connector": "Mqtt",
-        "GatewayPattern": "^mqtt-"
+        "GatewayIds": [
+          "mqtt-east-01",
+          "mqtt-west-01"
+        ]
       },
       {
-        "Name": "kafka-by-gateway",
         "Connector": "Kafka",
-        "GatewayPattern": "^kafka-"
-      },
-      {
-        "Name": "control-only-gateway",
-        "Connector": "RabbitMq",
-        "GatewayPattern": "^ctrl-"
-      },
+        "GatewayIds": [
+          "kafka-gw-01"
+        ]
+      }
+    ],
+    "Rules": [
       {
         "Name": "point-fallback",
         "Connector": "RabbitMq",
