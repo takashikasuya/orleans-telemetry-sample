@@ -1,3 +1,40 @@
+# plans.md: Admin UI point selection real-time update investigation (2026-02-16)
+
+## Purpose
+Admin UIでポイント選択を切り替えた際に、リアルタイム更新が期待通り追従しない問題の原因を特定し、必要最小限の修正で安定動作させる。
+
+## Success Criteria
+1. 原因をコードレベルで特定し、再発しないように修正されている。
+2. ポイント選択中に real-time update 有効時、購読対象が選択中ポイントへ切り替わる。
+3. `dotnet build` と `dotnet test` が成功する。
+
+## Steps
+1. Admin UI と SignalR Hub の購読処理を調査し、原因を特定
+2. 最小変更で購読切替ロジックを修正
+3. build/test 実行
+4. plans.md に結果を記録
+
+## Progress
+- [x] Step 1: 調査開始（Hub + Admin UI の購読/切替ロジック確認）
+- [x] Step 2: 修正実装
+- [x] Step 3: build/test
+- [x] Step 4: 結果記録
+
+## Observations
+- `TelemetryHub.SubscribeToPoint` は `connectionId + tenant + device + point` をキーに static Dictionary を保持しており、別ポイント選択時に旧購読を確実に解除しない。
+- `Admin.razor` の `SelectGraphNodeAsync` は選択変更時に購読再開を行わず、real-time update が有効でも旧ポイント購読のままになりうる。
+- 結果として「チェックONのままポイント選択を切り替える」と、表示中ポイントではなく旧ポイントの更新が流れ続ける。
+
+## Decisions
+- Hub は接続単位で既存購読を全解除してから新規購読する（1 connection = 1 active point）。
+- UI はノード選択時に real-time が有効なら一度 unsubscribe し、新選択ポイントが Point のときに自動再購読する。
+
+## Retrospective
+- 原因は UI/HUB の双方にあり、片側修正のみでは再発余地があるため両側で防御した。
+- `dotnet build` / `dotnet test --no-build` の成功を確認し、回帰がないことを確認した。
+
+---
+
 # plans.md: Docker Compose Multi-Silo Cluster Validation (2026-02-16)
 
 ## Purpose
