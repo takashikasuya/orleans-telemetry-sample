@@ -12,5 +12,5 @@ public sealed class TelemetryStorageOptions
 
     public int CompactionIntervalSeconds { get; set; } = 300;
 
-    public int DefaultQueryLimit { get; set; } = 1000;
+    public int DefaultQueryLimit { get; set; } = 100000;
 }

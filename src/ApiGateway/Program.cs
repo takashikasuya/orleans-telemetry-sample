@@ -413,8 +413,7 @@ app.MapGet("/api/telemetry/{deviceId}", async (
         return Results.Ok(TelemetryQueryResponse.Inline(results));
     }
 
-    var maxInline = Math.Max(1, exportOptions.Value.MaxInlineRecords);
-    if (results.Count <= maxInline)
+    if (TelemetryInlineResponsePolicy.ShouldReturnInline(results, exportOptions.Value))
     {
         return Results.Ok(TelemetryQueryResponse.Inline(results));
     }
