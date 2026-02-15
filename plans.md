@@ -4087,3 +4087,45 @@ Admin UI の表示順で `Spatial Hierarchy` を上部に配置し、`Storage` �
 ## Retrospective
 - UI 表示順は CSS の最小変更で対応できた。
 - Storage 表示は設定とデプロイ構成の両方が揃って初めて非ゼロになることが確認できた。
+
+---
+
+# plans.md: Build Failure Fix - TelemetryClient RegistryService Syntax Repair (2026-02-15)
+
+## Purpose
+`dotnet build` が `TelemetryClient/Services/RegistryService.cs` の構文崩れで失敗していたため、原因を特定して最小修正でビルドを復旧する。
+
+## Success Criteria
+1. `dotnet build` がエラー 0 で成功する。
+2. 既存テスト群 (`dotnet test`) がすべて成功する。
+3. 修正内容・検証結果を plans.md に記録する。
+
+## Steps
+1. 必須ドキュメント確認後に `dotnet build` で失敗を再現する。
+2. `RegistryService.cs` のエラー行を調査し、構文崩れ箇所を特定する。
+3. `RegistryService` を最小限で再構成し、Sites/Buildings/Devices 取得ロジックを共通化して再実装する。
+4. `dotnet build` / `dotnet test` で修正を検証する。
+
+## Progress
+- [x] Step 1: 失敗再現（TelemetryClient RegistryService で CS10xx 多発）
+- [x] Step 2: 構文崩れ特定（メソッド断片混入、波括弧不整合、JsonOptions 行破損）
+- [x] Step 3: RegistryService を再構成して構文復旧
+- [x] Step 4: build/test で再検証
+
+## Observations
+- 失敗原因は `src/TelemetryClient/Services/RegistryService.cs` 内に壊れたコード断片が混入していたこと（`QueryResponse>(content...` から始まる不正な断片、`ToList` の欠損、型定義中の `JsonOptions` 文字列破損など）。
+- 破損はビジネスロジック不整合よりも「ファイル整形・マージ崩れ」に近い症状。
+
+## Decisions
+- 既存意図（registry API からノード一覧取得）を維持しつつ、重複していた Sites/Buildings/Devices 取得処理を `GetNodesAsync` に集約。
+- API 互換のため `GraphNodeTypeStringConverter` は維持し、`NodeType` が数値でも文字列でも受け取れるよう継続。
+
+## Verification
+- `dotnet build`
+  - Result: Succeeded (0 errors / 0 warnings)
+- `dotnet test`
+  - Result: Succeeded (全テスト通過)
+
+## Retrospective
+- 破損ファイルはコンパイラエラーが連鎖して見えるため、まず最初の構文エラー近傍を確認するのが有効だった。
+- 重複ロジックを最小整理したことで今後の同種の修正時にも差分を小さく保ちやすい。
