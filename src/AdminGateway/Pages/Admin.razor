@@ -863,6 +863,13 @@ else
 
     private async Task SelectGraphNodeAsync(string nodeId)
     {
+        var shouldRestoreRealtime = _enableRealTimeUpdate;
+
+        if (shouldRestoreRealtime)
+        {
+            await StopRealTimeUpdatesAsync();
+        }
+
         if (string.IsNullOrWhiteSpace(nodeId) || string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             _selectedGraphNodeDetails = null;
@@ -872,6 +879,21 @@ else
 
         _selectedGraphNodeDetails = await Metrics.GetGraphNodeDetailsAsync(_selectedGraphTenant, nodeId);
         ResetPointTrend();
+
+        if (shouldRestoreRealtime)
+        {
+            if (_selectedGraphNodeDetails?.Snapshot.Node.NodeType == GraphNodeType.Point)
+            {
+                _enableRealTimeUpdate = true;
+                await StartRealTimeUpdatesAsync();
+            }
+            else
+            {
+                _enableRealTimeUpdate = false;
+                _pointTrendError = "Select a point node before enabling real-time updates.";
+            }
+        }
+
         StateHasChanged();
     }
 

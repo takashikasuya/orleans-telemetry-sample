@@ -2,6 +2,7 @@ using Grains.Abstractions;
 using Microsoft.AspNetCore.SignalR;
 using Orleans;
 using Orleans.Streams;
+using System.Collections.Concurrent;
 
 namespace AdminGateway.Hubs;
 
@@ -13,7 +14,7 @@ public sealed class TelemetryHub : Hub
 {
     private readonly IClusterClient _client;
     private readonly ILogger<TelemetryHub> _logger;
-    private static readonly Dictionary<string, StreamSubscriptionHandle<PointSnapshot>> Subscriptions = new();
+    private static readonly ConcurrentDictionary<string, StreamSubscriptionHandle<PointSnapshot>> Subscriptions = new();
 
     public TelemetryHub(IClusterClient client, ILogger<TelemetryHub> logger)
     {
@@ -47,12 +48,8 @@ public sealed class TelemetryHub : Hub
 
             var subscriptionKey = $"{Context.ConnectionId}:{tenantId}:{deviceId}:{pointId}";
 
-            // Unsubscribe existing subscription if any
-            if (Subscriptions.TryGetValue(subscriptionKey, out var existingSubscription))
-            {
-                await existingSubscription.UnsubscribeAsync();
-                Subscriptions.Remove(subscriptionKey);
-            }
+            // Keep one active point subscription per SignalR connection.
+            await UnsubscribeAllForConnectionAsync(Context.ConnectionId);
 
             // Subscribe to stream
             var subscription = await stream.SubscribeAsync(async (snapshot, token) =>
@@ -85,22 +82,7 @@ public sealed class TelemetryHub : Hub
     /// </summary>
     public async Task Unsubscribe()
     {
-        var subscriptionsToRemove = Subscriptions
-            .Where(kvp => kvp.Key.StartsWith(Context.ConnectionId + ":", StringComparison.Ordinal))
-            .ToList();
-
-        foreach (var (key, subscription) in subscriptionsToRemove)
-        {
-            try
-            {
-                await subscription.UnsubscribeAsync();
-                Subscriptions.Remove(key);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to unsubscribe {Key}", key);
-            }
-        }
+        var subscriptionsToRemove = await UnsubscribeAllForConnectionAsync(Context.ConnectionId);
 
         _logger.LogInformation("Client {ConnectionId} unsubscribed from {Count} streams",
             Context.ConnectionId, subscriptionsToRemove.Count);
@@ -111,5 +93,30 @@ public sealed class TelemetryHub : Hub
         // Clean up subscriptions when client disconnects
         await Unsubscribe();
         await base.OnDisconnectedAsync(exception);
+    }
+
+    private async Task<List<string>> UnsubscribeAllForConnectionAsync(string connectionId)
+    {
+        var subscriptionsToRemove = Subscriptions
+            .Where(kvp => kvp.Key.StartsWith(connectionId + ":", StringComparison.Ordinal))
+            .ToList();
+
+        foreach (var (key, subscription) in subscriptionsToRemove)
+        {
+            try
+            {
+                await subscription.UnsubscribeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to unsubscribe {Key}", key);
+            }
+            finally
+            {
+                Subscriptions.TryRemove(key, out _);
+            }
+        }
+
+        return subscriptionsToRemove.Select(item => item.Key).ToList();
     }
 }
