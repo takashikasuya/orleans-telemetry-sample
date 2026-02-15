@@ -63,12 +63,16 @@ services:
       Orleans__AdoNet__ConnectionString: Host=orleans-db;Port=5432;Database=orleans;Username=orleans;Password=orleans_password;
       Orleans__SiloPort: "11111"
       Orleans__GatewayPort: "30000"
+      TelemetryStorage__StagePath: /storage/stage
+      TelemetryStorage__ParquetPath: /storage/parquet
+      TelemetryStorage__IndexPath: /storage/index
     ports:
       - "11111:11111"
       - "30000:30000"
     volumes:
       - ./data/seed-complex.ttl:/seed/seed.ttl:ro
       - ./data/graph-uploads:/uploads
+      - silo-storage:/storage
 
   api:
     build:
@@ -84,8 +88,13 @@ services:
       Orleans__GatewayHost: silo
       Orleans__GatewayPort: "30000"
       ASPNETCORE_URLS: http://+:80
+      TelemetryStorage__StagePath: /storage/stage
+      TelemetryStorage__ParquetPath: /storage/parquet
+      TelemetryStorage__IndexPath: /storage/index
     ports:
       - "8080:80"
+    volumes:
+      - silo-storage:/storage
 
   admin:
     build:
@@ -102,10 +111,14 @@ services:
       Orleans__GatewayPort: "30000"
       ASPNETCORE_URLS: http://+:80
       ADMIN_GRAPH_UPLOAD_DIR: /uploads
+      TelemetryStorage__StagePath: /storage/stage
+      TelemetryStorage__ParquetPath: /storage/parquet
+      TelemetryStorage__IndexPath: /storage/index
     ports:
       - "8082:80"
     volumes:
       - ./data/graph-uploads:/uploads
+      - silo-storage:/storage
 
   telemetry-client:
     build:
@@ -149,3 +162,6 @@ services:
     image: ghcr.io/navikt/mock-oauth2-server:latest
     ports:
       - "8081:8080"
+
+volumes:
+  silo-storage:

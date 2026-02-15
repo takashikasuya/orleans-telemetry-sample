@@ -1,4 +1,5 @@
 using System.Net;
+using AdminGateway.Hubs;
 using AdminGateway.Models;
 using AdminGateway.Services;
 using Grains.Abstractions;
@@ -27,6 +28,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
+builder.Services.AddSignalR();
 builder.Services.AddMudServices();
 builder.Services.Configure<TelemetryStorageOptions>(builder.Configuration.GetSection("TelemetryStorage"));
 builder.Services.Configure<TelemetryIngestOptions>(builder.Configuration.GetSection("TelemetryIngest"));
@@ -135,6 +137,7 @@ app.MapGet("/admin/graph/hierarchy", async (AdminMetricsService metrics, string?
 
 app.MapRazorPages();
 app.MapBlazorHub();
+app.MapHub<TelemetryHub>("/telemetryHub");
 app.MapFallbackToPage("/_Host");
 
 app.Run();

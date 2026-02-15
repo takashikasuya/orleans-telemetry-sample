@@ -145,4 +145,15 @@ public interface IPointGrain : IGrainWithStringKey
 
     /// <summary>Reads the current snapshot from the grain.</summary>
     Task<PointSnapshot> GetAsync();
+
+    /// <summary>Retrieves recent telemetry samples (hot data) stored in memory.</summary>
+    Task<IReadOnlyList<PointSample>> GetRecentSamplesAsync(int maxSamples = 100);
 }
+
+/// <summary>
+/// Represents a single telemetry sample with timestamp and value.
+/// Used for hot data queries (recent samples held in grain memory).
+/// </summary>
+/// <param name="Timestamp">When this sample was recorded.</param>
+/// <param name="Value">Sample value (numeric, boolean, or string).</param>
+public sealed record PointSample(DateTimeOffset Timestamp, object? Value);

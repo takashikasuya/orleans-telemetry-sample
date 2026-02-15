@@ -76,6 +76,13 @@ public sealed class PointGrain : Grain, IPointGrain
             _state.State.UpdatedAt));
     }
 
+    public Task<IReadOnlyList<PointSample>> GetRecentSamplesAsync(int maxSamples = 100)
+    {
+        // Ring buffer removed for memory efficiency.
+        // Hot data should be cached browser-side via SignalR streaming.
+        return Task.FromResult<IReadOnlyList<PointSample>>(Array.Empty<PointSample>());
+    }
+
     [GenerateSerializer]
     public sealed class PointState
     {

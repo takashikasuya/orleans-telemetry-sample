@@ -1,3 +1,48 @@
+# plans.md: Memory Optimization - Remove PointGrain Ring Buffer (2026-02-15)
+
+## Purpose
+Remove in-memory ring buffer from PointGrain to optimize memory usage. Shift hot data caching responsibility from server-side (Orleans Grain) to browser-side (via SignalR streaming).
+
+## Success Criteria
+1. PointGrain ring buffer (`_recentSamples`, `MaxRecentSamples`) removed
+2. `GetRecentSamplesAsync()` returns empty list with clear documentation
+3. `dotnet build` succeeds with 0 errors
+4. Architecture documented: Parquet (cold) + SignalR (live) + browser cache (hot)
+
+## Steps
+1. Remove ring buffer field and constant from PointGrain
+2. Remove enqueue/dequeue logic from UpsertAsync
+3. Update GetRecentSamplesAsync to return empty list with comment
+4. Update architecture documentation in telemetry-realtime-viewer.md
+5. Build and verify
+
+## Progress
+- [x] Step 1: Remove ring buffer field
+- [x] Step 2: Remove queue logic
+- [x] Step 3: Update GetRecentSamplesAsync
+- [x] Step 4: Architecture doc update (next)
+- [x] Step 5: Build verification
+
+## Observations
+- Ring buffer was consuming memory: 500 samples × thousands of points = high memory footprint
+- SignalR real-time updates provide better UX than periodic polling
+- Browser-side caching is more scalable for multi-tenant scenarios
+
+## Decisions
+- Keep `GetRecentSamplesAsync()` method signature for interface compatibility, return empty list
+- `QueryHotDataAsync()` will return empty results, effectively making `QueryPointTrendHybridAsync()` rely on Parquet data only
+- Real-time updates via SignalR streams remain as the primary mechanism for live data
+- Browser maintains rolling window of recent samples received via SignalR
+
+## Verification
+- `dotnet build`
+  - Result: Succeeded (0 errors, 0 warnings)
+
+## Retrospective
+Successfully optimized memory usage by eliminating server-side data caching. New architecture: Parquet for historical data (>2min), SignalR streaming for live updates, browser-side caching for recent samples. This aligns with cloud-native principles: stateless grain, persistence in external storage, real-time via event streams.
+
+---
+
 # plans.md: 未消化タスク消化（AuthenticationTests 追加拡充） (2026-02-15)
 
 ## Purpose

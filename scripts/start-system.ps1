@@ -106,9 +106,11 @@ if ($RabbitMq) {
   $publisherService = " publisher"
 }
 
-if ($Simulator -or $RabbitMq) {
-  $ingestSinkLine = "      TelemetryIngest__EventSinks__Enabled__0: ParquetStorage"
-}
+# Always enable ParquetStorage for telemetry persistence
+$ingestSinkLine = @"
+      TelemetryIngest__EventSinks__Enabled__0: Logging
+      TelemetryIngest__EventSinks__Enabled__1: ParquetStorage
+"@
 
 $ingestEnabledText = if ($ingestEnabledLines.Count -gt 0) { ($ingestEnabledLines -join "`n") + "`n" } else { "" }
 $simulatorText = if ($simulatorLines) { "$simulatorLines`n" } else { "" }
@@ -170,6 +172,13 @@ $ingestEnabledText$ingestSinkText$rabbitMqText$simulatorText
     environment:
       OIDC_AUTHORITY: http://mock-oidc:8080/default
       OIDC_AUDIENCE: default
+      TelemetryStorage__StagePath: /storage/stage
+      TelemetryStorage__ParquetPath: /storage/parquet
+      TelemetryStorage__IndexPath: /storage/index
+      Orleans__GatewayHost: silo
+      Orleans__GatewayPort: "30000"
+    volumes:
+      - "${storageDirPosix}:/storage"
     extra_hosts:
       - "localhost:host-gateway"
 $publisherBlock

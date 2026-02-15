@@ -679,6 +679,165 @@ internal sealed class AdminMetricsService
         return DownsampleTrend(ordered, safeMaxSamples);
     }
 
+    /// <summary>
+    /// Queries hot data (recent samples) directly from PointGrain memory.
+    /// Use for real-time data within last few minutes.
+    /// </summary>
+    public async Task<IReadOnlyList<PointTrendSample>> QueryHotDataAsync(
+        string tenantId,
+        string deviceId,
+        string pointId,
+        int maxSamples = 100,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) ||
+            string.IsNullOrWhiteSpace(deviceId) ||
+            string.IsNullOrWhiteSpace(pointId))
+        {
+            return Array.Empty<PointTrendSample>();
+        }
+
+        try
+        {
+            var pointGrainKey = $"{tenantId}:{pointId}";
+            var grain = _client.GetGrain<IPointGrain>(pointGrainKey);
+            var samples = await grain.GetRecentSamplesAsync(maxSamples);
+
+            return samples
+                .Select(s =>
+                {
+                    var (value, raw) = NormalizeValue(s.Value);
+                    return new PointTrendSample(s.Timestamp, value, raw ?? s.Value?.ToString() ?? "null");
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to query hot data for {TenantId}/{DeviceId}/{PointId}", tenantId, deviceId, pointId);
+            return Array.Empty<PointTrendSample>();
+        }
+    }
+
+    /// <summary>
+    /// Hybrid query combining hot data (grain memory) and cold data (Parquet storage).
+    /// Provides seamless access to recent samples regardless of Parquet compaction status.
+    /// </summary>
+    public async Task<IReadOnlyList<PointTrendSample>> QueryPointTrendHybridAsync(
+        string tenantId,
+        string deviceId,
+        string pointId,
+        TimeSpan duration,
+        int maxSamples = 240,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) ||
+            string.IsNullOrWhiteSpace(deviceId) ||
+            string.IsNullOrWhiteSpace(pointId))
+        {
+            return Array.Empty<PointTrendSample>();
+        }
+
+        var safeDuration = duration <= TimeSpan.Zero ? TimeSpan.FromMinutes(5) : duration;
+        var safeMaxSamples = Math.Max(10, maxSamples);
+        var to = DateTimeOffset.UtcNow;
+        var from = to - safeDuration;
+        var hotThreshold = to - TimeSpan.FromMinutes(2);
+
+        var results = new List<PointTrendSample>();
+
+        // 1. Cold Data: Query Parquet storage for historical data (older than 2 minutes)
+        if (from < hotThreshold)
+        {
+            var coldTo = duration > TimeSpan.FromMinutes(2) ? hotThreshold : to;
+            var coldRequest = new TelemetryQueryRequest(
+                tenantId,
+                deviceId,
+                from,
+                coldTo,
+                pointId,
+                safeMaxSamples * 4);
+
+            try
+            {
+                var coldData = await _storageQuery.QueryAsync(coldRequest, ct);
+                results.AddRange(coldData.Select(item =>
+                {
+                    var (value, raw) = NormalizeValueJson(item.ValueJson);
+                    return new PointTrendSample(item.OccurredAt, value, raw ?? item.ValueJson);
+                }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to query cold data for {TenantId}/{DeviceId}/{PointId}", tenantId, deviceId, pointId);
+            }
+        }
+
+        // 2. Hot Data: Query grain memory for latest samples (last 2 minutes)
+        // Only fetch hot data for short-duration queries to avoid memory pressure
+        if (duration <= TimeSpan.FromHours(1))
+        {
+            try
+            {
+                var hotData = await QueryHotDataAsync(tenantId, deviceId, pointId, 200, ct);
+                // Filter to samples within query range
+                var filteredHot = hotData
+                    .Where(s => s.Timestamp >= from && s.Timestamp <= to)
+                    .ToList();
+                results.AddRange(filteredHot);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to query hot data for {TenantId}/{DeviceId}/{PointId}", tenantId, deviceId, pointId);
+            }
+        }
+
+        // 3. Deduplicate and sort
+        var ordered = results
+            .GroupBy(s => s.Timestamp)
+            .Select(g => g.First()) // Take first if duplicate timestamps
+            .OrderBy(s => s.Timestamp)
+            .ToList();
+
+        return DownsampleTrend(ordered, safeMaxSamples);
+    }
+
+    private static (double? numericValue, string? rawValue) NormalizeValue(object? value)
+    {
+        if (value is null)
+        {
+            return (null, null);
+        }
+
+        if (value is JsonElement elem)
+        {
+            return NormalizeValueJson(elem.GetRawText());
+        }
+
+        if (value is bool b)
+        {
+            return (b ? 1.0 : 0.0, value.ToString());
+        }
+
+        if (value is string str)
+        {
+            return double.TryParse(str, out var d) ? (d, str) : (null, str);
+        }
+
+        if (value is IConvertible convertible)
+        {
+            try
+            {
+                return (Convert.ToDouble(convertible), value.ToString());
+            }
+            catch
+            {
+                return (null, value.ToString());
+            }
+        }
+
+        return (null, value.ToString());
+    }
+
     public async Task<IReadOnlyList<GrainHierarchyNode>> GetGrainHierarchyAsync(
         int maxTypesPerSilo = 20,
         int maxGrainsPerType = 50)

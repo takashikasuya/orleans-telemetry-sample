@@ -1,9 +1,12 @@
 ﻿@page "/"
 @inject AdminMetricsService Metrics
+@inject IJSRuntime JS
 @inject IConfiguration Configuration
 @using System.Collections.Generic
 @using System.IO
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
 
 <section class="admin-header">
     <div>
@@ -452,6 +455,16 @@ else
                                             }
                                         </select>
                                     </label>
+                                    <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <input type="checkbox" @bind="_enableRealTimeUpdate" @bind:after="OnRealTimeToggleChanged" />
+                                        Real-time update
+                                        @if (_enableRealTimeUpdate && _isSubscribedToUpdates)
+                                        {
+                                            <span class="badge badge-success" style="display: flex; align-items: center; gap: 0.25rem;">
+                                                <span class="pulse-dot"></span> Live
+                                            </span>
+                                        }
+                                    </label>
                                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_pointTrendLoading" OnClick="LoadPointTrendAsync">
                                         @if (_pointTrendLoading)
                                         {
@@ -605,6 +618,12 @@ else
     private string? _pointTrendError;
     private string? _pointTrendStatusText;
     private string _selectedTrendRangeKey = "15m";
+    private bool _enableRealTimeUpdate;
+    private bool _isSubscribedToUpdates;
+    private DotNetObjectReference<Admin>? _dotNetRef;
+    private string? _currentSubscriptionTenant;
+    private string? _currentSubscriptionDevice;
+    private string? _currentSubscriptionPoint;
     private const long DefaultGraphUploadLimitBytes = 10 * 1024 * 1024;
     private static readonly IReadOnlyList<TrendRangeOption> TrendRangeOptions = new[]
     {
@@ -616,6 +635,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _dotNetRef = DotNetObjectReference.Create(this);
         await RefreshAsync();
     }
 
@@ -882,7 +902,7 @@ else
             }
 
             var range = GetSelectedTrendRange();
-            _pointTrendSamples = await Metrics.QueryPointTrendAsync(
+            _pointTrendSamples = await Metrics.QueryPointTrendHybridAsync(
                 tenantId,
                 deviceId,
                 pointId,
@@ -1201,5 +1221,110 @@ else
         {
             // Best effort cleanup of temporary uploads.
         }
+    }
+
+    private async Task OnRealTimeToggleChanged()
+    {
+        if (_enableRealTimeUpdate)
+        {
+            await StartRealTimeUpdatesAsync();
+        }
+        else
+        {
+            await StopRealTimeUpdatesAsync();
+        }
+    }
+
+    private async Task StartRealTimeUpdatesAsync()
+    {
+        if (!TryResolvePointQueryContext(
+            _selectedGraphNodeDetails,
+            _selectedGraphTenant ?? string.Empty,
+            out var tenantId,
+            out var deviceId,
+            out var pointId))
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("subscribeToPointUpdates", tenantId, deviceId, pointId, _dotNetRef);
+            _isSubscribedToUpdates = true;
+            _currentSubscriptionTenant = tenantId;
+            _currentSubscriptionDevice = deviceId;
+            _currentSubscriptionPoint = pointId;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _pointTrendError = $"Failed to start real-time updates: {ex.Message}";
+            _enableRealTimeUpdate = false;
+        }
+    }
+
+    private async Task StopRealTimeUpdatesAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("unsubscribeFromPointUpdates");
+            _isSubscribedToUpdates = false;
+            _currentSubscriptionTenant = null;
+            _currentSubscriptionDevice = null;
+            _currentSubscriptionPoint = null;
+            StateHasChanged();
+        }
+        catch
+        {
+            // Ignore errors during unsubscribe
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnPointUpdate(PointUpdateDto update)
+    {
+        var newSample = new PointTrendSample(update.Timestamp, ExtractNumericValue(update.Value), update.Value?.ToString() ?? "null");
+        
+        var samples = _pointTrendSamples.ToList();
+        samples.Add(newSample);
+        
+        // Keep only last 500 samples
+        if (samples.Count > 500)
+        {
+            samples = samples.TakeLast(500).ToList();
+        }
+        
+        _pointTrendSamples = samples;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static double? ExtractNumericValue(object? value)
+    {
+        if (value is null) return null;
+        if (value is bool b) return b ? 1.0 : 0.0;
+        if (value is IConvertible convertible)
+        {
+            try { return Convert.ToDouble(convertible); }
+            catch { return null; }
+        }
+        return null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_enableRealTimeUpdate)
+        {
+            await StopRealTimeUpdatesAsync();
+        }
+        _dotNetRef?.Dispose();
+    }
+
+    public sealed class PointUpdateDto
+    {
+        public DateTimeOffset Timestamp { get; set; }
+        public object? Value { get; set; }
+        public string PointId { get; set; } = string.Empty;
+        public string DeviceId { get; set; } = string.Empty;
+        public string TenantId { get; set; } = string.Empty;
     }
 }

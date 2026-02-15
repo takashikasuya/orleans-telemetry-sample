@@ -126,9 +126,9 @@ YML
   PUBLISHER_SERVICE=" publisher"
 fi
 
-if $USE_SIMULATOR || $USE_RABBITMQ; then
-  INGEST_SINK_LINES="      TelemetryIngest__EventSinks__Enabled__0: ParquetStorage"
-fi
+# Always enable ParquetStorage for telemetry persistence
+INGEST_SINK_LINES="      TelemetryIngest__EventSinks__Enabled__0: Logging
+      TelemetryIngest__EventSinks__Enabled__1: ParquetStorage"
 
 cat <<YML > "$OVERRIDE_FILE"
 services:
@@ -187,6 +187,13 @@ $SIMULATOR_LINES
     environment:
       OIDC_AUTHORITY: http://mock-oidc:8080/default
       OIDC_AUDIENCE: default
+      TelemetryStorage__StagePath: /storage/stage
+      TelemetryStorage__ParquetPath: /storage/parquet
+      TelemetryStorage__IndexPath: /storage/index
+      Orleans__GatewayHost: silo
+      Orleans__GatewayPort: "30000"
+    volumes:
+      - $STORAGE_DIR:/storage
     extra_hosts:
       - "localhost:host-gateway"
 $PUBLISHER_BLOCK
