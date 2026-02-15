@@ -21,7 +21,7 @@ dotnet run --project src/Publisher
 ### RDF シードを使って起動するコマンド
 
 ```bash
-RDF_SEED_PATH=./data/seed-complex.ttl \
+RDF_SEED_PATH=./data/sample.ttl \
 RABBITMQ_HOST=localhost \
 RABBITMQ_PORT=5672 \
 RABBITMQ_USER=guest \

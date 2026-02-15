@@ -1019,13 +1019,24 @@ else
         deviceId = string.Empty;
         pointId = string.Empty;
 
-        var attributes = details.Snapshot.Node.Attributes;
-        if (attributes.TryGetValue("DeviceId", out var device) && !string.IsNullOrWhiteSpace(device))
+        // Prefer DeviceId from GraphNodeDetailView (resolved by server)
+        if (!string.IsNullOrWhiteSpace(details.DeviceId))
         {
-            deviceId = device;
+            deviceId = details.DeviceId;
+        }
+        else
+        {
+            // Fallback to attributes
+            var attributes = details.Snapshot.Node.Attributes;
+            if (attributes.TryGetValue("DeviceId", out var device) && !string.IsNullOrWhiteSpace(device))
+            {
+                deviceId = device;
+            }
         }
 
-        if (attributes.TryGetValue("PointId", out var point) && !string.IsNullOrWhiteSpace(point))
+        // Resolve Point ID
+        var attributes2 = details.Snapshot.Node.Attributes;
+        if (attributes2.TryGetValue("PointId", out var point) && !string.IsNullOrWhiteSpace(point))
         {
             pointId = point;
         }

@@ -72,7 +72,8 @@ public sealed record GrainHierarchyNode(
 public sealed record GraphNodeDetailView(
     GraphNodeSnapshot Snapshot,
     PointSnapshot? PointSnapshot,
-    string? PointGrainKey);
+    string? PointGrainKey,
+    string? DeviceId = null);
 
 public sealed record PointTrendSample(
     DateTimeOffset Timestamp,

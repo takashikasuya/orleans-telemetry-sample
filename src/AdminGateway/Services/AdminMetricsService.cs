@@ -581,9 +581,23 @@ internal sealed class AdminMetricsService
 
         PointSnapshot? pointSnapshot = null;
         string? pointGrainKey = null;
+        string? deviceId = null;
 
         if (snapshot.Node.NodeType == GraphNodeType.Point)
         {
+            // Try to get DeviceId from point attributes first
+            if (!TryGetAttribute(snapshot.Node.Attributes, "DeviceId", out var deviceIdValue) ||
+                string.IsNullOrWhiteSpace(deviceIdValue))
+            {
+                // If not in point attributes, try to get from parent Device/Equipment node
+                deviceIdValue = await ResolveDeviceIdFromParentAsync(tenantId, snapshot);
+            }
+
+            if (!string.IsNullOrWhiteSpace(deviceIdValue))
+            {
+                deviceId = deviceIdValue;
+            }
+
             if (TryGetAttribute(snapshot.Node.Attributes, "PointId", out var pointIdValue))
             {
                 var pointId = pointIdValue!;
@@ -601,7 +615,37 @@ internal sealed class AdminMetricsService
             }
         }
 
-        return new GraphNodeDetailView(snapshot, pointSnapshot, pointGrainKey);
+        return new GraphNodeDetailView(snapshot, pointSnapshot, pointGrainKey, deviceId);
+    }
+
+    private async Task<string?> ResolveDeviceIdFromParentAsync(string tenantId, GraphNodeSnapshot pointSnapshot)
+    {
+        try
+        {
+            // Look for parent Device or Equipment node
+            foreach (var incomingEdge in pointSnapshot.IncomingEdges)
+            {
+                var parentSnapshot = await GetGraphNodeAsync(tenantId, incomingEdge.TargetNodeId);
+                if (parentSnapshot?.Node?.NodeType is GraphNodeType.Device)
+                {
+                    if (TryGetAttribute(parentSnapshot.Node.Attributes, "DeviceId", out var deviceId))
+                    {
+                        return deviceId;
+                    }
+                }
+                else if (parentSnapshot?.Node?.NodeType is GraphNodeType.Equipment)
+                {
+                    // For Equipment nodes, use the NodeId as deviceId if available
+                    return parentSnapshot.Node.NodeId;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to resolve device ID from parent node.");
+        }
+
+        return null;
     }
 
     public async Task<IReadOnlyList<PointTrendSample>> SamplePointTrendAsync(

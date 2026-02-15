@@ -1,0 +1,154 @@
+# Docker Compose Override for Multi-Silo Cluster Validation
+# 
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.silo-multi.yml up --build
+# 
+# This configuration replaces the single 'silo' service with three silos (silo-a, silo-b, silo-c)
+# all using the same AdoNet clustering table in PostgreSQL.
+# The 'api' and 'admin' services connect to silo-a's gateway (30000).
+#
+# Architecture:
+#   - silo-a, silo-b, silo-c: Three Orleans silos in the same cluster
+#   - orleans-db: Shared PostgreSQL MembershipTable for cluster coordination
+#   - mq: RabbitMQ for telemetry ingestion
+#   - api, admin: Gateway clients connecting to silo-a:30000
+#   - publisher: Telemetry publisher (no change)
+
+services:
+  # NOTE: The base 'silo' service is disabled when using this override file.
+  # Instead, use silo-a, silo-b, silo-c defined below.
+  #
+  # To start only multi-silo cluster, use:
+  #   docker compose -f docker-compose.yml -f docker-compose.silo-multi.yml up --build
+
+  silo-a:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.dotnet
+      args:
+        PROJECT: src/SiloHost
+    depends_on:
+      mq:
+        condition: service_healthy
+      orleans-db:
+        condition: service_healthy
+    hostname: silo-a
+    container_name: silo-a
+    environment:
+      RABBITMQ_HOST: mq
+      RDF_SEED_PATH: /seed/seed.ttl
+      TENANT_ID: t1
+      SiloHost__ClusteringMode: AdoNet
+      Orleans__AdoNet__Invariant: Npgsql
+      Orleans__AdoNet__ConnectionString: Host=orleans-db;Port=5432;Database=orleans;Username=orleans;Password=orleans_password;
+      Orleans__SiloPort: "11111"
+      Orleans__GatewayPort: "30000"
+      Orleans__AdvertisedIPAddress: silo-a
+      TelemetryStorage__StagePath: /storage/stage
+      TelemetryStorage__ParquetPath: /storage/parquet
+      TelemetryStorage__IndexPath: /storage/index
+    # Only expose silo-a gateway; silo-b/c are internal-only
+    ports:
+      - "11111:11111"
+      - "30000:30000"
+    volumes:
+      - ./data/seed-complex.ttl:/seed/seed.ttl:ro
+      - ./data/graph-uploads:/uploads
+      - silo-storage:/storage
+    networks:
+      default:
+        aliases:
+          - silo-a
+
+  silo-b:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.dotnet
+      args:
+        PROJECT: src/SiloHost
+    depends_on:
+      mq:
+        condition: service_healthy
+      orleans-db:
+        condition: service_healthy
+    hostname: silo-b
+    container_name: silo-b
+    environment:
+      RABBITMQ_HOST: mq
+      RDF_SEED_PATH: /seed/seed.ttl
+      TENANT_ID: t1
+      SiloHost__ClusteringMode: AdoNet
+      Orleans__AdoNet__Invariant: Npgsql
+      Orleans__AdoNet__ConnectionString: Host=orleans-db;Port=5432;Database=orleans;Username=orleans;Password=orleans_password;
+      Orleans__SiloPort: "11111"
+      Orleans__GatewayPort: "30000"
+      Orleans__AdvertisedIPAddress: silo-b
+      TelemetryStorage__StagePath: /storage/stage
+      TelemetryStorage__ParquetPath: /storage/parquet
+      TelemetryStorage__IndexPath: /storage/index
+    # No external port exposure (internal-only within compose network)
+    ports: []
+    volumes:
+      - ./data/seed-complex.ttl:/seed/seed.ttl:ro
+      - ./data/graph-uploads:/uploads
+      - silo-storage:/storage
+    networks:
+      default:
+        aliases:
+          - silo-b
+
+  silo-c:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.dotnet
+      args:
+        PROJECT: src/SiloHost
+    depends_on:
+      mq:
+        condition: service_healthy
+      orleans-db:
+        condition: service_healthy
+    hostname: silo-c
+    container_name: silo-c
+    environment:
+      RABBITMQ_HOST: mq
+      RDF_SEED_PATH: /seed/seed.ttl
+      TENANT_ID: t1
+      SiloHost__ClusteringMode: AdoNet
+      Orleans__AdoNet__Invariant: Npgsql
+      Orleans__AdoNet__ConnectionString: Host=orleans-db;Port=5432;Database=orleans;Username=orleans;Password=orleans_password;
+      Orleans__SiloPort: "11111"
+      Orleans__GatewayPort: "30000"
+      Orleans__AdvertisedIPAddress: silo-c
+      TelemetryStorage__StagePath: /storage/stage
+      TelemetryStorage__ParquetPath: /storage/parquet
+      TelemetryStorage__IndexPath: /storage/index
+    # No external port exposure (internal-only within compose network)
+    ports: []
+    volumes:
+      - ./data/seed-complex.ttl:/seed/seed.ttl:ro
+      - ./data/graph-uploads:/uploads
+      - silo-storage:/storage
+    networks:
+      default:
+        aliases:
+          - silo-c
+
+  # API Gateway connects to silo-a's gateway (primary gateway)
+  api:
+    depends_on:
+      - silo-a
+    environment:
+      Orleans__GatewayHost: silo-a
+      Orleans__GatewayPort: "30000"
+
+  # Admin Gateway also connects to silo-a
+  admin:
+    depends_on:
+      - silo-a
+    environment:
+      Orleans__GatewayHost: silo-a
+      Orleans__GatewayPort: "30000"
+
+  # Publisher remains unchanged (connects to RabbitMQ)
+  # Service definition inherited from docker-compose.yml

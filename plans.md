@@ -1,3 +1,47 @@
+# plans.md: Docker Compose Multi-Silo Cluster Validation (2026-02-16)
+
+## Purpose
+Docker Composeにおいて複数Silo（silo-a, silo-b, silo-c）の構成・検証を実現するため、AdoNetクラスタリング対応のスイートを完成させ、スケーリング検証の準備を整える。
+
+## Success Criteria
+1. `docker-compose.silo-multi.yml` が作成され、3つのSilo構成を定義している
+2. PostgreSQL OrleansMembershipTable で3つのSilo が相互発見できる（ステータス=0: Active）
+3. api/admin は silo-a:30000 経由で全Siloにアクセス可能
+4. publisher から RabbitMQ → silo-a/b/c への負荷分散を確認
+5. `docs/multi-silo-cluster-validation.md` が検証ステップを記載
+6. `docker compose -f docker-compose.yml -f docker-compose.silo-multi.yml up --build` で成功
+
+## Steps
+1. [x] docker-compose.silo-multi.yml を生成（silo-a/b/c 定義、Orleans環境変数、PortMappingなし）
+2. [x] docs/multi-silo-cluster-validation.md を生成（検証ガイド、トラブルシューティング）
+3. [ ] Program.cs が AdoNet Clustering 対応か確認
+4. [ ] `docker compose -f docker-compose.yml -f docker-compose.silo-multi.yml up --build` で起動
+5. [ ] MembershipTable に3Silo 登録を確認（postgres）
+6. [ ] API health endpoint で接続確認
+7. [ ] テレメトリ受信・ルーティング動作確認
+8. [ ] plans.md に検証結果を記録
+
+## Progress
+- [x] Step 1: docker-compose.silo-multi.yml 生成
+- [x] Step 2: 検証ガイド生成
+- [ ] Step 3: Program.cs 確認
+- [ ] Step 4-8: 検証実行
+
+## Observations
+- 既存の docker-compose.yml は既に PostgreSQL + AdoNet Clustering 対応になっている
+- SiloHost/Program.cs は `SiloHost__ClusteringMode: AdoNet` で切り替え可能
+- docker-compose.silo-multi.yml では、silo サービスを3つに分割し、port exposure を silo-a のみに限定
+
+## Decisions
+- Gateway Discovery: api/admin は silo-a:30000 に接続し、Gateway List から他のSiloを自動発見
+- Storage: 全Silo が同じ silo-storage volume を共有（分散ストレージ前提）
+- RabbitMQ: 3つのSilo が同一キューを購読し、メッセージは自動負荷分散
+
+## Retrospective
+待機中（実行結果の記録予定）
+
+---
+
 # plans.md: Memory Optimization - Remove PointGrain Ring Buffer (2026-02-15)
 
 ## Purpose
