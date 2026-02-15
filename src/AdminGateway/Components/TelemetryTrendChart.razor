@@ -68,8 +68,8 @@
             return;
         }
 
-        var timestamps = Samples.Select(s => s.Timestamp.ToLocalTime().ToString("HH:mm:ss")).ToArray();
-        var values = Samples.Select(s => s.Value?.ToString(CultureInfo.InvariantCulture) ?? "0").ToArray();
+        var timestamps = Samples.Select(s => s.Timestamp.ToString("o")).ToArray();
+        var values = Samples.Select(s => s.Value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
         await JSRuntime.InvokeVoidAsync("updateChart", _chartId, timestamps, values);
     }
 }

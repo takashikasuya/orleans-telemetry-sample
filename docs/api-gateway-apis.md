@@ -57,8 +57,13 @@ ApiGateway は Orleans の最新状態・グラフ・履歴データを REST API
     - `correlationId`
     - `lastError`
 - エラー:
-  - `400 BadRequest`: `deviceId` 不一致、`pointId` 不足など
+  - `400 BadRequest`: `deviceId` 不一致、`pointId` 不足、またはコネクタルーティング不一致
+- ルーティング:
+  - Graph の `GatewayId` をキーに、`config/control-routing.json` の `ConnectorGatewayMappings`（明示マッピング）を優先して `ConnectorName` を解決します。
+  - 明示マッピングで解決できない場合は `GatewayPattern` / `DevicePattern` / `PointPattern` の正規表現ルールを評価します。
+  - いずれにも一致しない場合は曖昧な配送を避けるため `400 BadRequest` を返します。
 - 備考: 現状は制御要求の受付と状態記録までで、実際の機器書き込みは Publisher 側の対応に依存します。
+- 運用: Admin Gateway では `Control Routing` セクションからマッピング設定（JSON）を確認・更新できます。
 
 ### ノード情報
 
@@ -162,9 +167,19 @@ ApiGateway は Orleans の最新状態・グラフ・履歴データを REST API
   - `404 NotFound`
   - `410 Gone`
 
-## gRPC API（計画仕様）
+### SPARQL クエリ
 
-gRPC は REST と等価な機能を提供する前提で設計します。以下は「実装時にあるべき」仕様の整理です。
+`POST /api/sparql/load`
+`POST /api/sparql/query`
+`GET /api/sparql/stats`
+
+- 説明: RDF ロード、SPARQL 実行、テナント単位 triple 数取得を提供します。
+- 認証: 必須（JWT）
+- 備考: 返却フォーマット詳細は `docs/sparql-query-service.md` を参照してください。
+
+## gRPC API（現状と拡張計画）
+
+gRPC は `devices.proto` ベースで一部実装済みです。現状の提供 API と、将来的な拡張計画を以下に整理します。
 
 ### gRPC 認証・テナント
 
@@ -375,8 +390,8 @@ service TelemetryService {
 
 ### 実装メモ
 
-- 現行コードでは gRPC 実装が無効化されています。gRPC を有効にするには `DeviceService` の `DeviceServiceBase` 継承・実装を戻し、`Program.cs` の `MapGrpcService` が有効に動作するようにする必要があります。
-- 上記 proto は REST と等価な API を gRPC で提供するための設計案であり、実装完了時点で正式版に更新します。
+- 現行コードでは `Program.cs` で `DeviceService` と `RegistryGrpcService` を `MapGrpcService` 済みです（`Grpc:Enabled=true` の場合）。
+- `src/ApiGateway/Protos/devices.proto` が実装済み契約であり、上記の大きな proto は将来拡張の設計案です。
 
 ## OpenAPI/Swagger 出力
 

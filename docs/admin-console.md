@@ -13,7 +13,7 @@ The Blazor Server admin console (`src/AdminGateway`) ministers immediate operati
 - **Point trend sampling**: when a Point node is selected, the console can sample the point grain at short intervals and render a lightweight trend chart on demand.
 - **Graph import uploads**: the Graph RDF Import card includes a file picker that uploads an RDF file to the AdminGateway server and then triggers the seed using that uploaded path. Configure the upload directory with `ADMIN_GRAPH_UPLOAD_DIR` or `Admin:GraphUploadDirectory`, and note that Docker deployments must mount the same directory into both the `admin` and `silo` containers so the Orleans silo can read the uploaded file.
 - **Theme toggle**: the app bar includes a light-by-default theme switch so operators can opt into a dark palette without altering the data layout.
-- **Graph seed contracts**: `GraphSeedRequest`/`GraphSeedStatus` in `Grains.Abstractions/GraphSeedContracts.cs` remain the interchange objects used by the console when portal users request a new import path and tenant. The Orleans host keeps the last status inside `GraphSeedGrain` so the UI card can show the last run details without extra storage.
+- **Graph seed contracts**: `GraphSeedRequest`/`GraphSeedStatus` in `Grains.Abstractions/GraphSeedContracts.cs` remain the interchange objects used by the console when portal users request a new import path, tenant ID, and optional tenant name. The Orleans host keeps the last status inside `GraphSeedGrain` so the UI card can show the last run details without extra storage.
 
 ## Component breakdown
 

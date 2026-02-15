@@ -60,6 +60,19 @@ function Run-Docker {
   @"
 version: "3.9"
 services:
+  orleans-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: orleans
+      POSTGRES_USER: orleans
+      POSTGRES_PASSWORD: orleans_password
+    volumes:
+      - ./docker/orleans-db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orleans -d orleans"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
   silo:
     build:
       context: .
@@ -69,7 +82,9 @@ services:
     environment:
       RDF_SEED_PATH: /seed/seed.ttl
       TENANT_ID: t1
-      Orleans__AdvertisedIPAddress: silo
+      SiloHost__ClusteringMode: AdoNet
+      Orleans__AdoNet__Invariant: Npgsql
+      Orleans__AdoNet__ConnectionString: Host=orleans-db;Port=5432;Database=orleans;Username=orleans;Password=orleans_password;
       Orleans__SiloPort: "11111"
       Orleans__GatewayPort: "30000"
       TelemetryIngest__Enabled__0: Simulator
@@ -110,19 +125,11 @@ services:
 
   Log "Starting docker compose"
   & docker compose -f (Join-Path $Root "docker-compose.yml") -f $script:overrideFile down --remove-orphans
+
+  Log "Building silo/api images"
+  & docker compose -f (Join-Path $Root "docker-compose.yml") -f $script:overrideFile build silo api
   
-  # Only build if images don't exist
-  foreach ($service in @("silo", "api")) {
-    $imageName = "orleans-telemetry-sample-${service}:latest"
-    $imageExists = & docker image inspect $imageName 2>$null
-    
-    if (-not $imageExists) {
-      Log "Building $service..."
-      & docker compose -f (Join-Path $Root "docker-compose.yml") -f $script:overrideFile build $service
-    }
-  }
-  
-  & docker compose -f (Join-Path $Root "docker-compose.yml") -f $script:overrideFile up -d mq silo api mock-oidc
+  & docker compose -f (Join-Path $Root "docker-compose.yml") -f $script:overrideFile up -d orleans-db mq silo api mock-oidc
 
   Log "Waiting for API"
   if (-not (Wait-ForUrl "http://localhost:8080/swagger" $apiWaitSeconds)) {

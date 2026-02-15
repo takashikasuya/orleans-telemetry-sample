@@ -30,6 +30,7 @@ builder.Services.AddMudServices();
 builder.Services.Configure<TelemetryStorageOptions>(builder.Configuration.GetSection("TelemetryStorage"));
 builder.Services.Configure<TelemetryIngestOptions>(builder.Configuration.GetSection("TelemetryIngest"));
 builder.Services.AddSingleton<TelemetryStorageScanner>();
+builder.Services.AddSingleton<ITelemetryStorageQuery, ParquetTelemetryStorageQuery>();
 builder.Services.AddScoped<AdminMetricsService>();
 
 var orleansHost = builder.Configuration["Orleans:GatewayHost"] ?? "127.0.0.1";

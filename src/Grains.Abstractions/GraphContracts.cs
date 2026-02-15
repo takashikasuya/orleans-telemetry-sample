@@ -101,10 +101,19 @@ public interface IGraphIndexGrain : IGrainWithStringKey
     Task<IReadOnlyList<string>> GetByTypeAsync(GraphNodeType nodeType);
 }
 
+
+[GenerateSerializer]
+public sealed class GraphTenantInfo
+{
+    [Id(0)] public string TenantId { get; set; } = string.Empty;
+    [Id(1)] public string TenantName { get; set; } = string.Empty;
+}
+
 public interface IGraphTenantRegistryGrain : IGrainWithIntegerKey
 {
-    Task RegisterTenantAsync(string tenantId);
+    Task RegisterTenantAsync(string tenantId, string? tenantName = null);
     Task<IReadOnlyList<string>> GetTenantIdsAsync();
+    Task<IReadOnlyList<GraphTenantInfo>> GetTenantsAsync();
 }
 
 

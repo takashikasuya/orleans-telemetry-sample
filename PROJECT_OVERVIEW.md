@@ -1,6 +1,6 @@
 # Orleans Telemetry Sample - Project Overview
 
-このリポジトリは、Orleans を用いたテレメトリ取り込みとグラフ参照のサンプルです。RabbitMQ/Kafka/シミュレータ経由のテレメトリを Orleans の Grain にマッピングし、REST API で最新状態やグラフ情報を取得できるようにしています。RDF からのグラフシードにも対応しています。
+このリポジトリは、Orleans を用いたテレメトリ取り込みとグラフ参照のサンプルです。RabbitMQ/Kafka/MQTT/シミュレータ経由のテレメトリを Orleans の Grain にマッピングし、REST API で最新状態やグラフ情報を取得できるようにしています。RDF からのグラフシードにも対応しています。
 
 ## ソリューション構成
 
@@ -10,9 +10,9 @@
 - `src/ApiGateway`
   - REST API を提供する ASP.NET Core アプリです。
   - OIDC/JWT 認証を前提にしており、`tenant` claim を `TenantResolver` が解決します。
-  - gRPC はスキャフォールドのみで、実サービスはコメントアウトされています。
+  - gRPC は `DeviceService`（GetSnapshot/StreamUpdates）と `RegistryService`（タグ検索）が有効です。
 - `src/Telemetry.Ingest`
-  - テレメトリ取り込み基盤。RabbitMQ/Kafka/Simulator コネクタと `TelemetryIngestCoordinator` を提供します。
+  - テレメトリ取り込み基盤。RabbitMQ/Kafka/MQTT/Simulator コネクタと `TelemetryIngestCoordinator` を提供します。
 - `src/Telemetry.Storage`
   - テレメトリ永続化モジュール。取り込んだイベントをステージファイル（JSONL）に書き込み、バックグラウンドで Parquet + インデックスに圧縮します。
   - クエリ API でテナント・デバイス・時間範囲によるテレメトリ検索が可能です。
@@ -28,7 +28,7 @@
 
 ## データフロー概要
 
-1. Telemetry.Ingest が RabbitMQ/Kafka/Simulator からメッセージを受信。
+1. Telemetry.Ingest が RabbitMQ/Kafka/MQTT/Simulator からメッセージを受信。
 2. `TelemetryRouterGrain` が `DeviceGrain` にルーティングし、最新値を保存。
 3. `DeviceGrain` は Orleans Stream (`DeviceUpdates`) にスナップショットを発行。
 4. `ParquetTelemetryEventSink` がテレメトリイベントをステージファイル（JSONL）に書き込み、バックグラウンドサービスが定期的に Parquet へ圧縮。
@@ -44,10 +44,10 @@
 ## 主な設定ポイント
 
 - `TelemetryIngest` 設定で有効化コネクタを指定します。
-  - `RabbitMq` / `Kafka` / `Simulator` の各オプションを `appsettings.json` などで設定可能です。
+  - `RabbitMq` / `Kafka` / `Mqtt` / `Simulator` の各オプションを `appsettings.json` などで設定可能です。
 - `TelemetryStorage` 設定で永続化パス、バケット間隔、圧縮間隔を制御します。
   - `ParquetStorage` を `EventSinks.Enabled` に追加することでストレージ機能を有効化します。
-- RDF シードは `RDF_SEED_PATH` と `TENANT_ID` で制御します。
+- RDF シードは `RDF_SEED_PATH` / `TENANT_ID` / `TENANT_NAME` で制御します（`TENANT_NAME` 未指定時は `TENANT_ID` が使用されます）。
 
 ## テスト体系
 
@@ -64,6 +64,7 @@
 - **SimulatorIngestConnectorTests**: シミュレータコネクタがテレメトリを正しく生成することをテスト。
 - **RabbitMqIngestConnectorTests**: RabbitMQ コネクタのデシリアライズ/ポイント変換と JSON 値正規化をテスト。
 - **KafkaIngestConnectorTests**: Kafka コネクタのデシリアライズ/ポイント変換をテスト。
+- **MqttIngestConnectorTests**: MQTT コネクタの topic パース、payload 変換、バックプレッシャー処理をテスト。
 
 #### `ApiGateway.Tests`
 - **RegistryEndpointsTests**: Graph Registry サービスがノードタイプ別の検索、ページング、キャッシュを正しく実装していることをテスト。
@@ -92,10 +93,10 @@
 
 ### ロードテスト・メモリテスト
 
-- **Telemetry.Ingest.LoadTest**: RabbitMQ/Kafka/Simulator を使用した高スループットテレメトリ取り込みのベンチマーク。バックプレッシャー、スループット、レイテンシを測定。
+- **Telemetry.Ingest.LoadTest**: RabbitMQ/Kafka/MQTT/Simulator を使用した高スループットテレメトリ取り込みのベンチマーク。バックプレッシャー、スループット、レイテンシを測定。
 - **Telemetry.Orleans.MemoryLoadTest**: Orleans Grain のメモリ使用量と GC 圧力のプロファイリング。大規模デバイス数・ポイント数での安定性を検証。
 
 ## 現状の制約
 
-- gRPC サービスはスキャフォールドのみで、実装はコメントアウトされています。
+- gRPC は `DeviceService` と `RegistryService` のみ提供され、REST の全機能と等価ではありません。
 - Control Flow はインターフェース定義のみで、制御 Grain/エグレス連携は未実装です。

@@ -11,6 +11,7 @@ using System.Reflection;
 using Bunit.JSInterop;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -64,6 +65,25 @@ public sealed class AdminPageTests : TestContext
         });
     }
 
+
+    [Fact]
+    public void ShowsControlRoutingMappings()
+    {
+        var metrics = CreateMetricsService(
+            tenants: new[] { "t1" },
+            idsByType: new Dictionary<GraphNodeType, IReadOnlyList<string>>(),
+            snapshots: new Dictionary<string, GraphNodeSnapshot>(StringComparer.OrdinalIgnoreCase));
+
+        ConfigureServices(metrics);
+
+        var cut = RenderComponent<Admin>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Control Routing", cut.Markup);
+            Assert.Contains("Routing Config JSON", cut.Markup);
+        });
+    }
     [Fact]
     public void GraphImport_ShowsFilePicker()
     {
@@ -262,11 +282,40 @@ public sealed class AdminPageTests : TestContext
                 IndexPath = "./not-used-index"
             }),
             NullLogger<TelemetryStorageScanner>.Instance);
+        var storageQuery = new Mock<ITelemetryStorageQuery>();
+        storageQuery
+            .Setup(q => q.QueryAsync(It.IsAny<TelemetryQueryRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<TelemetryQueryResult>());
+
+        var tempDir = Path.Combine(Path.GetTempPath(), "admin-gateway-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var routingPath = Path.Combine(tempDir, "control-routing.json");
+        File.WriteAllText(routingPath, "{\"ControlRouting\":{\"DefaultConnector\":\"RabbitMq\",\"ConnectorGatewayMappings\":[{\"Connector\":\"RabbitMq\",\"GatewayIds\":[\"gw-1\"]}]}}");
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ControlRouting:ConfigPath"] = routingPath
+            })
+            .Build();
+
+        var environment = new TestHostEnvironment { ContentRootPath = tempDir };
 
         return new AdminMetricsService(
             client.Object,
             storageScanner,
-            Options.Create(new TelemetryIngestOptions()),
+            storageQuery.Object,
+            Options.Create(new TelemetryIngestOptions { Enabled = new[] { "RabbitMq" } }),
+            configuration,
+            environment,
             NullLogger<AdminMetricsService>.Instance);
+    }
+
+    private sealed class TestHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Development";
+        public string ApplicationName { get; set; } = "AdminGateway.Tests";
+        public string ContentRootPath { get; set; } = Directory.GetCurrentDirectory();
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Directory.GetCurrentDirectory());
     }
 }

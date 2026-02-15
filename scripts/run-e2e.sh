@@ -56,6 +56,19 @@ run_docker() {
 
   cat <<'YML' > "$OVERRIDE_FILE"
 services:
+  orleans-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: orleans
+      POSTGRES_USER: orleans
+      POSTGRES_PASSWORD: orleans_password
+    volumes:
+      - ./docker/orleans-db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orleans -d orleans"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
   silo:
     build:
       context: .
@@ -63,9 +76,12 @@ services:
       args:
         PROJECT: src/SiloHost
     environment:
+      RABBITMQ_HOST: mq
       RDF_SEED_PATH: /seed/seed.ttl
       TENANT_ID: t1
-      Orleans__AdvertisedIPAddress: silo
+      SiloHost__ClusteringMode: AdoNet
+      Orleans__AdoNet__Invariant: Npgsql
+      Orleans__AdoNet__ConnectionString: Host=orleans-db;Port=5432;Database=orleans;Username=orleans;Password=orleans_password;
       Orleans__SiloPort: "11111"
       Orleans__GatewayPort: "30000"
       TelemetryIngest__Enabled__0: Simulator
@@ -91,6 +107,8 @@ services:
       args:
         PROJECT: src/ApiGateway
     environment:
+      OIDC_AUTHORITY: http://mock-oidc:8080/default
+      OIDC_AUDIENCE: default
       TelemetryStorage__StagePath: /storage/stage
       TelemetryStorage__ParquetPath: /storage/parquet
       TelemetryStorage__IndexPath: /storage/index
@@ -103,17 +121,11 @@ YML
 
   log "Starting docker compose"
   $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" down --remove-orphans
+
+  log "Building silo/api images"
+  $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build silo api
   
-  # Only build if images don't exist
-  for SERVICE in silo api; do
-    IMAGE_NAME="orleans-telemetry-sample-${SERVICE}:latest"
-    if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
-      log "Building $SERVICE..."
-      $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" build "$SERVICE"
-    fi
-  done
-  
-  $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d mq silo api mock-oidc
+  $COMPOSE -f "$ROOT/docker-compose.yml" -f "$OVERRIDE_FILE" up -d orleans-db mq silo api mock-oidc
 
   trap cleanup EXIT
 

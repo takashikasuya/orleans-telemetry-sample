@@ -11,21 +11,36 @@ builder.Services.Configure<TelemetryClientOidcOptions>(builder.Configuration.Get
 builder.Services.AddHttpClient("OidcClient");
 builder.Services.AddSingleton<OidcTokenProvider>();
 builder.Services.AddTransient<ApiGatewayAuthHandler>();
-builder.Services.AddHttpClient("ApiGateway", client =>
+var apiGatewayBaseAddress = builder.Configuration.GetValue<Uri?>("TelemetryClient:ApiGatewayBaseAddress") ?? new Uri("http://localhost:8080");
+
+// Data access services with typed HttpClients
+builder.Services.AddHttpClient<RegistryService>(client =>
 {
-    client.BaseAddress = builder.Configuration.GetValue<Uri?>("TelemetryClient:ApiGatewayBaseAddress") ?? new Uri("http://localhost:8080");
+    client.BaseAddress = apiGatewayBaseAddress;
 }).AddHttpMessageHandler<ApiGatewayAuthHandler>();
 
-builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("ApiGateway"));
-builder.Services.AddAuthorizationCore();
+builder.Services.AddHttpClient<GraphTraversalService>(client =>
+{
+    client.BaseAddress = apiGatewayBaseAddress;
+}).AddHttpMessageHandler<ApiGatewayAuthHandler>();
 
-// Data access services
-builder.Services.AddScoped<RegistryService>();
-builder.Services.AddScoped<GraphTraversalService>();
-builder.Services.AddScoped<DeviceService>();
-builder.Services.AddScoped<TelemetryService>();
-builder.Services.AddScoped<ControlService>();
+builder.Services.AddHttpClient<DeviceService>(client =>
+{
+    client.BaseAddress = apiGatewayBaseAddress;
+}).AddHttpMessageHandler<ApiGatewayAuthHandler>();
+
+builder.Services.AddHttpClient<TelemetryService>(client =>
+{
+    client.BaseAddress = apiGatewayBaseAddress;
+}).AddHttpMessageHandler<ApiGatewayAuthHandler>();
+
+builder.Services.AddHttpClient<ControlService>(client =>
+{
+    client.BaseAddress = apiGatewayBaseAddress;
+}).AddHttpMessageHandler<ApiGatewayAuthHandler>();
+
 builder.Services.AddScoped<HierarchyTreeService>();
+builder.Services.AddAuthorizationCore();
 
 var app = builder.Build();
 

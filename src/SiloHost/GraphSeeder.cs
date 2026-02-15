@@ -24,14 +24,15 @@ internal sealed class GraphSeeder
         _logger = logger;
     }
 
-    public async Task<GraphSeedStatus> SeedAsync(string path, string tenantId, CancellationToken cancellationToken)
+    public async Task<GraphSeedStatus> SeedAsync(string path, string tenantId, string? tenantName, CancellationToken cancellationToken)
     {
         tenantId = string.IsNullOrWhiteSpace(tenantId) ? "default" : tenantId;
+        tenantName = string.IsNullOrWhiteSpace(tenantName) ? tenantId : tenantName.Trim();
         var start = DateTimeOffset.UtcNow;
         try
         {
             var seed = await _integration.ExtractGraphSeedDataAsync(path);
-            return await ApplySeedAsync(seed, path, tenantId, start, cancellationToken);
+            return await ApplySeedAsync(seed, path, tenantId, tenantName, start, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -46,19 +47,21 @@ internal sealed class GraphSeeder
                 CompletedAt = failedTime,
                 NodeCount = 0,
                 EdgeCount = 0,
-                Message = ex.Message
+                Message = ex.Message,
+                TenantName = tenantName
             };
         }
     }
 
-    public async Task<GraphSeedStatus> SeedFromContentAsync(string content, string sourceName, string tenantId, CancellationToken cancellationToken)
+    public async Task<GraphSeedStatus> SeedFromContentAsync(string content, string sourceName, string tenantId, string? tenantName, CancellationToken cancellationToken)
     {
         tenantId = string.IsNullOrWhiteSpace(tenantId) ? "default" : tenantId;
+        tenantName = string.IsNullOrWhiteSpace(tenantName) ? tenantId : tenantName.Trim();
         var start = DateTimeOffset.UtcNow;
         try
         {
             var seed = await _integration.ExtractGraphSeedDataFromContentAsync(content, sourceName);
-            return await ApplySeedAsync(seed, sourceName, tenantId, start, cancellationToken);
+            return await ApplySeedAsync(seed, sourceName, tenantId, tenantName, start, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -73,7 +76,8 @@ internal sealed class GraphSeeder
                 CompletedAt = failedTime,
                 NodeCount = 0,
                 EdgeCount = 0,
-                Message = ex.Message
+                Message = ex.Message,
+                TenantName = tenantName
             };
         }
     }
@@ -82,6 +86,7 @@ internal sealed class GraphSeeder
         GraphSeedData seed,
         string sourceName,
         string tenantId,
+        string tenantName,
         DateTimeOffset start,
         CancellationToken cancellationToken)
     {
@@ -123,7 +128,7 @@ internal sealed class GraphSeeder
             }
 
             var completed = DateTimeOffset.UtcNow;
-            await registry.RegisterTenantAsync(tenantId);
+            await registry.RegisterTenantAsync(tenantId, tenantName);
             _logger.LogInformation("Graph seed completed. Path={Path} Tenant={Tenant} Nodes={NodeCount} Edges={EdgeCount}",
                 sourceName,
                 tenantId,
@@ -138,7 +143,8 @@ internal sealed class GraphSeeder
                 StartedAt = start,
                 CompletedAt = completed,
                 NodeCount = seed.Nodes.Count,
-                EdgeCount = seed.Edges.Count
+                EdgeCount = seed.Edges.Count,
+                TenantName = tenantName
             };
         }
         catch (Exception ex)
@@ -154,7 +160,8 @@ internal sealed class GraphSeeder
                 CompletedAt = failedTime,
                 NodeCount = 0,
                 EdgeCount = 0,
-                Message = ex.Message
+                Message = ex.Message,
+                TenantName = tenantName
             };
         }
     }

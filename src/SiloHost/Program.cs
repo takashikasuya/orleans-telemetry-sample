@@ -12,6 +12,7 @@ using Orleans.Hosting;
 using Orleans.Streaming;
 using Telemetry.Ingest;
 using Telemetry.Ingest.Kafka;
+using Telemetry.Ingest.Mqtt;
 using Telemetry.Ingest.RabbitMq;
 using Telemetry.Ingest.Simulator;
 using Telemetry.Storage;
@@ -37,6 +38,7 @@ internal static class Program
             services.AddSingleton<ITelemetryPointRegistrationFilter, GraphRegisteredTelemetryPointFilter>();
             // Connector registration stays in code; config controls which ones are enabled.
             services.AddKafkaIngest(ingestSection.GetSection("Kafka"));
+            services.AddMqttIngest(ingestSection.GetSection("Mqtt"));
             services.AddRabbitMqIngest(ingestSection.GetSection("RabbitMq"));
             services.AddSimulatorIngest(ingestSection.GetSection("Simulator"));
             services.AddLoggingTelemetryEventSink();
@@ -51,6 +53,8 @@ internal static class Program
             var advertisedHost = orleansSection["AdvertisedIPAddress"];
             var siloPort = orleansSection.GetValue("SiloPort", 11111);
             var gatewayPort = orleansSection.GetValue("GatewayPort", 30000);
+            var clusteringMode = context.Configuration.GetValue("SiloHost:ClusteringMode", "Localhost");
+            var useAdoNetClustering = string.Equals(clusteringMode, "AdoNet", StringComparison.OrdinalIgnoreCase);
 
             // Determine advertised address
             IPAddress? advertisedAddress = null;
@@ -84,22 +88,62 @@ internal static class Program
                 }
             }
 
-            // Configure endpoints FIRST, before UseLocalhostClustering
-            if (advertisedAddress != null)
+            // Configure clustering provider first.
+            if (useAdoNetClustering)
+            {
+                var adoNetSection = orleansSection.GetSection("AdoNet");
+                var connectionString = adoNetSection["ConnectionString"];
+                var invariant = adoNetSection["Invariant"] ?? "Npgsql";
+                if (string.IsNullOrWhiteSpace(connectionString))
+                {
+                    throw new InvalidOperationException("Orleans AdoNet clustering is enabled but Orleans:AdoNet:ConnectionString is not configured.");
+                }
+
+                siloBuilder.UseAdoNetClustering(options =>
+                {
+                    options.ConnectionString = connectionString;
+                    options.Invariant = invariant;
+                });
+            }
+            else
+            {
+                siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
+            }
+
+            // Configure endpoints and networking.
+            if (useAdoNetClustering)
+            {
+                // For AdoNet clustering, explicitly configure endpoints to enable gateway
+                if (advertisedAddress != null)
+                {
+                    // Container environment: advertise specific address and listen on all interfaces
+                    siloBuilder.ConfigureEndpoints(advertisedAddress, siloPort, gatewayPort, listenOnAnyHostAddress: true);
+                }
+                else
+                {
+                    // Local environment: let Orleans determine the best address
+                    siloBuilder.Configure<EndpointOptions>(options =>
+                    {
+                        options.SiloPort = siloPort;
+                        options.GatewayPort = gatewayPort;
+                        options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, siloPort);
+                        options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, gatewayPort);
+                    });
+                }
+            }
+            else if (advertisedAddress != null)
+            {
+                // Docker/containerized environment: advertise container IP and listen on all interfaces.
+                siloBuilder.ConfigureEndpoints(advertisedAddress, siloPort, gatewayPort, listenOnAnyHostAddress: true);
+            }
+            else
             {
                 siloBuilder.Configure<EndpointOptions>(options =>
                 {
-                    options.AdvertisedIPAddress = advertisedAddress;
                     options.SiloPort = siloPort;
                     options.GatewayPort = gatewayPort;
-                    // Listen on all interfaces
-                    options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, siloPort);
-                    options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, gatewayPort);
                 });
             }
-
-            // Set up localhost clustering for in-memory membership (this will use endpoints we configured above)
-            siloBuilder.UseLocalhostClustering(siloPort: siloPort, gatewayPort: gatewayPort);
             
             siloBuilder.Configure<ClusterOptions>(options =>
             {
@@ -112,6 +156,7 @@ internal static class Program
             siloBuilder.AddMemoryGrainStorage("GraphIndexStore");
             siloBuilder.AddMemoryGrainStorage("GraphTagIndexStore");
             siloBuilder.AddMemoryGrainStorage("GraphTenantStore");
+            siloBuilder.AddMemoryGrainStorage("SparqlStore");
             siloBuilder.AddMemoryStreams("DeviceUpdates");
             siloBuilder.AddMemoryGrainStorage("PointStore");
             siloBuilder.AddMemoryStreams("PointUpdates");
