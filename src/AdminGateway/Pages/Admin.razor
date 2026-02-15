@@ -448,7 +448,7 @@ else
                                         <select class="graph-input"
                                                 value="@_selectedTrendRangeKey"
                                                 @onchange="OnTrendRangeChanged"
-                                                disabled="_pointTrendLoading">
+                                                disabled="@_pointTrendLoading">
                                             @foreach (var option in TrendRangeOptions)
                                             {
                                                 <option value="@option.Key">@option.Label</option>
@@ -456,7 +456,7 @@ else
                                         </select>
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <input type="checkbox" @bind="_enableRealTimeUpdate" @bind:after="OnRealTimeToggleChanged" />
+                                        <input type="checkbox" @onchange="OnRealTimeCheckboxChanged" checked="@_enableRealTimeUpdate" disabled="@_pointTrendLoading" />
                                         Real-time update
                                         @if (_enableRealTimeUpdate && _isSubscribedToUpdates)
                                         {
@@ -465,7 +465,7 @@ else
                                             </span>
                                         }
                                     </label>
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_pointTrendLoading" OnClick="LoadPointTrendAsync">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_pointTrendLoading" OnClick="LoadPointTrendAsync">
                                         @if (_pointTrendLoading)
                                         {
                                             <MudProgressCircular Size="Size.Small" Indeterminate="true" />
@@ -1246,8 +1246,34 @@ else
         }
     }
 
+    private async Task OnRealTimeCheckboxChanged(ChangeEventArgs args)
+    {
+        if (args.Value is bool isChecked)
+        {
+            _enableRealTimeUpdate = isChecked;
+            StateHasChanged();
+            
+            if (isChecked)
+            {
+                await StartRealTimeUpdatesAsync();
+            }
+            else
+            {
+                await StopRealTimeUpdatesAsync();
+            }
+        }
+    }
+
     private async Task StartRealTimeUpdatesAsync()
     {
+        if (_selectedGraphNodeDetails is null)
+        {
+            _pointTrendError = "Select a point node before enabling real-time updates.";
+            _enableRealTimeUpdate = false;
+            StateHasChanged();
+            return;
+        }
+
         if (!TryResolvePointQueryContext(
             _selectedGraphNodeDetails,
             _selectedGraphTenant ?? string.Empty,
@@ -1255,6 +1281,9 @@ else
             out var deviceId,
             out var pointId))
         {
+            _pointTrendError = "Could not resolve Point context (tenant/device/point IDs missing).";
+            _enableRealTimeUpdate = false;
+            StateHasChanged();
             return;
         }
 
@@ -1265,12 +1294,15 @@ else
             _currentSubscriptionTenant = tenantId;
             _currentSubscriptionDevice = deviceId;
             _currentSubscriptionPoint = pointId;
+            _pointTrendError = null;
             StateHasChanged();
         }
         catch (Exception ex)
         {
             _pointTrendError = $"Failed to start real-time updates: {ex.Message}";
             _enableRealTimeUpdate = false;
+            _isSubscribedToUpdates = false;
+            StateHasChanged();
         }
     }
 

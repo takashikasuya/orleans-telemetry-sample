@@ -61,6 +61,7 @@ builder.Host.UseOrleansClient(client =>
                 TimeSpan.FromSeconds(retryMaxSeconds)));
     });
     client.AddMemoryStreams("DeviceUpdates");
+    client.AddMemoryStreams("PointUpdates");
 });
 
 var app = builder.Build();

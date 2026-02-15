@@ -7,13 +7,13 @@ namespace AdminGateway.Hubs;
 
 /// <summary>
 /// SignalR hub for real-time telemetry updates.
-/// Subscribes to Orleans DeviceUpdates stream and pushes point changes to connected clients.
+/// Subscribes to Orleans PointUpdates stream and pushes point changes to connected clients.
 /// </summary>
 public sealed class TelemetryHub : Hub
 {
     private readonly IClusterClient _client;
     private readonly ILogger<TelemetryHub> _logger;
-    private static readonly Dictionary<string, StreamSubscriptionHandle<DeviceSnapshot>> Subscriptions = new();
+    private static readonly Dictionary<string, StreamSubscriptionHandle<PointSnapshot>> Subscriptions = new();
 
     public TelemetryHub(IClusterClient client, ILogger<TelemetryHub> logger)
     {
@@ -41,9 +41,9 @@ public sealed class TelemetryHub : Hub
 
         try
         {
-            var grainKey = DeviceGrainKey.Create(tenantId, deviceId);
-            var streamProvider = _client.GetStreamProvider("DeviceUpdates");
-            var stream = streamProvider.GetStream<DeviceSnapshot>(StreamId.Create("DeviceUpdatesNs", grainKey));
+            var pointKey = PointGrainKey.Create(tenantId, pointId);
+            var streamProvider = _client.GetStreamProvider("PointUpdates");
+            var stream = streamProvider.GetStream<PointSnapshot>(StreamId.Create("PointUpdatesNs", pointKey));
 
             var subscriptionKey = $"{Context.ConnectionId}:{tenantId}:{deviceId}:{pointId}";
 
@@ -57,18 +57,14 @@ public sealed class TelemetryHub : Hub
             // Subscribe to stream
             var subscription = await stream.SubscribeAsync(async (snapshot, token) =>
             {
-                // Filter: only send updates for the requested pointId
-                if (snapshot.LatestProps.TryGetValue(pointId, out var value))
+                await Clients.Caller.SendAsync("ReceivePointUpdate", new
                 {
-                    await Clients.Caller.SendAsync("ReceivePointUpdate", new
-                    {
-                        Timestamp = snapshot.UpdatedAt,
-                        Value = value,
-                        PointId = pointId,
-                        DeviceId = deviceId,
-                        TenantId = tenantId
-                    }, token);
-                }
+                    Timestamp = snapshot.UpdatedAt,
+                    Value = snapshot.LatestValue,
+                    PointId = pointId,
+                    DeviceId = deviceId,
+                    TenantId = tenantId
+                }, token);
             });
 
             Subscriptions[subscriptionKey] = subscription;
