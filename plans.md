@@ -1,3 +1,45 @@
+# plans.md: Docker Compose ローカルクラスタ実装検討と 1/複数 Silo 負荷試験設計 (2026-02-15)
+
+## Purpose
+Docker Compose を使ったローカル Orleans クラスタ実装（単一 Silo / 複数 Silo 切替）の実装方針を整理し、同一条件で性能比較できる負荷試験手順を文書化する。
+
+## Success Criteria
+1. 単一 Silo と複数 Silo の Compose 実装方針が docs に明文化されている。
+2. 1 Silo vs 複数 Silo を比較する際の試験手順/KPI/判定基準が docs に明文化されている。
+3. 既存コード挙動を変更せず（ドキュメント更新のみ）、ビルドとテストが成功する。
+
+## Steps
+1. 既存のクラスタリング・負荷試験ドキュメントと compose 構成を確認する。
+2. `docs/clustering-and-scalability.md` にローカルクラスタ実装案（compose 2段構成）を追記する。
+3. `docs/telemetry-ingest-loadtest.md` に単一/複数 Silo 比較手順を追記する。
+4. `dotnet build` / `dotnet test` を実行して、既存挙動非破壊を確認する。
+
+## Progress
+- [x] Step 1: 既存資料の確認
+- [x] Step 2: クラスタ実装案の追記
+- [x] Step 3: 負荷試験比較手順の追記
+- [x] Step 4: build/test 実行（build は既存エラーで失敗、test は成功）
+
+## Observations
+- 既存の `docker-compose.yml` は単一 `silo` 構成で、AdoNet clustering は有効化済み。
+- 負荷試験ドキュメントには ingest 試験手順があるが、1 Silo vs 複数 Silo 比較の明示手順が不足していた。
+
+## Decisions
+- コード変更ではなく、まずドキュメントで実装・評価手順を定義する。
+- 複数 Silo は `docker-compose.silo-multi.yml` を追加する前提で、base + override 方式を採用する案を示す。
+
+## Verification
+- `dotnet build`
+  - Result: Failed（既存の `src/TelemetryClient/Services/RegistryService.cs` に構文エラーがあり失敗。今回変更ファイル外）
+- `dotnet test`
+  - Result: Succeeded（全テスト成功）
+
+## Retrospective
+- 既存ドキュメントにはクラスタ構成と ingest 試験の個別情報はあったが、1/複数 Silo の比較観点が分散していた。
+- 今回、ローカルクラスタ実装案と比較試験の評価軸を明文化し、次回の実装/検証タスクを開始しやすくした。
+
+---
+
 # plans.md: gRPC Endpoint Implementation & Test Audit (2026-02-14)
 
 ## Purpose

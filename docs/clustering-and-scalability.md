@@ -194,6 +194,91 @@ telemetry-cluster | 172.18.0.4   | 11111 | 0      | 30000     | 2026-02-14 12:34
 
 ---
 
+
+## Local Cluster Implementation Proposal (Docker Compose)
+
+ローカルで **1 Silo / 複数 Silo** を切り替えて評価するため、Compose を 2 段構成にする。
+
+- ベース: `docker-compose.yml`（単一 Silo）
+- オーバーライド: `docker-compose.silo-multi.yml`（複数 Silo）
+
+### 1. 単一 Silo（基準系）
+
+```bash
+docker compose up --build
+```
+
+評価観点:
+- API（REST/gRPC）の安定応答
+- RabbitMQ 消費遅延
+- Orleans membership が 1 ノードで安定
+
+### 2. 複数 Silo（比較系）
+
+以下の override を追加して `silo` を複製する。`api` は代表 Gateway（例: `silo-a:30000`）に接続し、Gateway list を自動取得させる。
+
+```yaml
+# docker-compose.silo-multi.yml
+services:
+  silo-a:
+    extends:
+      file: docker-compose.yml
+      service: silo
+    container_name: silo-a
+    hostname: silo-a
+    environment:
+      Orleans__SiloPort: "11111"
+      Orleans__GatewayPort: "30000"
+    ports: []
+
+  silo-b:
+    extends:
+      file: docker-compose.yml
+      service: silo
+    container_name: silo-b
+    hostname: silo-b
+    environment:
+      Orleans__SiloPort: "11111"
+      Orleans__GatewayPort: "30000"
+    ports: []
+
+  silo-c:
+    extends:
+      file: docker-compose.yml
+      service: silo
+    container_name: silo-c
+    hostname: silo-c
+    environment:
+      Orleans__SiloPort: "11111"
+      Orleans__GatewayPort: "30000"
+    ports: []
+
+  api:
+    environment:
+      Orleans__GatewayHost: silo-a
+      Orleans__GatewayPort: "30000"
+```
+
+起動例:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.silo-multi.yml up --build
+```
+
+### 3. 実装・運用上の注意
+
+- `orleans-db`（AdoNet membership）を必須にし、全 Silo が同一 membership table を使う。
+- Silo の host port 公開は不要（Compose network 内通信のみ）にする。
+- `api`/`admin` は 1 つの gateway host に接続できればよい。
+- スケール評価時は publisher の送信レートを固定し、Silo 台数だけを変える。
+
+### 4. 成功条件（ローカルクラスタ）
+
+1. `docker compose ps` で `silo-*` が全て `Up`。
+2. `api` ログで gateway 接続成功が確認できる。
+3. `silo-*` ログで membership に複数ノード登録が確認できる。
+4. 同一負荷条件で、単一 Silo 대비 複数 Silo の throughput / p95 latency の差分が取得できる。
+
 ## Production and Kubernetes
 
 ### Kubernetes Clustering
