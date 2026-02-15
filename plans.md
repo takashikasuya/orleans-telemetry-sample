@@ -4477,3 +4477,86 @@ GatewayId が命名ルールに従わないケースでも安全に遠隔制御�
 ## Retrospective
 - ルーティング根拠を「推測ルール」から「明示マップ中心」に寄せたことで、運用者が意図通りに制御先を管理しやすくなった。
 - 今後は Admin UI で JSON 直接編集だけでなく、行単位 CRUD にも拡張すると入力ミスを減らせる。
+
+---
+
+# plans.md: Telemetry取得上限の見直し（大きめエクスポート対応） (2026-02-15)
+
+## Purpose
+テレメトリ取得APIにおける既定上限（DefaultQueryLimit=1000 / MaxInlineRecords=1000）が小さく、URLダウンロード用途の実運用に不向きなため、既定値を引き上げて大きめのエクスポートを扱えるようにする。
+
+## Success Criteria
+1. `TelemetryStorageOptions.DefaultQueryLimit` の既定値が引き上げられている。
+2. `TelemetryExportOptions.MaxInlineRecords` の既定値が引き上げられている。
+3. `dotnet build` と `dotnet test` が成功する。
+
+## Steps
+1. 既定値を定義している箇所を特定する。
+2. 取得上限とインライン閾値を引き上げる。
+3. build/test を実行し、結果を記録する。
+
+## Progress
+- [x] Step 1: 既定値定義箇所の特定
+- [x] Step 2: 既定値引き上げ
+- [x] Step 3: build/test 実行
+
+## Observations
+- `DefaultQueryLimit` は API の limit 未指定時にエクスポート件数上限そのものとして効く。
+- `MaxInlineRecords` はインライン返却とURL返却の分岐にのみ影響する。
+
+## Decisions
+- URLダウンロード前提の実運用を想定し、既定値を次の通り引き上げる。
+  - `DefaultQueryLimit`: 1000 -> 100000
+  - `MaxInlineRecords`: 1000 -> 10000
+
+## Verification
+- `dotnet build`
+  - Result: Succeeded (0 errors, 既存 warning のみ)
+- `dotnet test`
+  - Result: Succeeded (Failed 0)
+
+## Retrospective
+- API limit 未指定時の取得上限を緩和でき、URLエクスポートを前提にしたユースケースへ寄せられた。
+- レコードサイズは可変のため、将来的には byte ベース上限（例: MaxExportBytes）を追加するとさらに運用しやすい。
+
+---
+
+# plans.md: Telemetryインライン返却のbyteベース上限化 (2026-02-15)
+
+## Purpose
+前回の件数ベース閾値（MaxInlineRecords）ではレコードサイズ差異を反映できず、10,000件でも不足という指摘に対応するため、テレメトリ取得レスポンスのインライン可否判定を byte ベースへ変更する。
+
+## Success Criteria
+1. インライン判定が件数ではなく byte ベースで行われる。
+2. `TelemetryExportOptions` に byte ベース閾値が追加され、既定値が設定される。
+3. 判定ロジックに対するテストが追加される。
+4. `dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. インライン判定箇所を特定し、byte 見積りポリシーを実装する。
+2. 既定オプションを `MaxInlineBytes` へ置き換える。
+3. ポリシーテストを追加する。
+4. build/test を実行して検証する。
+
+## Progress
+- [x] Step 1: 判定ポリシー実装
+- [x] Step 2: オプション置換
+- [x] Step 3: テスト追加
+- [x] Step 4: build/test 実行
+
+## Observations
+- テレメトリAPIは URL エクスポート経路を既に持っているため、インライン返却は件数より payload byte で切る方が実態に合う。
+
+## Decisions
+- `TelemetryInlineResponsePolicy` を追加し、`TelemetryQueryResponse.Inline(results)` の UTF-8 シリアライズサイズで判定する。
+- 既定閾値は `MaxInlineBytes = 5 * 1024 * 1024`（5MB）とする。
+
+## Verification
+- `dotnet build`
+  - Result: Succeeded (0 errors, 既存 warning のみ)
+- `dotnet test`
+  - Result: Succeeded (Failed 0)
+
+## Retrospective
+- 件数依存を排除し、可変サイズ payload に対して一貫したインライン制御が可能になった。
+- URL エクスポート経路を維持したまま、インラインは実データサイズで判断できるようになった。
