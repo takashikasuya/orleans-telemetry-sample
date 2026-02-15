@@ -1,6 +1,7 @@
 using System.Net;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using ApiGateway.Contracts;
 using ApiControlRequest = ApiGateway.Contracts.PointControlRequest;
 using ApiControlResponse = ApiGateway.Contracts.PointControlResponse;
@@ -18,6 +19,12 @@ using Telemetry.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var controlRoutingConfigPath = builder.Configuration["ControlRouting:ConfigPath"] ?? "config/control-routing.json";
+if (File.Exists(controlRoutingConfigPath))
+{
+    builder.Configuration.AddJsonFile(controlRoutingConfigPath, optional: true, reloadOnChange: true);
+}
+
 // Configure authentication using OIDC / JWT
 var authority = builder.Configuration["OIDC_AUTHORITY"] ?? "http://mock-oidc:8080/default";
 var audience = builder.Configuration["OIDC_AUDIENCE"] ?? "api";
@@ -30,6 +37,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<GraphTraversal>();
 builder.Services.Configure<TelemetryStorageOptions>(builder.Configuration.GetSection("TelemetryStorage"));
 builder.Services.AddSingleton<ITelemetryStorageQuery, ParquetTelemetryStorageQuery>();
@@ -41,6 +49,9 @@ builder.Services.AddSingleton<RegistryExportService>();
 builder.Services.AddSingleton<GraphRegistryService>();
 builder.Services.AddSingleton<TagSearchService>();
 builder.Services.AddSingleton<GraphPointResolver>();
+builder.Services.Configure<ControlRoutingOptions>(builder.Configuration.GetSection("ControlRouting"));
+builder.Services.AddSingleton<ControlConnectorRouter>();
+builder.Services.AddSingleton<PointGatewayResolver>();
 builder.Services.AddHostedService<RegistryExportCleanupService>();
 
 // Configure gRPC
@@ -164,6 +175,8 @@ app.MapPost("/api/devices/{deviceId}/control", async (
     string deviceId,
     ApiControlRequest command,
     IClusterClient client,
+    PointGatewayResolver gatewayResolver,
+    ControlConnectorRouter connectorRouter,
     HttpContext http) =>
 {
     var tenant = TenantResolver.ResolveTenant(http);
@@ -183,8 +196,36 @@ app.MapPost("/api/devices/{deviceId}/control", async (
         return Results.BadRequest(new { Message = "PointId is required." });
     }
 
+    var routing = await gatewayResolver.ResolveAsync(tenant, command.DeviceId, command.PointId);
+
     var requestId = string.IsNullOrWhiteSpace(command.CommandId) ? Guid.NewGuid().ToString("D") : command.CommandId;
-    var metadata = command.Metadata ?? new Dictionary<string, string>();
+    var metadata = command.Metadata ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    if (!string.IsNullOrWhiteSpace(routing.GatewayId))
+    {
+        metadata["GatewayId"] = routing.GatewayId;
+    }
+
+    var connectorName = connectorRouter.ResolveConnector(
+        new ControlRouteContext(command.DeviceId, command.PointId, routing.GatewayId),
+        out var matchedRule);
+
+    if (string.IsNullOrWhiteSpace(connectorName))
+    {
+        return Results.BadRequest(new
+        {
+            Message = "No connector route matched for the requested control point.",
+            command.DeviceId,
+            command.PointId,
+            routing.GatewayId
+        });
+    }
+
+    metadata["ConnectorName"] = connectorName;
+    if (!string.IsNullOrWhiteSpace(matchedRule))
+    {
+        metadata["RoutingRule"] = matchedRule;
+    }
     var grainRequest = new Grains.Abstractions.PointControlRequest
     {
         CommandId = requestId,
