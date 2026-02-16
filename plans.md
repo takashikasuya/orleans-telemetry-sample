@@ -1,3 +1,43 @@
+# plans.md: Admin UI Real-time Update & Ingest Config Issues (2026-02-16)
+
+## Purpose
+Admin UI でポイントのテレメトリ可視化の Real-time update が正しく機能していない、また Ingest 部分の connectors・Event sinks が None と表示される問題を解決する。
+
+## Success Criteria
+1. Connectors と Event sinks が admin UI に正しく表示される（None ではなく実際の値）
+2. Tenant 変更時に real-time update が適切に停止・再開される
+3. Point ノード選択時に real-time update が正常に購読される
+4. `dotnet build` と `dotnet test` が成功する
+
+## Observations & Findings
+- **Connectors/Event sinks が None**: AdminGateway に appsettings.json がなく、TelemetryIngestOptions.Enabled が null のままになっていた
+- **Real-time update の不安定**: Tenant selection 変更時に、購読中の古い point が unsubscribe されず、新しい tenant の point subscription が中途半端になる可能性があった
+- TelemetryHub.SubscribeToPoint は正しく実装されており、stream subscription は動作している
+
+## Changes Implemented
+1. **AdminGateway/appsettings.json 作成**
+   - SiloHost の TelemetryIngest 設定を mirror
+   - Enabled connectors: "RabbitMq"
+   - Enabled sinks: "Logging", "ParquetStorage"
+   
+2. **Admin.razor - Tenant selection 時の real-time update 処理修正**
+   - OnGraphTenantSelectionChanged: Tenant 変更時に StopRealTimeUpdatesAsync() を呼び出し
+   - LoadSpatialHierarchyAsync: Hierarchy ロード時にも real-time updates を stop
+   - これにより tenant 切り替え時に古い point subscription がクリーンアップされる
+
+## Verification Steps
+- [x] AdminGateway appsettings.json 作成
+- [x] Admin.razor でリアルタイム更新状態管理を改善
+- [x] dotnet build 成功
+- [x] dotnet test 成功（全3テスト通過）
+
+## Retrospective
+- AdminGateway が独立した設定ファイルを必要とすること、また real-time update の state が multiple lifecycle points でリセットされるべきことが理解された
+- SelectGraphNodeAsync は既に async unsubscribe/subscribe の logic を持っていたが、tenant/hierarchy 変更時の cleanup が lacking していた
+- 最小変更で問題が解決された
+
+---
+
 # plans.md: Admin UI point selection real-time update investigation (2026-02-16)
 
 ## Purpose

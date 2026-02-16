@@ -668,6 +668,13 @@ else
 
     private async Task LoadSpatialHierarchyAsync()
     {
+        // Stop real-time updates when loading new hierarchy
+        if (_enableRealTimeUpdate)
+        {
+            await StopRealTimeUpdatesAsync();
+            _enableRealTimeUpdate = false;
+        }
+
         if (string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             _graphTreeNodes.Clear();
@@ -783,6 +790,13 @@ else
         if (args?.Value is not string tenant || string.IsNullOrWhiteSpace(tenant))
         {
             return;
+        }
+
+        // Stop real-time updates when tenant changes
+        if (_enableRealTimeUpdate)
+        {
+            await StopRealTimeUpdatesAsync();
+            _enableRealTimeUpdate = false;
         }
 
         _selectedGraphTenant = tenant;
