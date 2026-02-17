@@ -494,6 +494,12 @@ else
                                     <TelemetryTrendChart Samples="_pointTrendSamples"
                                                          Title="Latest telemetry trend" />
                                 }
+                                else if (_pointTrendRequested && _enableRealTimeUpdate && _isSubscribedToUpdates)
+                                {
+                                    // Real-time update is active but no data yet - show chart in empty state
+                                    <TelemetryTrendChart Samples="_pointTrendSamples"
+                                                         Title="Latest telemetry trend (waiting for real-time data...)" />
+                                }
                                 else if (_pointTrendRequested)
                                 {
                                     <MudText Typo="Typo.body2" Class="muted mt-2">No telemetry samples available.</MudText>
@@ -1381,11 +1387,24 @@ else
     {
         if (value is null) return null;
         if (value is bool b) return b ? 1.0 : 0.0;
+        if (value is double d) return d;
+        if (value is float f) return f;
+        if (value is int i) return i;
+        if (value is long l) return l;
+        if (value is decimal dec) return (double)dec;
+        
         if (value is IConvertible convertible)
         {
             try { return Convert.ToDouble(convertible); }
             catch { return null; }
         }
+        
+        // Last resort: try parsing as string
+        if (value is string str && double.TryParse(str, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+        {
+            return parsed;
+        }
+        
         return null;
     }
 

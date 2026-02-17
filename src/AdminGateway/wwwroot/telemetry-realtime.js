@@ -22,8 +22,10 @@ window.subscribeToPointUpdates = async (tenantId, deviceId, pointId, dotNetHelpe
 
         // Handle incoming point updates
         telemetryConnection.on("ReceivePointUpdate", (update) => {
+            console.log("[telemetry-realtime.js] ReceivePointUpdate received:", update);
             dotNetHelper.invokeMethodAsync('OnPointUpdate', update)
-                .catch(err => console.error('Failed to invoke OnPointUpdate:', err));
+                .then(() => console.log("[telemetry-realtime.js] OnPointUpdate invoked successfully"))
+                .catch(err => console.error('[telemetry-realtime.js] Failed to invoke OnPointUpdate:', err));
         });
 
         // Connection lifecycle events

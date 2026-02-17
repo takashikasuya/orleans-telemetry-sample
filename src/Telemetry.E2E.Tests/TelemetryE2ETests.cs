@@ -31,6 +31,217 @@ public sealed class TelemetryE2ETests
         PropertyNameCaseInsensitive = true
     };
 
+    /// <summary>
+    /// RDFファイルが正常にロードされ、グラフ構造がGrainとして生成されることを確認するテスト
+    /// </summary>
+    [Fact]
+    public async Task RdfGrainInitialization_LoadsGraphStructureAndEquipmentPoints()
+    {
+        var rdfPath = Path.Combine(AppContext.BaseDirectory, "seed.ttl");
+        var tempRoot = CreateTempDirectory();
+        var stageRoot = Path.Combine(tempRoot, "stage");
+        var parquetRoot = Path.Combine(tempRoot, "parquet");
+        var indexRoot = Path.Combine(tempRoot, "index");
+        Directory.CreateDirectory(stageRoot);
+        Directory.CreateDirectory(parquetRoot);
+        Directory.CreateDirectory(indexRoot);
+
+        Environment.SetEnvironmentVariable("RDF_SEED_PATH", rdfPath);
+        Environment.SetEnvironmentVariable("TENANT_ID", "t1");
+
+        IHost? siloHost = null;
+        try
+        {
+            var siloPort = GetFreeTcpPort();
+            var gatewayPort = GetFreeTcpPort();
+            var simulator = new TelemetryE2ESimulatorConfig
+            {
+                TenantId = "t1",
+                BuildingName = "building",
+                SpaceId = "space",
+                DeviceIdPrefix = "device",
+                DeviceCount = 1,
+                PointsPerDevice = 1,
+                IntervalMilliseconds = 500
+            };
+
+            var siloConfig = BuildSiloConfig(stageRoot, parquetRoot, indexRoot, simulator, siloPort, gatewayPort);
+            siloHost = CreateSiloHost(siloConfig);
+            await siloHost.StartAsync();
+            await WaitForPortAsync(gatewayPort, TimeSpan.FromSeconds(5));
+
+            // Verify RDF was loaded and grains created
+            var grainFactory = siloHost.Services.GetRequiredService<IGrainFactory>();
+
+            // Verify graph structure was seeded
+            var graphIndexGrain = grainFactory.GetGrain<IGraphIndexGrain>("t1");
+            
+            // Get Equipment nodes from the graph index
+            var equipmentNodeIds = await graphIndexGrain.GetByTypeAsync(GraphNodeType.Equipment);
+            equipmentNodeIds.Should().NotBeEmpty("Equipment nodes should be created from RDF seed");
+
+            // Get Point nodes from the graph index
+            var pointNodeIds = await graphIndexGrain.GetByTypeAsync(GraphNodeType.Point);
+            pointNodeIds.Should().NotBeEmpty("Point nodes should be created from RDF seed");
+
+            // Verify we can access at least one point grain and its snapshot
+            if (pointNodeIds.Count > 0)
+            {
+                var firstPointNodeId = pointNodeIds.First();
+                var pointNodeGrain = grainFactory.GetGrain<IGraphNodeGrain>(GraphNodeKey.Create("t1", firstPointNodeId));
+                var pointNodeSnapshot = await pointNodeGrain.GetAsync();
+                
+                pointNodeSnapshot.Should().NotBeNull();
+                pointNodeSnapshot.Node.Should().NotBeNull();
+                pointNodeSnapshot.Node.NodeType.Should().Be(GraphNodeType.Point);
+
+                // Get the actual Point grain to verify telemetry state
+                if (pointNodeSnapshot.Node.Attributes.TryGetValue("PointId", out var pointId))
+                {
+                    var pointGrain = grainFactory.GetGrain<IPointGrain>(PointGrainKey.Create("t1", pointId));
+                    var pointSnapshot = await pointGrain.GetAsync();
+                    pointSnapshot.Should().NotBeNull();
+                    pointSnapshot.UpdatedAt.Ticks.Should().BeGreaterThan(0);
+                }
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("RDF_SEED_PATH", null);
+            Environment.SetEnvironmentVariable("TENANT_ID", null);
+
+            if (siloHost is not null)
+            {
+                await siloHost.StopAsync();
+                siloHost.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// APIゲートウェイがGrainから取得したデバイスデータを正常に返すことを確認するテスト
+    /// </summary>
+    [Fact]
+    public async Task ApiGateway_RetrievesDeviceDataFromGrains()
+    {
+        var options = LoadOptions();
+        var rdfPath = Path.Combine(AppContext.BaseDirectory, "seed.ttl");
+        var tempRoot = CreateTempDirectory();
+        var stageRoot = Path.Combine(tempRoot, "stage");
+        var parquetRoot = Path.Combine(tempRoot, "parquet");
+        var indexRoot = Path.Combine(tempRoot, "index");
+        Directory.CreateDirectory(stageRoot);
+        Directory.CreateDirectory(parquetRoot);
+        Directory.CreateDirectory(indexRoot);
+
+        IHost? siloHost = null;
+        ApiGatewayFactory? apiFactory = null;
+
+        try
+        {
+            var simulator = new TelemetryE2ESimulatorConfig
+            {
+                TenantId = "t1",
+                BuildingName = "building",
+                SpaceId = "space",
+                DeviceIdPrefix = "device",
+                DeviceCount = 2,
+                PointsPerDevice = 2,
+                IntervalMilliseconds = 100
+            };
+
+            Environment.SetEnvironmentVariable("RDF_SEED_PATH", rdfPath);
+            Environment.SetEnvironmentVariable("TENANT_ID", simulator.TenantId);
+
+            var siloPort = GetFreeTcpPort();
+            var gatewayPort = GetFreeTcpPort();
+            var siloConfig = BuildSiloConfig(stageRoot, parquetRoot, indexRoot, simulator, siloPort, gatewayPort);
+            siloHost = CreateSiloHost(siloConfig);
+            await siloHost.StartAsync();
+            await WaitForPortAsync(gatewayPort, TimeSpan.FromSeconds(5));
+
+            Environment.SetEnvironmentVariable("Orleans__GatewayHost", "127.0.0.1");
+            Environment.SetEnvironmentVariable("Orleans__GatewayPort", gatewayPort.ToString());
+
+            var apiConfig = BuildApiConfig(stageRoot, parquetRoot, indexRoot, gatewayPort);
+            apiFactory = new ApiGatewayFactory(apiConfig);
+            using var client = apiFactory.CreateClient();
+
+            var timeout = TimeSpan.FromSeconds(options.WaitTimeoutSeconds);
+
+            // Test 1: Verify device list is returned
+            var deviceListResponse = await client.GetAsync("/api/registry/devices?limit=10");
+            deviceListResponse.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+            var deviceListContent = await deviceListResponse.Content.ReadAsStringAsync();
+            var deviceListJson = JsonSerializer.Deserialize<JsonElement>(deviceListContent, JsonOptions);
+            
+            // Handle both direct array and wrapped response
+            JsonElement itemsElement;
+            if (deviceListJson.ValueKind == JsonValueKind.Array)
+            {
+                var devices = deviceListJson.EnumerateArray().ToList();
+                devices.Should().NotBeEmpty("Devices should be enumerable from RDF-seeded registry");
+                
+                // Test 2: Get first device and verify it has properties
+                var firstDeviceJson = devices.FirstOrDefault();
+                firstDeviceJson.Should().NotBe(default);
+                
+                // Try different property name cases
+                var deviceId = "";
+                if (firstDeviceJson.TryGetProperty("deviceId", out var deviceIdProp))
+                {
+                    deviceId = deviceIdProp.GetString() ?? "";
+                }
+                else if (firstDeviceJson.TryGetProperty("id", out var idProp))
+                {
+                    deviceId = idProp.GetString() ?? "";
+                }
+                else
+                {
+                    // Log available properties for debugging
+                    var props = string.Join(", ", firstDeviceJson.EnumerateObject().Select(p => p.Name));
+                    throw new InvalidOperationException($"No device ID found in response. Available properties: {props}");
+                }
+                
+                deviceId.Should().NotBeNullOrEmpty();
+
+                var deviceResponse = await client.GetAsync($"/api/devices/{deviceId}");
+                deviceResponse.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+            }
+            else
+            {
+                // Try getting items property
+                deviceListJson.TryGetProperty("items", out itemsElement);
+                var devices = itemsElement.EnumerateArray().ToList();
+                devices.Should().NotBeEmpty("Devices should be enumerable from RDF-seeded registry");
+            }
+
+            // Test 3: Verify graph nodes are accessible
+            var nodesResponse = await client.GetAsync("/api/graph/traverse/urn:site-1?depth=1");
+            // May return 404 if nodes don't exist, but endpoint should be accessible
+            nodesResponse.StatusCode.Should().BeOneOf(
+                System.Net.HttpStatusCode.OK,
+                System.Net.HttpStatusCode.NotFound
+            );
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("RDF_SEED_PATH", null);
+            Environment.SetEnvironmentVariable("TENANT_ID", null);
+
+            if (apiFactory is not null)
+            {
+                apiFactory.Dispose();
+            }
+
+            if (siloHost is not null)
+            {
+                await siloHost.StopAsync();
+                siloHost.Dispose();
+            }
+        }
+    }
+
     [Fact]
     public async Task EndToEndReport_IsGenerated()
     {

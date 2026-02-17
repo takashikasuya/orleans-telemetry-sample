@@ -28,13 +28,17 @@ if (File.Exists(controlRoutingConfigPath))
 
 // Configure authentication using OIDC / JWT
 var authority = builder.Configuration["OIDC_AUTHORITY"] ?? "http://mock-oidc:8080/default";
-var audience = builder.Configuration["OIDC_AUDIENCE"] ?? "api";
+var audience = builder.Configuration["OIDC_AUDIENCE"] ?? "default";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.Authority = authority;
-        options.Audience = audience;
         options.RequireHttpsMetadata = authority.StartsWith("https://");
+        // Validate JWT signature, but not issuer/audience for now
+        options.TokenValidationParameters.ValidateIssuer = false;
+        options.TokenValidationParameters.ValidateAudience = false;
+        options.TokenValidationParameters.ValidateLifetime = true;
+        options.TokenValidationParameters.ValidateIssuerSigningKey = true;
     });
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();

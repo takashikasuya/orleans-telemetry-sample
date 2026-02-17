@@ -54,10 +54,13 @@ public sealed class TelemetryHub : Hub
             // Subscribe to stream
             var subscription = await stream.SubscribeAsync(async (snapshot, token) =>
             {
+                // Normalize the value to a numeric value for charting
+                var numericValue = NormalizeValue(snapshot.LatestValue);
+                
                 await Clients.Caller.SendAsync("ReceivePointUpdate", new
                 {
                     Timestamp = snapshot.UpdatedAt,
-                    Value = snapshot.LatestValue,
+                    Value = numericValue,
                     PointId = pointId,
                     DeviceId = deviceId,
                     TenantId = tenantId
@@ -118,5 +121,37 @@ public sealed class TelemetryHub : Hub
         }
 
         return subscriptionsToRemove.Select(item => item.Key).ToList();
+    }
+
+    /// <summary>
+    /// Normalize a value to a numeric double for charting.
+    /// Handles various input types: bool, numeric types, IConvertible, null.
+    /// </summary>
+    private static double? NormalizeValue(object? value)
+    {
+        if (value is null) return null;
+        if (value is bool b) return b ? 1.0 : 0.0;
+        
+        // Try to convert to double
+        if (value is IConvertible convertible)
+        {
+            try
+            {
+                return Convert.ToDouble(convertible);
+            }
+            catch
+            {
+                // Conversion failed, return null
+                return null;
+            }
+        }
+        
+        // Last resort: try parsing as string
+        if (value is string str && double.TryParse(str, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+        {
+            return parsed;
+        }
+        
+        return null;
     }
 }

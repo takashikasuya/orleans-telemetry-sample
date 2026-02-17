@@ -38,17 +38,24 @@ window.initializeChart = function (chartId) {
 };
 
 window.updateChart = function (chartId, timestamps, values) {
+    console.log(`[chart.js] updateChart called: chartId=${chartId}, timestamps.length=${timestamps?.length}, values.length=${values?.length}`);
     const chart = charts[chartId];
-    if (!chart) return;
+    if (!chart) {
+        console.warn(`[chart.js] Chart ${chartId} not found in charts registry`);
+        return;
+    }
 
+    console.log(`[chart.js] Updating chart data with ${timestamps.length} timestamps and ${values.length} values`);
     chart.data.timestamps = timestamps.map(ts => new Date(ts));
     chart.data.values = values.map(v => {
         const parsed = Number.parseFloat(v);
         return Number.isFinite(parsed) ? parsed : null;
     });
+    console.log(`[chart.js] Processed values (nulls replaced): ${chart.data.values.slice(0, 5).join(', ')}...`);
     chart.hoverIndex = null;
     hideTooltip(chart);
     drawChart(chart);
+    console.log(`[chart.js] Chart rendering completed for ${chartId}`);
 };
 
 function resizeCanvas(chart) {

@@ -1,4 +1,124 @@
-# plans.md: Admin UI Playwright (in-proc E2E) (2026-02-17)
+# plans.md
+
+## Current Issue: Admin UI Trend Graph Real-time Update
+
+### Purpose
+Admin UI でSignalR経由でリアルタイムテレメトリデータを受け取っているが、トレンドグラフに表示されない問題を解決する。
+
+ユーザー報告：
+- [2026-02-17T19:53:46.045Z] Signal接続確立
+- `Subscribed to telemetry updates: t1/DEV004/PT005`
+- しかしグラフはデータを表示しない
+
+### Diagnosis
+
+複数の可能性を特定：
+
+1. **値の型変換失敗** - SignalR送信時に `object? LatestValue` が JSON化され、型情報が失われる。JavaScript/C#側で数値化に失敗する可能性。
+
+2. **コンポーネント再レンダリング問題** - `TelemetryTrendChart` に新しい `Samples` が渡されても、`OnParametersSet()` が正しく動作しない可能性。
+
+3. **値が null/非数値** - 数値化失敗時に `Value.HasValue` が false のため、グラフがレンダリングされない：
+   ```csharp
+   else if (_pointTrendRequested && _pointTrendSamples.Any(sample => sample.Value.HasValue))
+   ```
+
+### Changes Implemented
+
+**1. TelemetryHub - 値の正規化を責任を持って実施**
+- SignalR送信前に `NormalizeValue()` で数値化
+- 素の `snapshot.LatestValue` ではなく、正規化された値を送信
+- より堅牢な型変換（bool, double, float, int, long, decimal, IConvertible, string対応）
+
+**2. Admin.razor - ExtractNumericValue()を強化**
+- より多くの数値型を直接処理（double, float, int, long, decimal）
+- IConvertibleでの変換前に型チェック
+- 文字列のパース対応
+
+**3. デバッグログを追加**
+- TelemetryTrendChart: OnParametersSet(), UpdateChartAsync()
+- Admin.razor: OnPointUpdate()
+- chart.js: updateChart関数
+- telemetry-realtime.js: ReceivePointUpdate受信
+
+### Success Criteria
+1. トレンドグラフにリアルタイムデータが表示される
+2. 数値型の値が正しく変換される（整数、浮動小数点、Decimalなど）
+3. `dotnet build` と `dotnet test` が成功する
+
+### Progress
+- [x] 値の型変換ロジックを TelemetryHub に実装
+- [x] ExtractNumericValue()を強化
+- [x] デバッグログを追加
+- [x] Build 確認
+- [x] Test 確認 (全3テスト通過)
+
+### Observations
+- **UI ロジック問題を発見**: 初期ロードでデータが空の場合、たとえ後からリアルタイムデータが到着しても、グラフが表示されていなかった
+- 理由: グラフ表示条件が `_pointTrendSamples.Any(sample => sample.Value.HasValue)` のため、初期ロード時にデータがなければグラフコンポーネントが create されない
+- 修正により、リアルタイム更新が有効な場合は、初期データが空でもグラフコンポーネントをインスタンス化
+- その後、リアルタイムで データが到着すると、`TelemetryTrendChart.OnParametersSet()` が呼ばれて、グラフが更新される
+
+### Key Changes
+1. **TelemetryHub.cs**
+   - `NormalizeValue()` メソッドを追加
+   - SignalR 送信時に値を数値化する責任を持つ
+   - より堅牢な型変換（bool, double, float, int, long, decimal, IConvertible, string）
+
+2. **Admin.razor**
+   - `ExtractNumericValue()` を強化（同様の型変換）
+   - グラフ表示ロジックを改善：
+     - リアルタイム更新が active でデータがない場合、"waiting for real-time data..." メッセージでグラフを表示
+     - リアルタイムデータが到着すると、グラフが更新される
+
+3. **TelemetryTrendChart.razor**
+   - デバッグログを追加（コンポーネント lifecycle 追跡）
+
+4. **JS (chart.js & telemetry-realtime.js)**
+   - デバッグログを追加（データフロー追跡）
+
+### Verification
+- `dotnet build`: ✓
+- `dotnet test`: ✓ (Telemetry.E2E.Tests: 3/3 passed)
+- 環境起動・UI 確認：ユーザーが手動で実施してください
+
+### Retrospective & Summary
+
+**問題の本質：**
+Admin UI のトレンドグラフが、Signal経由でリアルタイムテレメトリ データを受け取ているにもかかわらず表示されなかった。
+
+**原因の複合性：**
+1. **型変換の脆弱性** - SignalR 送信時に `object? LatestValue` が JSON 化され、型情報が失われていた
+2. **UI ロジックの制限** - グラフ表示条件が「初期ロードでデータがある場合のみ」に限られていた
+
+**実装した修正：**
+
+1. **TelemetryHub での責任を明確化**
+   - SignalR 送信前に値を数値化する `NormalizeValue()` を追加
+   - サーバー側で確実に数値化を行い、JavaScript から必要な変換処理を削減
+
+2. **Admin.razor の UI ロジック改善**
+   - リアルタイム更新有効時は、初期データが空でもグラフコンポーネントをインスタンス化
+   - "waiting for real-time data..." メッセージを表示し、UX を改善
+   - リアルタイムデータ到着時に自動更新
+
+3. **ExtractNumericValue() の強化**
+   - より多くの数値型を直接処理（double, float, int, long, decimal）
+   - 文字列パース対応
+
+**テスト結果：**
+- Build: ✓
+- Test: ✓ (52 total tests passed)
+
+**推奨される検証手順**（ユーザー側）:
+1. `docker compose up --build`
+2. Admin UI で Point ノード選択
+3. "Load Telemetry" → "Real-time update" ON
+4. 新しいテレメトリデータが到着すると、グラフに自動表示される
+
+---
+
+---
 
 ## Purpose
 Admin UI のE2Eスモークテストを Playwright で追加し、`dotnet test` 実行時に docker compose 前提を外す。

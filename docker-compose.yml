@@ -83,7 +83,7 @@ services:
     depends_on:
       - silo
     environment:
-      OIDC_AUTHORITY: ${OIDC_AUTHORITY:-http://mock-oidc:8080/default}
+      OIDC_AUTHORITY: ${OIDC_AUTHORITY:-http://localhost:8081/default}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-default}
       Orleans__GatewayHost: silo
       Orleans__GatewayPort: "30000"
@@ -105,7 +105,7 @@ services:
     depends_on:
       - silo
     environment:
-      OIDC_AUTHORITY: ${OIDC_AUTHORITY:-http://mock-oidc:8080/default}
+      OIDC_AUTHORITY: ${OIDC_AUTHORITY:-http://localhost:8081/default}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-default}
       Orleans__GatewayHost: silo
       Orleans__GatewayPort: "30000"
