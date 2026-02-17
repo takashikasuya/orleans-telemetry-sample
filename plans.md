@@ -1,3 +1,54 @@
+# plans.md: Admin UI Playwright (in-proc E2E) (2026-02-17)
+
+## Purpose
+Admin UI のE2Eスモークテストを Playwright で追加し、`dotnet test` 実行時に docker compose 前提を外す。
+
+## Success Criteria
+1. in-proc Orleans Silo + AdminGateway で Playwright スモークが通る
+2. `dotnet test` で Admin UI のE2Eが実行可能（docker compose不要）
+3. 実行手順が docs に明記されている
+
+## Steps
+1. AdminGateway向けの in-proc E2E テストプロジェクトを追加
+2. Orleans Silo + AdminGateway のテストホストを構成
+3. Playwright スモークテストを実装（Admin UIのみ）
+4. 実行手順を docs に追記
+
+## Progress
+- [x] Step 1: AdminGateway E2E test project 追加
+- [x] Step 2: in-proc host 設定
+- [x] Step 3: Playwright スモークテスト
+- [x] Step 4: docs 更新
+
+## Observations
+- 既存の E2E は Telemetry.E2E.Tests で in-proc Silo を起動している
+- AdminGateway は Orleans クライアント前提だが、in-proc Silo で代替可能
+- テスト実行時に AdminGateway が `Orleans:GatewayPort` の上書きを拾えず、既定の 30000 に接続して待ち続けるケースがあった
+- WebApplicationFactory は TestServer 前提のため、Kestrel で起動した AdminGateway に対して `CreateClient()` を使うと InvalidCastException になる
+- AdminGateway 起動直後は `/` が 200 以外になる可能性があるため、HTTP 応答を受け取れるかで readiness を判定する方が安定
+
+## Decisions
+- Playwright は .NET 版（xUnit）を採用
+- Admin UI のみ先行し、Telemetry Client は後追い
+- E2E 初期化で `Orleans__GatewayHost`/`Orleans__GatewayPort` を明示し、AdminGateway の接続先を必ずテスト内で揃える
+- Kestrel で起動した AdminGateway の readiness check は `HttpClient` を直接生成して行う
+- readiness は `WaitForPortAsync` でポートオープン → `/` の応答有無で判定する
+- ポート待ちのタイムアウトを環境差を見越して 30 秒に延長する
+- Silo の `EndpointOptions` を IPv4 loopback に固定し、gateway port が確実に 127.0.0.1 にバインドされるようにする
+- `Orleans__GatewayHost`/`Orleans__GatewayPort` は Silo 起動後に設定し、Silo の起動に影響しないようにする
+- Silo/Gateway/Admin のポートは重複しないようにリトライして確保する
+- Silo の `SiloListeningEndpoint`/`GatewayListeningEndpoint` を明示してバインド先を固定する
+- Silo/Gateway のリスナーは `IPAddress.Any` にバインドし、advertised は loopback のままにする
+- テスト用 Silo でも `ConfigureEndpoints` を使って Gateway/Silo のバインドを明示する
+- Gateway ポートの待機は短い遅延に切り替え、AdminGateway 側の接続リトライに任せる
+- AdminGateway E2E は TestCluster に切り替え、Orleans gateway 接続に依存しない構成にする
+- AdminGateway の Orleans client を設定で無効化できるようにし、E2E では TestCluster を DI で注入する
+
+## Retrospective
+- AdminGateway の構成が WebApplicationFactory 経由で上書きされないケースがあり、環境変数で確実に上書きするのが安定策だった
+
+---
+
 # plans.md: Admin UI Real-time Update & Ingest Config Issues (2026-02-16)
 
 ## Purpose

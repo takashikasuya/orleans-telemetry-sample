@@ -113,6 +113,16 @@ dotnet test
 - `scripts/run-e2e.sh` / `scripts/run-e2e.ps1`
 - `scripts/run-loadtest.sh` / `scripts/run-loadtest.ps1`
 
+### Admin UI Playwright (in-proc)
+
+Docker Compose不要で、in-process Orleans Silo + AdminGateway を起動してPlaywright E2Eを実行します。
+
+```bash
+dotnet test src/AdminGateway.E2E.Tests
+```
+
+初回実行時、Playwright ブラウザの自動ダウンロードが含まれるため、時間がかかります。
+
 ## メモリロードテスト
 
 ```bash
