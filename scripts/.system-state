@@ -1,0 +1,2 @@
+TEMP_DIR=/tmp/telemetry-system-2ZUwM5
+OVERRIDE_FILE=/tmp/telemetry-system-2ZUwM5/docker-compose.override.yml
