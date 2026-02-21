@@ -4897,3 +4897,46 @@ GatewayId が命名ルールに従わないケースでも安全に遠隔制御�
 ## Retrospective
 - 件数依存を排除し、可変サイズ payload に対して一貫したインライン制御が可能になった。
 - URL エクスポート経路を維持したまま、インラインは実データサイズで判断できるようになった。
+
+---
+
+# plans.md: BigQuery sink モジュール追加の設計案 (2026-02-16)
+
+## Purpose
+既存の Parquet ストレージを維持したまま、保存先として Google BigQuery を選択可能にし、BigQuery への書き込みおよび BigQuery からの検索取得を可能にするための設計案を整理する。
+
+## Success Criteria
+1. 既存アーキテクチャ（`ITelemetryEventSink` + `ITelemetryStorageQuery`）を前提に、BigQuery sink/query の差し込みポイントが明確に定義されている。
+2. Parquet を既定のまま維持しつつ、設定で sink/query 実装を切替できる案になっている。
+3. 認証・スキーマ・運用（コスト/遅延/再試行/障害時）まで含めた設計と段階的導入手順が文書化されている。
+4. ドキュメント追加後に `dotnet build` / `dotnet test` が成功する。
+
+## Steps
+1. 既存のストレージ実装と DI 構成 (`Telemetry.Storage`, `Telemetry.Ingest`) を確認する。
+2. BigQuery sink/query の設計ドキュメントを追加し、Parquet 併存と切替方針を記述する。
+3. 関連ドキュメント（README / telemetry-storage.md）へ導線を追加する。
+4. build/test を実行し、結果を記録する。
+
+## Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+## Observations
+- `ITelemetryEventSink` は複数実装の同時有効化に対応しており、BigQuery sink の追加は既存設計と親和性が高い。
+- 一方で `ITelemetryStorageQuery` は現状 Parquet 実装を単一登録しているため、問い合わせ先切替には Factory もしくは Router が必要。
+
+## Decisions
+- 本タスクでは実装ではなく設計に限定し、`docs/telemetry-storage-bigquery-design.md` を新規追加する。
+- 切替設計は `TelemetryStorage:QueryProvider`（`Parquet` / `BigQuery` / `Hybrid`）を提案し、既定値は `Parquet` とする。
+
+## Verification
+- `dotnet build`
+  - Result: Succeeded（既存 warning のみ、0 errors）
+- `dotnet test`
+  - Result: Succeeded（Failed 0）
+
+## Retrospective
+- 既存設計の拡張ポイント（`ITelemetryEventSink` と `ITelemetryStorageQuery`）を分けて整理したことで、段階導入（dual-write -> query 切替）の実行計画を明確化できた。
+- 実装前に設定・IAM・コスト観点を先に定義できたため、後続実装の手戻りを減らせる見込み。

@@ -136,3 +136,7 @@ Parquet への保存が成立していることを、以下の観点で検証し
 
 dotnet test src/Telemetry.Storage.Tests
 ```
+
+## 関連設計
+
+- BigQuery 追加時の設計案: [telemetry-storage-bigquery-design.md](telemetry-storage-bigquery-design.md)

@@ -53,6 +53,7 @@ graph LR
 - [MQTT コネクタ設計](docs/mqtt-connector-design.md)
 - [ルーティングと値バインディング](docs/telemetry-routing-binding.md)
 - [テレメトリーストレージ](docs/telemetry-storage.md)
+- [BigQuery sink 拡張設計案](docs/telemetry-storage-bigquery-design.md)
 - [RDF ロードと Grain 初期化](docs/rdf-loading-and-grains.md)
 - [Admin Console](docs/admin-console.md)
 - [Telemetry Client Spec](docs/telemetry-client-spec.md)
