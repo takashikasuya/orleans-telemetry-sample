@@ -7,7 +7,7 @@ This document defines guardrails and procedures for AI agents operating on this 
 ## Repository Overview
 
 **orleans-telemetry-sample** is a sample solution demonstrating a telemetry ingestion pipeline.  
-It ingests messages from RabbitMQ into an Orleans cluster, routes them to device-scoped grains, and exposes state via REST and gRPC.  
+It ingests messages from RabbitMQ, MQTT and Kafka into an Orleans cluster, routes them to device-scoped grains, and exposes state via REST and gRPC.  
 Services include:
 - `mq`: RabbitMQ broker for incoming telemetry.
 - `silo`: Orleans host with RabbitMQ consumer and grain logic.

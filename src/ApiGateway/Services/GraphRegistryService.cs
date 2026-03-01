@@ -93,7 +93,7 @@ internal sealed class GraphRegistryService
 
 internal sealed record RegistryNodeSummary(
     string NodeId,
-    GraphNodeType NodeType,
+    [property: JsonIgnore] GraphNodeType NodeType,
     string DisplayName,
     IReadOnlyDictionary<string, string> Attributes);
 

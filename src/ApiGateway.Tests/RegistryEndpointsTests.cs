@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ApiGateway.Services;
@@ -117,6 +118,33 @@ public sealed class RegistryEndpointsTests
             opened.Status.Should().Be(RegistryExportOpenStatus.Ready);
             opened.Stream.Should().NotBeNull();
             await opened.Stream!.DisposeAsync();
+        }
+        finally
+        {
+            GraphRegistryTestHelper.CleanupTempDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task GetNodesAsync_SerializedResponse_DoesNotContainNodeType()
+    {
+        var nodesByType = new Dictionary<GraphNodeType, IReadOnlyList<string>>
+        {
+            [GraphNodeType.Equipment] = new[] { "device:1" }
+        };
+
+        var registry = GraphRegistryTestHelper.CreateGraphRegistry(nodesByType, maxInlineRecords: 10, out _, out var tempRoot);
+        try
+        {
+            var result = await registry.GetNodesAsync("tenant-test", GraphNodeType.Equipment, null, CancellationToken.None);
+            var json = JsonSerializer.Serialize(result, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            json.Should().Contain("\"items\"");
+            json.Should().Contain("\"nodeId\"");
+            json.Should().NotContain("nodeType");
         }
         finally
         {

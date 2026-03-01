@@ -454,13 +454,9 @@ public class OrleansIntegrationService
         var nodeId = !string.IsNullOrWhiteSpace(forcedId) ? forcedId : ResolveNodeId(resource, nodeType.ToString().ToLowerInvariant(), resource.Uri);
         var attributes = new Dictionary<string, string>();
 
-        if (!string.IsNullOrWhiteSpace(resource.Uri))
-        {
-            attributes["Uri"] = resource.Uri;
-        }
         if (!string.IsNullOrWhiteSpace(resource.SchemaId))
         {
-            attributes["SchemaId"] = resource.SchemaId;
+            attributes["id"] = resource.SchemaId;
         }
 
         foreach (var kv in resource.Identifiers)

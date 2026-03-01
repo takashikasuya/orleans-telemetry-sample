@@ -23,16 +23,17 @@ public class RegistryService
     }
 
     public Task<List<GraphNodeDto>> GetSitesAsync(string tenantId, CancellationToken cancellationToken = default)
-        => GetNodesAsync("sites", tenantId, cancellationToken);
+        => GetNodesAsync("sites", "Site", tenantId, cancellationToken);
 
     public Task<List<GraphNodeDto>> GetBuildingsAsync(string tenantId, CancellationToken cancellationToken = default)
-        => GetNodesAsync("buildings", tenantId, cancellationToken);
+        => GetNodesAsync("buildings", "Building", tenantId, cancellationToken);
 
     public Task<List<GraphNodeDto>> GetDevicesAsync(string tenantId, CancellationToken cancellationToken = default)
-        => GetNodesAsync("devices", tenantId, cancellationToken);
+        => GetNodesAsync("devices", "Equipment", tenantId, cancellationToken);
 
     private async Task<List<GraphNodeDto>> GetNodesAsync(
         string endpoint,
+        string defaultNodeType,
         string tenantId,
         CancellationToken cancellationToken)
     {
@@ -68,7 +69,7 @@ public class RegistryService
 
             return result.Items.Select(item => new GraphNodeDto(
                 item.NodeId,
-                item.NodeType,
+                string.IsNullOrWhiteSpace(item.NodeType) ? defaultNodeType : item.NodeType,
                 item.DisplayName,
                 item.DisplayName,
                 item.Attributes?.ToDictionary(static kvp => kvp.Key, static kvp => (object)kvp.Value)))
@@ -92,7 +93,7 @@ public record RegistryQueryResponse(
 
 public record RegistryNodeSummary(
     string NodeId,
-    [property: JsonConverter(typeof(GraphNodeTypeStringConverter))] string NodeType,
+    [property: JsonConverter(typeof(GraphNodeTypeStringConverter))] string? NodeType,
     string DisplayName,
     IReadOnlyDictionary<string, string>? Attributes);
 

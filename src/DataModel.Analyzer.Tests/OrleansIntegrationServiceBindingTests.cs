@@ -109,6 +109,27 @@ public class OrleansIntegrationServiceBindingTests
             edge.TargetNodeId == "level:1");
     }
 
+    [Fact]
+    public void CreateGraphSeedData_UsesIdAttributeAndOmitsUriAttribute()
+    {
+        var model = BuildModelWithSchemaIds();
+        var service = CreateService();
+
+        var seed = service.CreateGraphSeedData(model);
+
+        var equipmentNode = seed.Nodes.Single(node => node.NodeType == GraphNodeType.Equipment);
+        equipmentNode.Attributes.Should().ContainKey("id");
+        equipmentNode.Attributes["id"].Should().Be("equip-1");
+        equipmentNode.Attributes.Should().NotContainKey("SchemaId");
+        equipmentNode.Attributes.Should().NotContainKey("Uri");
+
+        var pointNode = seed.Nodes.Single(node => node.NodeType == GraphNodeType.Point);
+        pointNode.Attributes.Should().ContainKey("id");
+        pointNode.Attributes["id"].Should().Be("point-1");
+        pointNode.Attributes.Should().NotContainKey("SchemaId");
+        pointNode.Attributes.Should().NotContainKey("Uri");
+    }
+
     private static BuildingDataModel BuildModel()
     {
         var site = new Site { Name = "SiteA", Uri = "site:1" };

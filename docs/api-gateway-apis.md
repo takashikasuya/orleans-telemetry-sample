@@ -118,6 +118,7 @@ ApiGateway は Orleans の最新状態・グラフ・履歴データを REST API
   - `count` (返却件数)
   - `totalCount` (総件数)
   - `items` (inline 時のみ)
+    - 各 item は `nodeId`, `displayName`, `attributes` を返します（`nodeType` は返しません）
   - `url`, `expiresAt` (url 時のみ)
 - 備考:
   - `limit` が未指定かつ件数が多い場合、`mode=url` でエクスポート URL を返します。
