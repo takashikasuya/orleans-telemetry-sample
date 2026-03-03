@@ -402,6 +402,58 @@ _:siteId1 <https://www.sbco.or.jp/ont/value> ""SITE-001"" .
         model.Points[0].PointId.Should().Be("p1");
     }
 
+    [Fact]
+    public async Task AnalyzeRdfContent_CustomTagsRdfList_ParsesBooleanTags()
+    {
+        var ttl = @"@prefix sbco: <https://www.sbco.or.jp/ont/> .
+@prefix rec: <https://w3id.org/rec/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<urn:site-1> a rec:Site ;
+  rec:name ""Site 1"" ;
+  sbco:id ""site-1"" ;
+  rec:identifiers [ a sbco:KeyStringMapEntry ; sbco:key ""site_code"" ; sbco:value ""SITE-001"" ] ;
+  rec:customTags (
+    [ a sbco:KeyBoolMapEntry ; sbco:key ""temperature"" ; sbco:flag ""true""^^xsd:boolean ]
+    [ a sbco:KeyBoolMapEntry ; sbco:key ""room101"" ; sbco:flag ""true""^^xsd:boolean ]
+  ) .
+";
+
+        var svc = CreateService();
+        var model = await svc.AnalyzeRdfContentAsync(ttl, RdfSerializationFormat.Turtle, "custom-tags-list-test");
+
+        model.Sites.Should().ContainSingle();
+        var site = model.Sites[0];
+        site.CustomTags.Should().ContainKey("temperature");
+        site.CustomTags["temperature"].Should().BeTrue();
+        site.CustomTags.Should().ContainKey("room101");
+        site.CustomTags["room101"].Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AnalyzeRdfContentWithValidation_CustomTagsKeyBoolMapEntry_Conforms()
+    {
+        var ttl = @"@prefix sbco: <https://www.sbco.or.jp/ont/> .
+@prefix rec: <https://w3id.org/rec/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<urn:site-1> a rec:Site ;
+  rec:name ""Site 1"" ;
+  sbco:id ""site-1"" ;
+  rec:identifiers [ a sbco:KeyStringMapEntry ; sbco:key ""site_code"" ; sbco:value ""SITE-001"" ] ;
+  rec:customTags [ a sbco:KeyBoolMapEntry ; sbco:key ""temperature"" ; sbco:flag ""true""^^xsd:boolean ] .
+";
+
+        var svc = CreateService();
+        var result = await svc.AnalyzeRdfContentWithValidationAsync(ttl, RdfSerializationFormat.Turtle, "custom-tags-shacl-test");
+
+        result.Validation.Should().NotBeNull();
+        result.Validation!.Conforms.Should().BeTrue();
+        result.Model.Sites.Should().ContainSingle();
+        result.Model.Sites[0].CustomTags.Should().ContainKey("temperature");
+        result.Model.Sites[0].CustomTags["temperature"].Should().BeTrue();
+    }
+
     private static RdfAnalyzerService CreateService() => new(NullLogger<RdfAnalyzerService>.Instance);
 
     private static void AssertStandardModel(BuildingDataModel model)

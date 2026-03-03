@@ -955,17 +955,25 @@ public class RdfAnalyzerService
             var predicateNode = graph.CreateUriNode(UriFactory.Create(predicateUri));
             foreach (var triple in graph.GetTriplesWithSubjectPredicate(subject, predicateNode))
             {
-                var entryNode = triple.Object;
-                var key = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}key" });
-                var flagValue = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}flag" });
-                if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(flagValue))
+                var entries = ExpandRdfList(graph, triple.Object).ToList();
+                if (entries.Count == 0)
                 {
-                    continue;
+                    entries.Add(triple.Object);
                 }
 
-                if (bool.TryParse(flagValue, out var flag))
+                foreach (var entryNode in entries)
                 {
-                    resource.CustomTags[key] = flag;
+                    var key = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}key" });
+                    var flagValue = GetFirstLiteralValue(graph, entryNode, new[] { $"{SbcoNamespace}flag" });
+                    if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(flagValue))
+                    {
+                        continue;
+                    }
+
+                    if (bool.TryParse(flagValue, out var flag))
+                    {
+                        resource.CustomTags[key] = flag;
+                    }
                 }
             }
         }
