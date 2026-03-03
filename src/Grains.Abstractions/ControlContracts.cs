@@ -11,27 +11,27 @@ public enum ControlRequestStatus
     /// The request is pending processing.
     /// </summary>
     Pending = 0,
-    
+
     /// <summary>
     /// The request has been accepted.
     /// </summary>
     Accepted = 1,
-    
+
     /// <summary>
     /// The request has been applied.
     /// </summary>
     Applied = 2,
-    
+
     /// <summary>
     /// The request was rejected.
     /// </summary>
     Rejected = 3,
-    
+
     /// <summary>
     /// The request failed.
     /// </summary>
     Failed = 4,
-    
+
     /// <summary>
     /// The request timed out.
     /// </summary>
