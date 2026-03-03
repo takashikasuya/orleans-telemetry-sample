@@ -6,6 +6,9 @@ using Microsoft.AspNetCore.Http;
 
 namespace ApiGateway.Services;
 
+/// <summary>
+/// gRPC registry service for tenant-scoped tag search operations.
+/// </summary>
 public sealed class RegistryGrpcService : Devices.V1.RegistryService.RegistryServiceBase
 {
     private readonly TagSearchService _tagSearch;
@@ -17,6 +20,7 @@ public sealed class RegistryGrpcService : Devices.V1.RegistryService.RegistrySer
         _contextAccessor = contextAccessor;
     }
 
+    /// <inheritdoc />
     public override async Task<TagNodeSearchResponse> SearchByTags(TagSearchRequest request, ServerCallContext context)
     {
         if (request.Tags.Count == 0)
@@ -57,6 +61,7 @@ public sealed class RegistryGrpcService : Devices.V1.RegistryService.RegistrySer
         return grpc;
     }
 
+    /// <inheritdoc />
     public override async Task<TagGrainSearchResponse> SearchGrainsByTags(TagSearchRequest request, ServerCallContext context)
     {
         if (request.Tags.Count == 0)

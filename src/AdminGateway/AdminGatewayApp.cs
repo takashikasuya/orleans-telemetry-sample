@@ -14,8 +14,16 @@ using Telemetry.Storage;
 
 namespace AdminGateway;
 
+/// <summary>
+/// Configures AdminGateway services and HTTP endpoints.
+/// </summary>
 public static class AdminGatewayApp
 {
+    /// <summary>
+    /// Configures host services for AdminGateway.
+    /// </summary>
+    /// <param name="builder">Application builder.</param>
+    /// <param name="includeOrleansClient">Whether Orleans client registration is enabled.</param>
     public static void Configure(WebApplicationBuilder builder, bool includeOrleansClient)
     {
         ConfigureServices(builder);
@@ -54,6 +62,10 @@ public static class AdminGatewayApp
         });
     }
 
+    /// <summary>
+    /// Configures middleware pipeline and endpoint mappings.
+    /// </summary>
+    /// <param name="app">Web application instance.</param>
     public static void ConfigureApp(WebApplication app)
     {
         app.UseStaticFiles();

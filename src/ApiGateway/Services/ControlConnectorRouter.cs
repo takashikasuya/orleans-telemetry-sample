@@ -6,6 +6,9 @@ using Microsoft.Extensions.Options;
 
 namespace ApiGateway.Services;
 
+/// <summary>
+/// Resolves the connector name for point control requests using gateway maps and routing rules.
+/// </summary>
 public sealed class ControlConnectorRouter
 {
     private readonly string? _defaultConnector;
@@ -38,6 +41,12 @@ public sealed class ControlConnectorRouter
             .ToArray();
     }
 
+    /// <summary>
+    /// Resolves a connector for the specified route context.
+    /// </summary>
+    /// <param name="context">Route context containing device, point, and optional gateway data.</param>
+    /// <param name="matchedRule">Matched rule name when available.</param>
+    /// <returns>Resolved connector name, or null when no connector is configured.</returns>
     public string? ResolveConnector(ControlRouteContext context, out string? matchedRule)
     {
         if (!string.IsNullOrWhiteSpace(context.GatewayId)

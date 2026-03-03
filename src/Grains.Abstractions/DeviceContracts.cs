@@ -63,6 +63,8 @@ public class TelemetryMsg
     /// <param name="Sequence">The sequence number of the telemetry message.</param>
     /// <param name="Timestamp">The timestamp when the telemetry message was generated.</param>
     /// <param name="Properties">A dictionary of additional properties associated with the telemetry message.</param>
+    /// <param name="BuildingName">The building name associated with the telemetry payload.</param>
+    /// <param name="SpaceId">The space identifier associated with the telemetry payload.</param>
     public TelemetryMsg(
         string TenantId,
         string DeviceId,
@@ -102,13 +104,44 @@ public sealed record DeviceSnapshot(
 [GenerateSerializer]
 public class TelemetryPointMsg
 {
+    /// <summary>
+    /// Gets or sets the tenant identifier.
+    /// </summary>
     [Id(0)] public string TenantId { get; set; } = default!;
+
+    /// <summary>
+    /// Gets or sets the building name.
+    /// </summary>
     [Id(1)] public string BuildingName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the space identifier.
+    /// </summary>
     [Id(2)] public string SpaceId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the device identifier.
+    /// </summary>
     [Id(3)] public string DeviceId { get; set; } = default!;
+
+    /// <summary>
+    /// Gets or sets the point identifier.
+    /// </summary>
     [Id(4)] public string PointId { get; set; } = default!;
+
+    /// <summary>
+    /// Gets or sets the telemetry sequence number.
+    /// </summary>
     [Id(5)] public long Sequence { get; set; }
+
+    /// <summary>
+    /// Gets or sets the telemetry timestamp.
+    /// </summary>
     [Id(6)] public DateTimeOffset Timestamp { get; set; }
+
+    /// <summary>
+    /// Gets or sets the point value.
+    /// </summary>
     [Id(7)] public object? Value { get; set; }
 }
 

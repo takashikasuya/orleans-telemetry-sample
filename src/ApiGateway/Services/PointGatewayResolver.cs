@@ -8,10 +8,18 @@ using Orleans;
 
 namespace ApiGateway.Services;
 
+/// <summary>
+/// Represents resolved gateway and point-node metadata for a point.
+/// </summary>
+/// <param name="GatewayId">Resolved gateway identifier when available.</param>
+/// <param name="PointNodeId">Resolved graph node identifier for the point.</param>
 public sealed record PointGatewayResolution(
     string? GatewayId,
     string? PointNodeId);
 
+/// <summary>
+/// Resolves point-to-gateway mapping from graph data.
+/// </summary>
 public sealed class PointGatewayResolver
 {
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
@@ -25,6 +33,13 @@ public sealed class PointGatewayResolver
         _cache = cache;
     }
 
+    /// <summary>
+    /// Resolves gateway information for a device point.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier.</param>
+    /// <param name="deviceId">Device identifier.</param>
+    /// <param name="pointId">Point identifier.</param>
+    /// <returns>Resolved gateway and point node identifiers.</returns>
     public async Task<PointGatewayResolution> ResolveAsync(string tenantId, string deviceId, string pointId)
     {
         var cacheKey = $"{tenantId}:{deviceId}:{pointId}";

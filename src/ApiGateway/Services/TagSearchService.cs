@@ -6,6 +6,9 @@ using Orleans;
 
 namespace ApiGateway.Services;
 
+/// <summary>
+/// Provides tenant-scoped tag search against graph nodes and derived grains.
+/// </summary>
 public sealed class TagSearchService
 {
     private readonly IClusterClient _client;
@@ -15,6 +18,14 @@ public sealed class TagSearchService
         _client = client;
     }
 
+    /// <summary>
+    /// Searches graph nodes matching all provided tags.
+    /// </summary>
+    /// <param name="tenant">Tenant identifier.</param>
+    /// <param name="tags">Input tags.</param>
+    /// <param name="limit">Optional item limit.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Matched node search result.</returns>
     public async Task<TagNodeSearchResult> SearchNodesByTagsAsync(
         string tenant,
         IReadOnlyCollection<string> tags,
@@ -32,6 +43,14 @@ public sealed class TagSearchService
         return new TagNodeSearchResult(selected);
     }
 
+    /// <summary>
+    /// Searches grain identities derived from nodes matching all provided tags.
+    /// </summary>
+    /// <param name="tenant">Tenant identifier.</param>
+    /// <param name="tags">Input tags.</param>
+    /// <param name="limit">Optional item limit.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Matched grain search result.</returns>
     public async Task<TagGrainSearchResult> SearchGrainsByTagsAsync(
         string tenant,
         IReadOnlyCollection<string> tags,
@@ -217,6 +236,14 @@ public sealed class TagSearchService
                || value.Equals("1", StringComparison.OrdinalIgnoreCase));
 }
 
+/// <summary>
+/// Represents a node matched by tag search.
+/// </summary>
+/// <param name="NodeId">Node identifier.</param>
+/// <param name="NodeType">Node type.</param>
+/// <param name="DisplayName">Display name.</param>
+/// <param name="Attributes">Node attributes.</param>
+/// <param name="MatchedTags">Tags that matched the node.</param>
 public sealed record TagMatchedNode(
     string NodeId,
     GraphNodeType NodeType,
@@ -224,13 +251,31 @@ public sealed record TagMatchedNode(
     IReadOnlyDictionary<string, string> Attributes,
     IReadOnlyList<string> MatchedTags);
 
+/// <summary>
+/// Represents node search results matched by tags.
+/// </summary>
+/// <param name="Items">Matched node items.</param>
 public sealed record TagNodeSearchResult(IReadOnlyList<TagMatchedNode> Items)
 {
+    /// <summary>
+    /// Gets matched item count.
+    /// </summary>
     public int Count => Items.Count;
 
+    /// <summary>
+    /// Gets an empty result instance.
+    /// </summary>
     public static TagNodeSearchResult Empty { get; } = new(Array.Empty<TagMatchedNode>());
 }
 
+/// <summary>
+/// Represents a grain matched by tag search.
+/// </summary>
+/// <param name="SourceNodeId">Source node identifier.</param>
+/// <param name="NodeType">Source node type.</param>
+/// <param name="GrainType">Resolved grain type name.</param>
+/// <param name="GrainKey">Resolved grain key.</param>
+/// <param name="MatchedTags">Tags that matched the source node.</param>
 public sealed record TagMatchedGrain(
     string SourceNodeId,
     GraphNodeType NodeType,
@@ -238,9 +283,19 @@ public sealed record TagMatchedGrain(
     string GrainKey,
     IReadOnlyList<string> MatchedTags);
 
+/// <summary>
+/// Represents grain search results matched by tags.
+/// </summary>
+/// <param name="Items">Matched grain items.</param>
 public sealed record TagGrainSearchResult(IReadOnlyList<TagMatchedGrain> Items)
 {
+    /// <summary>
+    /// Gets matched item count.
+    /// </summary>
     public int Count => Items.Count;
 
+    /// <summary>
+    /// Gets an empty result instance.
+    /// </summary>
     public static TagGrainSearchResult Empty { get; } = new(Array.Empty<TagMatchedGrain>());
 }

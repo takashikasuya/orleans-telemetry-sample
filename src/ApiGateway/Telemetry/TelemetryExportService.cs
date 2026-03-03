@@ -6,6 +6,9 @@ using Telemetry.Storage;
 
 namespace ApiGateway.Telemetry;
 
+/// <summary>
+/// Creates, opens, and cleans up exported telemetry result files.
+/// </summary>
 public sealed class TelemetryExportService
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -26,6 +29,13 @@ public sealed class TelemetryExportService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Creates a telemetry export and metadata index.
+    /// </summary>
+    /// <param name="request">Original query request.</param>
+    /// <param name="results">Query results to export.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Export reference information.</returns>
     public async Task<TelemetryExportReference> CreateExportAsync(
         TelemetryQueryRequest request,
         IReadOnlyList<TelemetryQueryResult> results,
@@ -70,6 +80,12 @@ public sealed class TelemetryExportService
         return new TelemetryExportReference(exportId, BuildExportUrl(exportId), expiresAt, results.Count);
     }
 
+    /// <summary>
+    /// Gets export metadata by export identifier.
+    /// </summary>
+    /// <param name="exportId">Export identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Metadata when found; otherwise null.</returns>
     public async Task<TelemetryExportMetadata?> GetMetadataAsync(string exportId, CancellationToken ct)
     {
         var metadataPath = GetMetadataPath(exportId);
@@ -82,6 +98,14 @@ public sealed class TelemetryExportService
         return JsonSerializer.Deserialize<TelemetryExportMetadata>(json, SerializerOptions);
     }
 
+    /// <summary>
+    /// Tries to open an export file for download.
+    /// </summary>
+    /// <param name="exportId">Export identifier.</param>
+    /// <param name="tenantId">Tenant identifier.</param>
+    /// <param name="now">Current timestamp.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Open result status and stream when ready.</returns>
     public async Task<TelemetryExportOpenResult> TryOpenExportAsync(
         string exportId,
         string tenantId,
@@ -114,6 +138,12 @@ public sealed class TelemetryExportService
         return new TelemetryExportOpenResult(TelemetryExportOpenStatus.Ready, metadata, stream);
     }
 
+    /// <summary>
+    /// Cleans up expired export artifacts.
+    /// </summary>
+    /// <param name="now">Current timestamp.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Number of removed exports.</returns>
     public async Task<int> CleanupExpiredAsync(DateTimeOffset now, CancellationToken ct)
     {
         var indexRoot = Path.Combine(_options.ExportRoot, "index");
@@ -190,12 +220,33 @@ public sealed class TelemetryExportService
         => Path.Combine(_options.ExportRoot, "data", $"telemetry_{exportId}.jsonl");
 }
 
+/// <summary>
+/// Represents a created telemetry export reference.
+/// </summary>
+/// <param name="ExportId">Export identifier.</param>
+/// <param name="Url">Export URL.</param>
+/// <param name="ExpiresAt">Expiration timestamp.</param>
+/// <param name="Count">Record count.</param>
 public sealed record TelemetryExportReference(
     string ExportId,
     string Url,
     DateTimeOffset ExpiresAt,
     int Count);
 
+/// <summary>
+/// Represents telemetry export metadata persisted on disk.
+/// </summary>
+/// <param name="ExportId">Export identifier.</param>
+/// <param name="TenantId">Tenant identifier.</param>
+/// <param name="DeviceId">Device identifier.</param>
+/// <param name="From">Query start timestamp.</param>
+/// <param name="To">Query end timestamp.</param>
+/// <param name="PointId">Optional point identifier.</param>
+/// <param name="CreatedAt">Creation timestamp.</param>
+/// <param name="ExpiresAt">Expiration timestamp.</param>
+/// <param name="FilePath">Export data file path.</param>
+/// <param name="ContentType">Content type.</param>
+/// <param name="RecordCount">Export record count.</param>
 public sealed record TelemetryExportMetadata(
     string ExportId,
     string TenantId,
@@ -209,6 +260,9 @@ public sealed record TelemetryExportMetadata(
     string ContentType,
     int RecordCount);
 
+/// <summary>
+/// Represents possible states when opening an export.
+/// </summary>
 public enum TelemetryExportOpenStatus
 {
     Ready = 0,
@@ -216,6 +270,12 @@ public enum TelemetryExportOpenStatus
     Expired = 2
 }
 
+/// <summary>
+/// Represents result of opening an export file.
+/// </summary>
+/// <param name="Status">Open status.</param>
+/// <param name="Metadata">Export metadata when available.</param>
+/// <param name="Stream">Readable stream when status is ready.</param>
 public sealed record TelemetryExportOpenResult(
     TelemetryExportOpenStatus Status,
     TelemetryExportMetadata? Metadata,

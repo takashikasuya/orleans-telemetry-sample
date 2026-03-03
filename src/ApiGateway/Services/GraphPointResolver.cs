@@ -4,6 +4,9 @@ using Orleans;
 
 namespace ApiGateway.Services;
 
+/// <summary>
+/// Resolves point latest values from graph node relationships.
+/// </summary>
 public sealed class GraphPointResolver
 {
     private readonly IClusterClient _client;
@@ -13,6 +16,12 @@ public sealed class GraphPointResolver
         _client = client;
     }
 
+    /// <summary>
+    /// Gets points attached to a graph node.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier.</param>
+    /// <param name="snapshot">Source node snapshot.</param>
+    /// <returns>Dictionary of point key to latest value.</returns>
     public async Task<Dictionary<string, PointPropertyValue>> GetPointsForNodeAsync(
         string tenantId,
         GraphNodeSnapshot snapshot)
@@ -44,6 +53,12 @@ public sealed class GraphPointResolver
         return results;
     }
 
+    /// <summary>
+    /// Gets points attached to equipment/device nodes matching the specified device.
+    /// </summary>
+    /// <param name="tenantId">Tenant identifier.</param>
+    /// <param name="deviceId">Device identifier.</param>
+    /// <returns>Dictionary of point key to latest value.</returns>
     public async Task<Dictionary<string, PointPropertyValue>> GetPointsForDeviceAsync(
         string tenantId,
         string deviceId)
@@ -126,7 +141,8 @@ public sealed class GraphPointResolver
 
         var attributes = pointSnapshot.Node.Attributes;
 
-        if (!TryGetAttribute(attributes, "PointId", out var pointId))
+        if (!TryGetAttribute(attributes, "PointId", out var pointId) ||
+            string.IsNullOrWhiteSpace(pointId))
         {
             return;
         }

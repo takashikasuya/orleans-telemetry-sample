@@ -10,6 +10,9 @@ using Orleans.Streams;
 
 namespace ApiGateway.Services;
 
+/// <summary>
+/// gRPC device service for snapshot retrieval and update streaming.
+/// </summary>
 public sealed class DeviceService : Devices.V1.DeviceService.DeviceServiceBase
 {
     private readonly IClusterClient _client;
@@ -21,6 +24,7 @@ public sealed class DeviceService : Devices.V1.DeviceService.DeviceServiceBase
         _contextAccessor = contextAccessor;
     }
 
+    /// <inheritdoc />
     public override async Task<Snapshot> GetSnapshot(DeviceKey request, ServerCallContext context)
     {
         if (string.IsNullOrWhiteSpace(request.DeviceId))
@@ -51,6 +55,7 @@ public sealed class DeviceService : Devices.V1.DeviceService.DeviceServiceBase
         }
     }
 
+    /// <inheritdoc />
     public override async Task StreamUpdates(DeviceKey request, IServerStreamWriter<Snapshot> responseStream, ServerCallContext context)
     {
         if (string.IsNullOrWhiteSpace(request.DeviceId))

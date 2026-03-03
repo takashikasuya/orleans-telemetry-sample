@@ -4,6 +4,9 @@ using Microsoft.Extensions.Options;
 
 namespace ApiGateway.Telemetry;
 
+/// <summary>
+/// Background service that removes expired telemetry export artifacts.
+/// </summary>
 public sealed class TelemetryExportCleanupService : BackgroundService
 {
     private readonly TelemetryExportService _exports;
