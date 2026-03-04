@@ -36,7 +36,7 @@ PowerShell:
 ```
 
 補足:
-- `--simulator` は `data/seed.ttl` と `TENANT_ID=t1` を使った ingest を有効化。
+- `--simulator` は `data/sample.ttl` と `TENANT_ID=t1` を使った ingest を有効化。
 - `--rabbitmq` は RabbitMQ ingest と publisher コンテナを有効化。
 
 ### Docker なしでのローカル起動

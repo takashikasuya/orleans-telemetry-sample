@@ -154,7 +154,6 @@ dotnet test
 
 ---
 
-必要なら次に、上の「△/×」を**ガイドライン準拠に寄せるための追加コンポーネント案**（Control egress、Device identity、Policy/RBAC、Filtering/Quality、Broker設計）を、いまのリポジトリ構造（Telemetry.Ingest / ApiGateway / Grains / Storage）にそのまま差し込む形で設計案に落とします。
 
 [1]: https://raw.githubusercontent.com/takashikasuya/orleans-telemetry-sample/main/README.md "raw.githubusercontent.com"
 [2]: https://raw.githubusercontent.com/takashikasuya/orleans-telemetry-sample/main/PROJECT_OVERVIEW.md "raw.githubusercontent.com"

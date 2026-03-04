@@ -5143,3 +5143,77 @@ Ensure RDF import correctly accepts schema-compliant customTags (KeyBoolMapEntry
 - Command: dotnet test src/DataModel.Analyzer.Tests/DataModel.Analyzer.Tests.csproj -v minimal
 - Result: Passed (23 passed, 0 failed)
 
+## Task: Validate loading of data/sample.ttl (2026-03-04)
+
+### Purpose
+Add an automated test that verifies `data/sample.ttl` can be loaded by `RdfAnalyzerService` without errors.
+
+### Success Criteria
+1. A test exists in `src/DataModel.Analyzer.Tests` that loads `data/sample.ttl`.
+2. The test confirms parsing succeeds and model content is not empty.
+3. `dotnet test src/DataModel.Analyzer.Tests/DataModel.Analyzer.Tests.csproj -v minimal` completes and reports the new test result.
+
+### Steps
+1. Include `data/sample.ttl` in the analyzer test project's output.
+2. Add a new test class that reads and analyzes the sample Turtle file.
+3. Run analyzer tests and record the result.
+
+### Progress
+- [x] Step 1: include sample.ttl in test output
+- [x] Step 2: add sample RDF load test
+- [x] Step 3: run tests and verify result
+
+### Verification Results
+- Command: `dotnet test src/DataModel.Analyzer.Tests/DataModel.Analyzer.Tests.csproj -v minimal`
+- Result: Passed (24 passed, 0 failed)
+
+### Follow-up (customProperties/customTags assertion)
+- Added assertions in `SampleRdfLoadTests` to verify `PT001` includes:
+  - `customTags`: `temperature=true`, `room101=true`
+  - `customProperties["point_list"]` entries: `writable=false`, `interval=60`, `supplier=VendorA`
+- Updated `RdfAnalyzerService` predicate support so `rec#customProperties` / `rec#customTags` are recognized in addition to `rec/customProperties` / `rec/customTags`.
+- Verification command: `dotnet test src/DataModel.Analyzer.Tests/DataModel.Analyzer.Tests.csproj -v minimal --filter SampleRdfLoadTests`
+- Verification result: Passed (1 passed, 0 failed)
+
+## Task: Align start-system seed file to data/sample.ttl (2026-03-04)
+
+### Purpose
+Ensure local start scripts use `data/sample.ttl` consistently so startup behavior matches current sample RDF.
+
+### Success Criteria
+1. `scripts/start-system.ps1` defaults to `data/sample.ttl` (aligned with `scripts/start-system.sh`).
+2. Local operations doc reflects the same seed file.
+
+### Progress
+- [x] Update `scripts/start-system.ps1` seed path.
+- [x] Update `docs/local-setup-and-operations.md` simulator note.
+
+### Verification Results
+- `scripts/start-system.ps1` now sets `$seedFile = Join-Path $Root "data/sample.ttl"`.
+- `docs/local-setup-and-operations.md` now states `--simulator` uses `data/sample.ttl`.
+
+## Task: Fix start-system.ps1 publisher startup parity with start-system.sh (2026-03-04)
+
+### Purpose
+Make `scripts/start-system.ps1 -RabbitMq` start `publisher` the same way as `scripts/start-system.sh --rabbitmq`.
+
+### Success Criteria
+1. `-RabbitMq` adds `publisher` to both build and app startup targets in PowerShell script.
+2. Service name passing uses PowerShell-safe argument handling (no whitespace-concatenated single argument).
+
+### Changes
+- Replaced string-based service concatenation (`admin$publisherService`) with explicit arrays:
+  - `$buildServices`: `silo, api, admin` (+`publisher` when `-RabbitMq`)
+  - `$appServices`: `api, admin` (+`publisher` when `-RabbitMq`)
+- Switched docker compose calls to splatted argument arrays:
+  - `docker compose @composeArgs build @buildServices`
+  - `docker compose @composeArgs up -d @appServices`
+
+### Observations
+- In PowerShell, `admin$publisherService` with `$publisherService = " publisher"` is passed as one argument (`"admin publisher"`), unlike Bash word-splitting behavior.
+- This prevented `publisher` from being treated as a separate service target.
+
+### Verification Results
+- Parse check: `[scriptblock]::Create((Get-Content 'scripts/start-system.ps1' -Raw))`
+- Result: `PS1_PARSE_OK`
+

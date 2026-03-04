@@ -28,6 +28,7 @@ public class RdfAnalyzerService
     private readonly string _schemaFolder;
 
     private const string RecNamespace = "https://w3id.org/rec/";
+    private const string RecNamespaceHash = "https://w3id.org/rec#";
     private const string SbcoNamespace = "https://www.sbco.or.jp/ont/";
     private const string BrickNamespace = "https://brickschema.org/schema/Brick#";
     private const string DctNamespace = "http://purl.org/dc/terms/";
@@ -39,8 +40,8 @@ public class RdfAnalyzerService
     private const string SchemaDirectoryName = "Schema";
     private static readonly string[] DocumentationPredicates = { $"{SbcoNamespace}documentation", $"{RecNamespace}documentation" };
     private static readonly string[] AddressPredicates = { $"{SbcoNamespace}address", $"{RecNamespace}address" };
-    private static readonly string[] CustomPropertiesPredicates = { $"{SbcoNamespace}customProperties", $"{RecNamespace}customProperties" };
-    private static readonly string[] CustomTagsPredicates = { $"{SbcoNamespace}customTags", $"{RecNamespace}customTags" };
+    private static readonly string[] CustomPropertiesPredicates = { $"{SbcoNamespace}customProperties", $"{RecNamespace}customProperties", $"{RecNamespaceHash}customProperties" };
+    private static readonly string[] CustomTagsPredicates = { $"{SbcoNamespace}customTags", $"{RecNamespace}customTags", $"{RecNamespaceHash}customTags" };
     private static readonly string[] DescriptionPredicates = { $"{SbcoNamespace}description", $"{RecNamespace}description" };
     private static readonly string[] FormatPredicates = { $"{SbcoNamespace}format", $"{RecNamespace}format" };
     private static readonly string[] LanguagePredicates = { $"{SbcoNamespace}language", $"{RecNamespace}language" };

@@ -71,13 +71,13 @@ ex:DEV005 a sbco:EquipmentExt ;
 ex:DEV006 a sbco:EquipmentExt ;
   sbco:id "DEV006" ;
   sbco:name "Temperature Sensor 02" ;
-  sbco:locatedIn ex:room_2F_Room101 ;
+  sbco:locatedIn ex:room_2F_Room201 ;
   sbco:hasPoint ex:PT008 .
 
 ex:DEV007 a sbco:EquipmentExt ;
   sbco:id "DEV007" ;
   sbco:name "Motion Sensor 01" ;
-  sbco:locatedIn ex:room%3Alevel%3Abuilding%3Asite%3ATokyoSite1%2FMainBldg%2F4F%2FRoom201 ;
+  sbco:locatedIn ex:room_2F_Room201 ;
   sbco:hasPoint ex:PT009 .
 
 ex:PT001 a sbco:PointExt ;

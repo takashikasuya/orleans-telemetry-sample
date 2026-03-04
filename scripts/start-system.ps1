@@ -15,7 +15,7 @@ $storageDirPosix = $storageDir -replace "\\", "/"
 $stateFile = Join-Path $Root "scripts/.system-state"
 $dockerfile = Join-Path $Root "Dockerfile.dotnet"
 $dockerfilePosix = $dockerfile -replace "\\", "/"
-$seedFile = Join-Path $Root "data/seed-complex.ttl"
+$seedFile = Join-Path $Root "data/sample.ttl"
 $seedFilePosix = $seedFile -replace "\\", "/"
 
 if ($Help) {
@@ -47,7 +47,8 @@ $rabbitMqLines = ""
 $ingestSinkLine = ""
 $mqBlock = ""
 $publisherBlock = ""
-$publisherService = ""
+$buildServices = @("silo", "api", "admin")
+$appServices = @("api", "admin")
 
 if ($Simulator) {
   $ingestEnabledLines.Add("      TelemetryIngest__Enabled__{0}: Simulator" -f $ingestEnabledLines.Count)
@@ -103,7 +104,8 @@ if ($RabbitMq) {
     volumes:
       - "${seedFilePosix}:/seed/seed.ttl:ro"
 "@
-  $publisherService = " publisher"
+  $buildServices += "publisher"
+  $appServices += "publisher"
 }
 
 # Always enable ParquetStorage for telemetry persistence
@@ -191,13 +193,14 @@ $Success = $false
 
 while ($RetryCount -lt $MaxRetries) {
   try {
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile down --remove-orphans 2>$null
+    $composeArgs = @("-f", (Join-Path $Root "docker-compose.yml"), "-f", $overrideFile)
+    & docker compose @composeArgs down --remove-orphans 2>$null
     
-    Write-Host "Building services (silo, api, admin$publisherService)..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile build silo api admin$publisherService
+    Write-Host ("Building services ({0})..." -f ($buildServices -join ", "))
+    & docker compose @composeArgs build @buildServices
 
     Write-Host "Starting base services (mq, silo, mock-oidc)..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d mq silo mock-oidc
+    & docker compose @composeArgs up -d mq silo mock-oidc
 
     Write-Host "Waiting for Orleans gateway (localhost:30000)..."
     $GatewayRetries = 24
@@ -228,8 +231,8 @@ while ($RetryCount -lt $MaxRetries) {
       throw "Orleans gateway did not become ready after $GatewayRetries attempts."
     }
 
-    Write-Host "Starting API/Admin/Publisher..."
-    & docker compose -f (Join-Path $Root "docker-compose.yml") -f $overrideFile up -d api admin$publisherService
+    Write-Host ("Starting app services ({0})..." -f ($appServices -join ", "))
+    & docker compose @composeArgs up -d @appServices
     
     $Success = $true
     break

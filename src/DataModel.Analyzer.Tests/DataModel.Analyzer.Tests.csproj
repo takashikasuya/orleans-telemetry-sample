@@ -23,5 +23,6 @@
 
   <ItemGroup>
     <Content Include="..\DataModel.Analyzer\Schema\*.ttl" Link="Schema\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\data\sample.ttl" Link="data\sample.ttl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
