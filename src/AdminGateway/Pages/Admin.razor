@@ -4,6 +4,7 @@
 @inject IConfiguration Configuration
 @using System.Collections.Generic
 @using System.IO
+@using System.Text.Json
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
 @implements IAsyncDisposable
@@ -636,7 +637,8 @@ else
         new TrendRangeOption("5m", "Last 5 minutes", TimeSpan.FromMinutes(5), 120),
         new TrendRangeOption("15m", "Last 15 minutes", TimeSpan.FromMinutes(15), 180),
         new TrendRangeOption("1h", "Last 1 hour", TimeSpan.FromHours(1), 240),
-        new TrendRangeOption("6h", "Last 6 hours", TimeSpan.FromHours(6), 360)
+        new TrendRangeOption("6h", "Last 6 hours", TimeSpan.FromHours(6), 360),
+        new TrendRangeOption("24h", "Last 24 hours", TimeSpan.FromHours(24), 480)
     };
 
     protected override async Task OnInitializedAsync()
@@ -1386,6 +1388,21 @@ else
     private static double? ExtractNumericValue(object? value)
     {
         if (value is null) return null;
+        if (value is JsonElement elem)
+        {
+            return elem.ValueKind switch
+            {
+                JsonValueKind.Number when elem.TryGetDouble(out var n) => n,
+                JsonValueKind.String when double.TryParse(
+                    elem.GetString(),
+                    System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var s) => s,
+                JsonValueKind.True => 1.0,
+                JsonValueKind.False => 0.0,
+                _ => null
+            };
+        }
         if (value is bool b) return b ? 1.0 : 0.0;
         if (value is double d) return d;
         if (value is float f) return f;

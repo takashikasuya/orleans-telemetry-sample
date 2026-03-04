@@ -13,12 +13,17 @@ namespace AdminGateway.Hubs;
 public sealed class TelemetryHub : Hub
 {
     private readonly IClusterClient _client;
+    private readonly IHubContext<TelemetryHub> _hubContext;
     private readonly ILogger<TelemetryHub> _logger;
     private static readonly ConcurrentDictionary<string, StreamSubscriptionHandle<PointSnapshot>> Subscriptions = new();
 
-    public TelemetryHub(IClusterClient client, ILogger<TelemetryHub> logger)
+    public TelemetryHub(
+        IClusterClient client,
+        IHubContext<TelemetryHub> hubContext,
+        ILogger<TelemetryHub> logger)
     {
         _client = client;
+        _hubContext = hubContext;
         _logger = logger;
     }
 
@@ -42,22 +47,23 @@ public sealed class TelemetryHub : Hub
 
         try
         {
+            var connectionId = Context.ConnectionId;
             var pointKey = PointGrainKey.Create(tenantId, pointId);
             var streamProvider = _client.GetStreamProvider("PointUpdates");
             var stream = streamProvider.GetStream<PointSnapshot>(StreamId.Create("PointUpdatesNs", pointKey));
 
-            var subscriptionKey = $"{Context.ConnectionId}:{tenantId}:{deviceId}:{pointId}";
+            var subscriptionKey = $"{connectionId}:{tenantId}:{deviceId}:{pointId}";
 
             // Keep one active point subscription per SignalR connection.
-            await UnsubscribeAllForConnectionAsync(Context.ConnectionId);
+            await UnsubscribeAllForConnectionAsync(connectionId);
 
             // Subscribe to stream
             var subscription = await stream.SubscribeAsync(async (snapshot, token) =>
             {
                 // Normalize the value to a numeric value for charting
                 var numericValue = NormalizeValue(snapshot.LatestValue);
-                
-                await Clients.Caller.SendAsync("ReceivePointUpdate", new
+
+                await _hubContext.Clients.Client(connectionId).SendAsync("ReceivePointUpdate", new
                 {
                     Timestamp = snapshot.UpdatedAt,
                     Value = numericValue,

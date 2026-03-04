@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using AdminGateway.Models;
 using AdminGateway.Pages;
 using AdminGateway.Services;
@@ -106,6 +107,27 @@ public sealed class AdminPageTests : TestContext
     }
 
     [Fact]
+    public void TrendRange_Includes24HoursOption()
+    {
+        var field = typeof(Admin).GetField("TrendRangeOptions", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("TrendRangeOptions field was not found.");
+        var options = (System.Collections.IEnumerable)(field.GetValue(null)
+            ?? throw new InvalidOperationException("TrendRangeOptions value was null."));
+
+        var labels = new List<string>();
+        foreach (var option in options)
+        {
+            var label = option?.GetType().GetProperty("Label", BindingFlags.Public | BindingFlags.Instance)?.GetValue(option) as string;
+            if (!string.IsNullOrWhiteSpace(label))
+            {
+                labels.Add(label);
+            }
+        }
+
+        Assert.Contains("Last 24 hours", labels);
+    }
+
+    [Fact]
     public async Task SelectingPointNode_ShowsMetadataAndPointSnapshot()
     {
         var pointNode = Snapshot("point-1", "Supply Temp", GraphNodeType.Point);
@@ -156,6 +178,100 @@ public sealed class AdminPageTests : TestContext
         });
     }
 
+    [Fact]
+    public async Task OnPointUpdate_ParsesNumericValuesIncludingJsonElement()
+    {
+        var metrics = CreateMetricsService(
+            tenants: new[] { "t1" },
+            idsByType: new Dictionary<GraphNodeType, IReadOnlyList<string>>(),
+            snapshots: new Dictionary<string, GraphNodeSnapshot>(StringComparer.OrdinalIgnoreCase));
+
+        ConfigureServices(metrics);
+        var cut = RenderComponent<Admin>();
+        cut.WaitForAssertion(() => Assert.DoesNotContain("Loading dashboard data...", cut.Markup));
+
+        var t0 = new DateTimeOffset(2026, 3, 4, 0, 0, 0, TimeSpan.Zero);
+
+        await cut.InvokeAsync(() => cut.Instance.OnPointUpdate(new Admin.PointUpdateDto
+        {
+            Timestamp = t0,
+            Value = 12.5,
+            PointId = "p1",
+            DeviceId = "d1",
+            TenantId = "t1"
+        }));
+
+        using var numberDoc = JsonDocument.Parse("23.75");
+        await cut.InvokeAsync(() => cut.Instance.OnPointUpdate(new Admin.PointUpdateDto
+        {
+            Timestamp = t0.AddSeconds(1),
+            Value = numberDoc.RootElement.Clone(),
+            PointId = "p1",
+            DeviceId = "d1",
+            TenantId = "t1"
+        }));
+
+        using var numericStringDoc = JsonDocument.Parse("\"34.125\"");
+        await cut.InvokeAsync(() => cut.Instance.OnPointUpdate(new Admin.PointUpdateDto
+        {
+            Timestamp = t0.AddSeconds(2),
+            Value = numericStringDoc.RootElement.Clone(),
+            PointId = "p1",
+            DeviceId = "d1",
+            TenantId = "t1"
+        }));
+
+        using var nonNumericStringDoc = JsonDocument.Parse("\"not-a-number\"");
+        await cut.InvokeAsync(() => cut.Instance.OnPointUpdate(new Admin.PointUpdateDto
+        {
+            Timestamp = t0.AddSeconds(3),
+            Value = nonNumericStringDoc.RootElement.Clone(),
+            PointId = "p1",
+            DeviceId = "d1",
+            TenantId = "t1"
+        }));
+
+        var samples = GetPrivateField<IReadOnlyList<PointTrendSample>>(cut.Instance, "_pointTrendSamples");
+        Assert.Equal(4, samples.Count);
+        Assert.Equal(12.5, samples[0].Value);
+        Assert.Equal(23.75, samples[1].Value);
+        Assert.Equal(34.125, samples[2].Value);
+        Assert.Null(samples[3].Value);
+    }
+
+    [Fact]
+    public async Task OnPointUpdate_KeepsOnlyLatest500Samples()
+    {
+        var metrics = CreateMetricsService(
+            tenants: new[] { "t1" },
+            idsByType: new Dictionary<GraphNodeType, IReadOnlyList<string>>(),
+            snapshots: new Dictionary<string, GraphNodeSnapshot>(StringComparer.OrdinalIgnoreCase));
+
+        ConfigureServices(metrics);
+        var cut = RenderComponent<Admin>();
+
+        var start = new DateTimeOffset(2026, 3, 4, 0, 0, 0, TimeSpan.Zero);
+        for (var i = 0; i < 501; i++)
+        {
+            var value = i;
+            await cut.InvokeAsync(() => cut.Instance.OnPointUpdate(new Admin.PointUpdateDto
+            {
+                Timestamp = start.AddSeconds(value),
+                Value = value,
+                PointId = "p1",
+                DeviceId = "d1",
+                TenantId = "t1"
+            }));
+        }
+
+        var samples = GetPrivateField<IReadOnlyList<PointTrendSample>>(cut.Instance, "_pointTrendSamples");
+        Assert.Equal(500, samples.Count);
+        Assert.Equal(start.AddSeconds(1), samples[0].Timestamp);
+        Assert.Equal(1, samples[0].Value);
+        Assert.Equal(start.AddSeconds(500), samples[^1].Timestamp);
+        Assert.Equal(500, samples[^1].Value);
+    }
+
     private static Task InvokePrivateAsync(object target, string methodName, params object[] args)
     {
         var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
@@ -177,6 +293,14 @@ public sealed class AdminPageTests : TestContext
         var button = cut.FindAll("button")
             .First(b => b.TextContent.Contains(text, StringComparison.Ordinal));
         button.Click();
+    }
+
+    private static T GetPrivateField<T>(object target, string fieldName)
+    {
+        var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"Field '{fieldName}' was not found.");
+        return (T)(field.GetValue(target)
+            ?? throw new InvalidOperationException($"Field '{fieldName}' value was null."));
     }
 
     private void ConfigureServices(AdminMetricsService metrics)

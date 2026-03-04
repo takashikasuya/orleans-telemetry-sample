@@ -5217,3 +5217,123 @@ Make `scripts/start-system.ps1 -RabbitMq` start `publisher` the same way as `scr
 - Parse check: `[scriptblock]::Create((Get-Content 'scripts/start-system.ps1' -Raw))`
 - Result: `PS1_PARSE_OK`
 
+
+---
+
+## Task: AdminGateway Pointリアルタイムグラフ反映の機能確認（2026-03-04）
+
+### Purpose
+Admin UIのTreeViewでPointを選択した際のモニタリング機能について、リアルタイム更新がグラフに反映されない問題の原因候補と、既存テストで検知可能かを確認する。
+
+### Success Criteria
+1. Point監視の実装経路（UI/JS/SignalR/Hub）を確認できる。
+2. リアルタイム反映失敗の主要原因候補をコード上で特定できる。
+3. 既存テストが当該不具合を検知できるか判断できる。
+
+### Steps
+1. AdminGatewayのPointトレンドUIとリアルタイム購読処理を確認。
+2. SignalR Hub送信値とUI受信時の型変換を確認。
+3. AdminGateway.Tests / AdminGateway.E2E.Tests の対象テスト範囲を確認。
+4. テスト実行結果を確認し、検知可否を判断。
+
+### Progress
+- [x] Step 1: UI・JS・Hubの処理フロー確認
+- [x] Step 2: 値変換ロジック確認
+- [x] Step 3: テスト範囲確認
+- [x] Step 4: テスト実行と判定
+
+### Observations
+- `Admin.razor` の `OnPointUpdate(PointUpdateDto update)` では `update.Value` を `object` として受け、`ExtractNumericValue` で数値化している。
+- JS interop経由の `object` は `JsonElement` として到達するケースがあり、`ExtractNumericValue` は `JsonElement` を扱っていない。
+- その場合 `Value` が `null` になり、チャート描画側で有効点がゼロ扱いとなり「No data」状態が続く可能性が高い。
+- 既存テストには `OnPointUpdate`/`ExtractNumericValue`/SignalR受信の検証が無い。
+- `AdminGateway.Tests` は 6件成功、`AdminGateway.E2E.Tests` は 1件成功 + 1件Skip（Playwrightブラウザ検証は未実行）。
+
+### Decisions
+- 現時点では「機能確認」依頼に対する調査結果として、原因候補とテストギャップを報告する。
+- 追加修正を行う場合は、`JsonElement` 対応とリアルタイム反映のテスト追加を優先対象とする。
+
+### Retrospective
+- リアルタイム経路はJS interopとSignalRの境界で型が崩れやすく、`object` 受けのままではテストなしで不具合が潜在化しやすい。
+
+### Planned Fix (next)
+- `Admin.razor` の `ExtractNumericValue(object? value)` に `JsonElement` 対応を追加する。
+  - `JsonValueKind.Number`: `TryGetDouble` で取得
+  - `JsonValueKind.String`: invariant culture で `double.TryParse`
+  - `JsonValueKind.True/False`: `1.0 / 0.0`
+  - `JsonValueKind.Null/Undefined/その他`: `null`
+- `OnPointUpdate` のサンプル追加時は既存の「末尾500件保持」を維持し、グラフの表示期間が時系列で前進する挙動を維持する。
+- 変更は `Admin.razor` に限定し、Hub/JS/Chart 側には手を入れない（影響範囲最小化）。
+
+### Planned Tests (next)
+1) AdminGateway.Tests: `AdminPageTests` に `OnPointUpdate` 系テスト追加
+- `OnPointUpdate` に `double` を渡したとき、`_pointTrendSamples` に数値が追加される。
+- `OnPointUpdate` に `JsonElement(number)` を渡したとき、`Value` が数値として保持される。
+- `OnPointUpdate` に `JsonElement(string-number)` を渡したとき、`Value` が数値化される。
+- `OnPointUpdate` に `JsonElement(non-number string)` を渡したとき、`Value` が `null` になる（非数値入力の明示）。
+
+2) AdminGateway.Tests: バッファ上限制御テスト
+- `OnPointUpdate` を 501 回呼んだとき、`_pointTrendSamples.Count == 500` を維持する。
+- 先頭が切り詰められ、最新サンプルが末尾に残ることを確認する（表示期間が前進する前提）。
+
+3) 実行確認
+- `dotnet test src/AdminGateway.Tests/AdminGateway.Tests.csproj`
+- 必要に応じて `dotnet test src/AdminGateway.E2E.Tests/AdminGateway.E2E.Tests.csproj`（現状はブラウザケースがSkipのため補助確認）
+
+### Execution Results (2026-03-04)
+- 実装: `Admin.razor` の `ExtractNumericValue` に `JsonElement` 対応を追加（Number/String/True/Falseを処理）。
+- テスト追加: `AdminPageTests` に以下2件を追加。
+  - `OnPointUpdate_ParsesNumericValuesIncludingJsonElement`
+  - `OnPointUpdate_KeepsOnlyLatest500Samples`
+- 実行: `dotnet test src/AdminGateway.Tests/AdminGateway.Tests.csproj -v minimal`
+  - 結果: Passed 8 / Failed 0 / Skipped 0
+
+### Verification Update
+- 既存のUIテストでは未カバーだった「リアルタイム受信値の型変換（JsonElement）」と「500件リングバッファ維持」を自動テストで検証可能にした。
+
+### Live Validation Finding (2026-03-04)
+- ブラウザでは `Telemetry SignalR connection established` / `Subscribed to telemetry updates: t1/DEV001/PT001` まで成功。
+- しかし `ReceivePointUpdate` が到達せず、chart は空配列更新のまま。
+- サーバーログで以下を確認:
+  - `Failed to deliver message to consumer ... stream PointUpdates/PointUpdatesNs/t1:PT001`
+  - `Object name: 'AdminGateway.Hubs.TelemetryHub'`
+  - 失敗箇所: `TelemetryHub.SubscribeToPoint` の stream callback（`Clients.Caller.SendAsync`）
+- 結論: stream callback 実行時点で Hub インスタンスライフサイクル外になり、`Clients.Caller` を安全に使えず配信が落ちる。
+
+### Fix Direction (next)
+- `TelemetryHub` に `IHubContext<TelemetryHub>` を注入し、コールバック内は `hubContext.Clients.Client(connectionId).SendAsync(...)` で送信する。
+- `SubscribeToPoint` 内で `connectionId` をローカル保持し、Hubインスタンス依存の `Clients` 参照を無くす。
+- 修正後に同じ手順でブラウザ console に `ReceivePointUpdate` が出ることを確認する。
+
+### Long-Range Verification (2026-03-04)
+- Admin UI の trend range は現状 `5m/15m/1h/6h` の4種類のみ（6時間が上限）。
+- `storage/index` を確認した結果、`tenant=t1/device=DEV001` の `PT001` は過去データ自体は存在するが、**直近6時間内のバケットは2件のみ**。
+  - `DEV001/PT001 buckets total=102`
+  - `in1h=2`, `in6h=2`, `in24h=2`, `in7d=11`
+- そのため 5m→1h→6h に切り替えても、表示が「直近中心」に見えるのはデータ分布上は整合する。
+- 追加確認ポイント:
+  - レンジ変更だけでは再取得されず、`Load Telemetry` 実行時に選択中レンジで再クエリされる。
+
+## Task: Admin UIに24hレンジ追加（2026-03-04）
+
+### Purpose
+Point trend の取得レンジに `24h` を追加し、6時間を超える履歴をUIから確認可能にする。
+
+### Success Criteria
+1. Trend range 選択肢に `Last 24 hours` が表示される。
+2. 既存のレンジ挙動（5m/15m/1h/6h）が壊れない。
+3. `AdminGateway.Tests` が通過する。
+
+### Steps
+1. `Admin.razor` の `TrendRangeOptions` に `24h` を追加。
+2. UIテストに `24h` 選択肢表示確認を追加。
+3. `dotnet test src/AdminGateway.Tests/AdminGateway.Tests.csproj` 実行。
+
+### Progress Update (2026-03-04)
+- [x] Step 1: `TrendRangeOptions` に `24h` を追加。
+- [x] Step 2: `TrendRange_Includes24HoursOption` テスト追加（反射でオプション定義を検証）。
+- [x] Step 3: `dotnet test src/AdminGateway.Tests/AdminGateway.Tests.csproj -v minimal` 実行。
+
+### Verification Results
+- `AdminGateway.Tests`: Passed 9 / Failed 0 / Skipped 0
+- 既存のリアルタイム更新テスト（OnPointUpdate）を含めて回帰なし。
