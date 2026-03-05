@@ -1557,19 +1557,34 @@ else
     private void StartApiLogTimer()
     {
         _apiLogTimerCts?.Cancel();
+        _apiLogTimerCts?.Dispose();
+        _apiLogTimer?.Dispose();
+
         _apiLogTimerCts = new CancellationTokenSource();
         _apiLogTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
 
         _ = Task.Run(async () =>
         {
-            while (_apiLogTimer is not null && await _apiLogTimer.WaitForNextTickAsync(_apiLogTimerCts.Token))
+            try
             {
-                if (!_enableApiLogRealtime || _loading || _apiLogLoading)
+                while (_apiLogTimer is not null &&
+                       await _apiLogTimer.WaitForNextTickAsync(_apiLogTimerCts.Token))
                 {
-                    continue;
-                }
+                    if (!_enableApiLogRealtime || _loading || _apiLogLoading)
+                    {
+                        continue;
+                    }
 
-                await LoadApiRequestLogsAsync();
+                    await LoadApiRequestLogsAsync();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the timer is canceled or disposed.
+            }
+            catch
+            {
+                // Swallow other exceptions to avoid unobserved task exceptions from this fire-and-forget loop.
             }
         });
     }
