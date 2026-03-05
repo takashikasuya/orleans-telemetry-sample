@@ -107,7 +107,7 @@ else
                 </div>
             </div>
             <div class="graph-import-actions">
-                <button class="refresh-button" @onclick="LoadApiRequestLogsAsync" disabled="_apiLogLoading">
+                <button class="refresh-button" @onclick="LoadApiRequestLogsAsync" disabled="@_apiLogLoading">
                     @(_apiLogLoading ? "Loading..." : "Search")
                 </button>
                 <label>
