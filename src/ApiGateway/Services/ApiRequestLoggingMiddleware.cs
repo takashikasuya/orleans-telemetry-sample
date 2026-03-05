@@ -41,16 +41,26 @@ public sealed class ApiRequestLoggingMiddleware
             var user = context.User?.Identity?.Name;
             var traceId = Activity.Current?.TraceId.ToString();
 
-            await dispatcher.WriteHttpRequestLogAsync(
-                tenant,
-                context.Request.Method,
-                context.Request.Path.ToString(),
-                statusCode,
-                stopwatch.Elapsed.TotalMilliseconds,
-                traceId,
-                context.Request.QueryString.HasValue ? context.Request.QueryString.Value : null,
-                user,
-                context.RequestAborted);
+            // Use a short-lived cancellation token and ensure logging cannot fail the request pipeline.
+            using var loggingCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+            try
+            {
+                await dispatcher.WriteHttpRequestLogAsync(
+                    tenant,
+                    context.Request.Method,
+                    context.Request.Path.ToString(),
+                    statusCode,
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    traceId,
+                    context.Request.QueryString.HasValue ? context.Request.QueryString.Value : null,
+                    user,
+                    loggingCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // Ignore cancellation: logging must not mask the original request outcome.
+            }
         }
     }
 }
