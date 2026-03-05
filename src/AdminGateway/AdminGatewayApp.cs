@@ -123,6 +123,22 @@ public static class AdminGatewayApp
             return Results.Ok(result);
         }).RequireAuthorization();
 
+
+        app.MapGet("/admin/api-request-logs", async (
+            AdminMetricsService metrics,
+            string? tenantId,
+            string? pathContains,
+            int? statusCode,
+            DateTimeOffset? from,
+            DateTimeOffset? to,
+            int? limit,
+            CancellationToken ct) =>
+        {
+            var query = new ApiRequestLogQuery(tenantId, pathContains, statusCode, from, to, limit ?? 100);
+            var result = await metrics.GetApiRequestLogsAsync(query, ct);
+            return Results.Ok(result);
+        }).RequireAuthorization();
+
         app.MapGet("/admin/graph/statistics", async (AdminMetricsService metrics, string? tenantId) =>
         {
             var tenant = tenantId ?? "default";

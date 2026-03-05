@@ -196,6 +196,142 @@ internal sealed class AdminMetricsService
         return await File.ReadAllTextAsync(path, cancellationToken);
     }
 
+
+    public async Task<IReadOnlyList<ApiRequestLogEntry>> GetApiRequestLogsAsync(ApiRequestLogQuery query, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var from = query.From ?? now.AddMinutes(-15);
+        var to = query.To ?? now;
+        var tenant = string.IsNullOrWhiteSpace(query.TenantId) ? "t1" : query.TenantId.Trim();
+        var limit = Math.Clamp(query.Limit, 1, 500);
+
+        var rows = await _storageQuery.QueryAsync(
+            new TelemetryQueryRequest(tenant, "api-gateway", from, to, "http-request", limit * 2),
+            cancellationToken);
+
+        var results = rows
+            .Where(row => row.EventType == (int)TelemetryEventType.Log)
+            .Select(MapApiRequestLogEntry)
+            .Where(entry => query.StatusCode is null || entry.StatusCode == query.StatusCode.Value)
+            .Where(entry => string.IsNullOrWhiteSpace(query.PathContains)
+                || entry.Path.Contains(query.PathContains, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(entry => entry.OccurredAt)
+            .Take(limit)
+            .ToArray();
+
+        return results;
+    }
+
+    private static ApiRequestLogEntry MapApiRequestLogEntry(TelemetryQueryResult row)
+    {
+        string method = row.Tags?.GetValueOrDefault("method") ?? string.Empty;
+        string path = row.Tags?.GetValueOrDefault("path") ?? string.Empty;
+        var traceId = row.Tags?.GetValueOrDefault("traceId");
+        var statusText = row.Tags?.GetValueOrDefault("status");
+        var statusCode = int.TryParse(statusText, out var parsedStatus) ? parsedStatus : ParseStatusCodeFromPayload(row.PayloadJson);
+        var durationMs = ParseDurationMs(row.PayloadJson);
+        var user = ParseUser(row.PayloadJson);
+
+        return new ApiRequestLogEntry(
+            row.OccurredAt,
+            row.TenantId,
+            method,
+            path,
+            statusCode,
+            durationMs,
+            ParseSeverity(row.Severity),
+            traceId,
+            user,
+            row.PayloadJson);
+    }
+
+    private static int ParseStatusCodeFromPayload(string? payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+        {
+            return 0;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(payloadJson);
+            if (document.RootElement.TryGetProperty("statusCode", out var statusElement)
+                && statusElement.TryGetInt32(out var statusCode))
+            {
+                return statusCode;
+            }
+        }
+        catch
+        {
+            // ignored
+        }
+
+        return 0;
+    }
+
+    private static double? ParseDurationMs(string? payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(payloadJson);
+            if (document.RootElement.TryGetProperty("durationMs", out var durationElement)
+                && durationElement.TryGetDouble(out var durationMs))
+            {
+                return durationMs;
+            }
+        }
+        catch
+        {
+            // ignored
+        }
+
+        return null;
+    }
+
+    private static string? ParseUser(string? payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(payloadJson);
+            if (document.RootElement.TryGetProperty("user", out var userElement)
+                && userElement.ValueKind == JsonValueKind.String)
+            {
+                return userElement.GetString();
+            }
+        }
+        catch
+        {
+            // ignored
+        }
+
+        return null;
+    }
+
+    private static string ParseSeverity(int? severity)
+    {
+        if (severity is null)
+        {
+            return nameof(TelemetryLogSeverity.Information);
+        }
+
+        if (Enum.IsDefined(typeof(TelemetryLogSeverity), severity.Value))
+        {
+            return ((TelemetryLogSeverity)severity.Value).ToString();
+        }
+
+        return severity.Value.ToString(CultureInfo.InvariantCulture);
+    }
+
     private static string? ParseDefaultConnector(string rawJson)
     {
         try

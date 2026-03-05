@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Orleans;
+using Telemetry.Ingest;
 using Telemetry.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,6 +46,12 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<GraphTraversal>();
 builder.Services.Configure<TelemetryStorageOptions>(builder.Configuration.GetSection("TelemetryStorage"));
+builder.Services.Configure<ApiRequestLoggingOptions>(builder.Configuration.GetSection("ApiRequestLogging"));
+builder.Services.AddSingleton<ApiRequestLogDispatcher>();
+builder.Services.Configure<TelemetryIngestOptions>(builder.Configuration.GetSection("TelemetryIngest"));
+builder.Services.AddSingleton<ITelemetryEventSink, LoggingTelemetryEventSink>();
+builder.Services.AddSingleton<ParquetTelemetryEventSink>();
+builder.Services.AddSingleton<ITelemetryEventSink>(sp => sp.GetRequiredService<ParquetTelemetryEventSink>());
 builder.Services.AddSingleton<ITelemetryStorageQuery, ParquetTelemetryStorageQuery>();
 builder.Services.Configure<TelemetryExportOptions>(builder.Configuration.GetSection("TelemetryExport"));
 builder.Services.AddSingleton<TelemetryExportService>();
@@ -152,6 +159,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<ApiRequestLoggingMiddleware>();
 
 // REST endpoint to fetch device snapshot
 app.MapGet("/api/devices/{deviceId}", async (

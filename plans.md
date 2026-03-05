@@ -1,3 +1,97 @@
+## Task: AdminGateway APIリクエスト監視/ログ検索の実装（2026-03-05）
+
+### Purpose
+設計メモ（`docs/admin-gateway-api-request-log-monitoring.md`）に沿って、ApiGatewayのHTTPリクエストを既存 sink へ記録し、AdminGatewayから検索・リアルタイム監視できる最小実装（Phase 1相当）を追加する。
+
+### Success Criteria
+1. ApiGateway が `/api/*` リクエストを `TelemetryEventType.Log` として既存 `ITelemetryEventSink`（Logging/ParquetStorage）へ記録できる。
+2. AdminGateway で tenant/path/status 条件でログ検索できる。
+3. AdminGateway で5秒間隔の自動更新によりリアルタイム監視できる。
+4. `dotnet build` / `dotnet test` 実行結果を記録できる。
+
+### Steps
+1. ApiGateway に request logging middleware + sink dispatch サービスを追加する。
+2. `Telemetry.Storage` のクエリ結果に eventType/severity/ingestedAt を含め、ログ用途で扱えるようにする。
+3. AdminGateway に API request log 取得ロジックとエンドポイントを追加する。
+4. Admin UI にログ検索/自動更新テーブルを追加する。
+5. 関連ドキュメント（plans/docs）を更新し、build/test で検証する。
+
+### Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+- [x] Step 5
+
+### Observations
+- 既存ストレージ schema には `eventType`/`severity` 列が既に含まれていたが、`ITelemetryStorageQuery` の戻り値に未露出だったため Admin 側で使えなかった。
+- `PeriodicTimer` で Admin UI 自動更新を実装し、SignalR追加なしで near-real-time 監視を実現可能。
+
+### Decisions
+- 「sink再利用」を優先し、ApiGatewayには専用 logging ライブラリではなく `TelemetryEventEnvelope` ベースのディスパッチを採用。
+- リアルタイム監視はまず5秒ポーリングで実装し、必要なら将来 SignalR/SSE へ拡張する。
+
+### Verification Plan
+- `dotnet build`
+- `dotnet test`
+
+### Verification Results
+- `dotnet build` 成功（warning 2件: 既存E2Eテストコードの未使用フィールド）。
+- `dotnet test` 成功（全テストパス。AdminGateway.E2Eのブラウザ依存テスト1件は既存どおり Skip）。
+
+### Retrospective
+- 既存 sink 再利用の方針で、ApiGateway 側に大きな依存追加をせずログ保存導線を実装できた。
+- ストレージクエリの戻り値拡張により、既存テレメトリ検索APIとの互換性を保ちながらログ用途へ展開できた。
+- リアルタイムはポーリング実装のため、将来的にSignalR移行する余地を残している。
+
+---
+
+## Task: AdminGateway APIリクエスト監視/ログ検索の検討（2026-03-05）
+
+### Purpose
+AdminGateway から API Gateway へのリクエストをリアルタイム監視し、過去ログを検索・閲覧できる仕組みの実装方針を整理する。既存 sink モジュール（`Telemetry.Ingest` の `ITelemetryEventSink` 実装）を再利用できる構成を優先する。
+
+### Success Criteria
+1. 現行コードで再利用可能な logging/sink の実装箇所を特定できている。
+2. リアルタイム監視・ログ保存・検索 UI のアーキテクチャ案を文書化できている。
+3. sink 再利用案と代替案の比較、推奨案、段階的導入ステップが文書化できている。
+4. 変更後に `dotnet build` / `dotnet test` が成功する。
+
+### Steps
+1. AdminGateway / ApiGateway / Telemetry.Ingest / Telemetry.Storage の logging/sink 関連コードを確認する。
+2. 既存 `TelemetryEventEnvelope`（`EventType.Log`）と `ParquetTelemetryEventSink` の流用可能性を評価する。
+3. 検討結果を docs に設計メモとして追加し、README の docs 一覧へ反映する。
+4. `dotnet build` と `dotnet test` で回帰がないことを確認する。
+
+### Progress
+- [x] Step 1: 関連コードの確認
+- [x] Step 2: sink 再利用可能性の評価
+- [x] Step 3: 設計メモ追加と README 反映
+- [x] Step 4: Build/Test 検証（test は既存E2E 1件失敗を確認）
+
+### Observations
+- `TelemetryEventEnvelope` は `TelemetryEventType.Log` と `TelemetryLogSeverity` を既に持っており、API request/response ログの格納モデルとして転用可能。
+- `ParquetTelemetryEventSink` は `ITelemetryEventSink` を実装し、JSONL stage へ書き出す既存導線があるため、追加 sink 実装なしで保存経路を使える。
+- AdminGateway は SignalR を既に利用しており、リアルタイム表示用 Hub の追加余地がある。
+
+### Decisions
+- 今回は実装ではなく、まず設計方針ドキュメントを追加する。
+- ログ保存は新規専用ストアを増やさず、既存 sink（特に `ParquetStorage`）へ `EventType.Log` で流す案を第一候補とする。
+
+### Verification Plan
+- `dotnet build`
+- `dotnet test`
+
+### Verification Results
+- `dotnet build` は成功（既存 warning 3件）。
+- `dotnet test` は `Telemetry.E2E.Tests.TelemetryE2ETests.RdfGrainInitialization_LoadsGraphStructureAndEquipmentPoints` が失敗し全体失敗。今回の変更（ドキュメントのみ）とは無関係な既存E2E失敗として記録。
+
+### Retrospective
+- ログ保存については既存 sink を再利用できる見通しが高く、実装時の変更範囲を ApiGateway middleware + AdminGateway表示層に絞れる。
+- 次フェーズで実装する場合は、まず Phase 1（ログ発行/保存/ライブ表示）を小さく完了させるのが安全。
+
+---
+
 ## Task: ルート直下Markdown整理（2026-03-01）
 
 ### Purpose
