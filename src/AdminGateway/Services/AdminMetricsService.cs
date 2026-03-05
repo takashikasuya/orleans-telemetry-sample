@@ -205,8 +205,21 @@ internal sealed class AdminMetricsService
         var tenant = string.IsNullOrWhiteSpace(query.TenantId) ? "t1" : query.TenantId.Trim();
         var limit = Math.Clamp(query.Limit, 1, 500);
 
+        // Use the same configurable identifiers as ApiGateway request logging, with defaults matching previous behavior.
+        var deviceId = _configuration["ApiRequestLogging:DeviceId"];
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            deviceId = "api-gateway";
+        }
+
+        var pointId = _configuration["ApiRequestLogging:PointId"];
+        if (string.IsNullOrWhiteSpace(pointId))
+        {
+            pointId = "http-request";
+        }
+
         var rows = await _storageQuery.QueryAsync(
-            new TelemetryQueryRequest(tenant, "api-gateway", from, to, "http-request", limit * 2),
+            new TelemetryQueryRequest(tenant, deviceId, from, to, pointId, limit * 2),
             cancellationToken);
 
         var results = rows
