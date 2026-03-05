@@ -202,3 +202,45 @@ public sealed record ControlRoutingView(
     string? DefaultConnector,
     IReadOnlyList<ControlRoutingConnectorView> ConnectorMappings,
     string RawJson);
+
+/// <summary>
+/// Represents one API request log row shown in Admin UI.
+/// </summary>
+/// <param name="OccurredAt">Event timestamp.</param>
+/// <param name="TenantId">Tenant identifier.</param>
+/// <param name="Method">HTTP method.</param>
+/// <param name="Path">Request path.</param>
+/// <param name="StatusCode">Response status code.</param>
+/// <param name="DurationMs">Elapsed duration in milliseconds.</param>
+/// <param name="Severity">Log severity text.</param>
+/// <param name="TraceId">Trace identifier when available.</param>
+/// <param name="User">User identifier when available.</param>
+/// <param name="RawPayload">Raw payload JSON.</param>
+public sealed record ApiRequestLogEntry(
+    DateTimeOffset OccurredAt,
+    string TenantId,
+    string Method,
+    string Path,
+    int StatusCode,
+    double? DurationMs,
+    string Severity,
+    string? TraceId,
+    string? User,
+    string? RawPayload);
+
+/// <summary>
+/// Represents API request log query options.
+/// </summary>
+/// <param name="TenantId">Optional tenant filter.</param>
+/// <param name="PathContains">Optional path text filter.</param>
+/// <param name="StatusCode">Optional exact status code filter.</param>
+/// <param name="From">Range start.</param>
+/// <param name="To">Range end.</param>
+/// <param name="Limit">Result row limit.</param>
+public sealed record ApiRequestLogQuery(
+    string? TenantId,
+    string? PathContains,
+    int? StatusCode,
+    DateTimeOffset? From,
+    DateTimeOffset? To,
+    int Limit = 100);

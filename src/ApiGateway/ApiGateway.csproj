@@ -6,6 +6,7 @@
     <ProjectReference Include="../Grains.Abstractions/Grains.Abstractions.csproj" />
     <ProjectReference Include="../ApiGateway.Contracts/ApiGateway.Contracts.csproj" />
     <ProjectReference Include="../Telemetry.Storage/Telemetry.Storage.csproj" />
+    <ProjectReference Include="../Telemetry.Ingest/Telemetry.Ingest.csproj" />
     <PackageReference Include="Microsoft.Orleans.Client" Version="9.2.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />

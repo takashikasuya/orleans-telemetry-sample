@@ -82,6 +82,86 @@ else
             </article>
         </section>
 
+
+        <section>
+            <div class="graph-card-header">
+                <h2>API Request Logs</h2>
+                <button class="refresh-button button-ghost" @onclick="LoadApiRequestLogsAsync">Refresh Logs</button>
+            </div>
+            <div class="graph-import-grid">
+                <div>
+                    <label>Tenant</label>
+                    <input class="graph-input" @bind="_apiLogTenant" placeholder="t1" />
+                </div>
+                <div>
+                    <label>Path contains</label>
+                    <input class="graph-input" @bind="_apiLogPathContains" placeholder="/api/telemetry" />
+                </div>
+                <div>
+                    <label>Status code</label>
+                    <input class="graph-input" type="number" @bind="_apiLogStatusCodeText" placeholder="500" />
+                </div>
+                <div>
+                    <label>Limit</label>
+                    <input class="graph-input" type="number" @bind="_apiLogLimit" min="10" max="500" />
+                </div>
+            </div>
+            <div class="graph-import-actions">
+                <button class="refresh-button" @onclick="LoadApiRequestLogsAsync" disabled="@_apiLogLoading">
+                    @(_apiLogLoading ? "Loading..." : "Search")
+                </button>
+                <label>
+                    <input type="checkbox" @bind="_enableApiLogRealtime" /> Auto refresh (5s)
+                </label>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_apiLogError))
+            {
+                <p class="status error">@_apiLogError</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_apiLogStatus))
+            {
+                <p class="status muted">@_apiLogStatus</p>
+            }
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>OccurredAt (UTC)</th>
+                            <th>Tenant</th>
+                            <th>Method</th>
+                            <th>Path</th>
+                            <th>Status</th>
+                            <th>Duration(ms)</th>
+                            <th>Severity</th>
+                            <th>TraceId</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_apiRequestLogs.Count == 0)
+                        {
+                            <tr><td colspan="8" class="muted">No API request logs found.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var log in _apiRequestLogs)
+                            {
+                                <tr>
+                                    <td>@log.OccurredAt.UtcDateTime.ToString("u")</td>
+                                    <td>@log.TenantId</td>
+                                    <td>@log.Method</td>
+                                    <td>@log.Path</td>
+                                    <td class="numeric">@log.StatusCode</td>
+                                    <td class="numeric">@((log.DurationMs ?? 0).ToString("F1"))</td>
+                                    <td>@log.Severity</td>
+                                    <td>@(string.IsNullOrWhiteSpace(log.TraceId) ? "-" : log.TraceId)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <section>
             <h2>Control Routing</h2>
             @if (_controlRoutingLoading)
@@ -592,6 +672,17 @@ else
     private SiloSummary[] _silos = Array.Empty<SiloSummary>();
     private StorageOverview? _storage;
     private IngestSummary? _ingest;
+    private List<ApiRequestLogEntry> _apiRequestLogs = new();
+    private bool _apiLogLoading;
+    private string? _apiLogError;
+    private string? _apiLogStatus;
+    private string _apiLogTenant = "t1";
+    private string? _apiLogPathContains;
+    private string? _apiLogStatusCodeText;
+    private int _apiLogLimit = 100;
+    private bool _enableApiLogRealtime = true;
+    private PeriodicTimer? _apiLogTimer;
+    private CancellationTokenSource? _apiLogTimerCts;
     private IReadOnlyList<GrainHierarchyNode> _grainHierarchy = Array.Empty<GrainHierarchyNode>();
     private bool _loadingGrainHierarchy;
     private string? _grainHierarchyError;
@@ -644,6 +735,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _dotNetRef = DotNetObjectReference.Create(this);
+        StartApiLogTimer();
         await RefreshAsync();
     }
 
@@ -657,6 +749,7 @@ else
             _silos = await Metrics.GetSiloSummariesAsync();
             _storage = await Metrics.GetStorageOverviewAsync(CancellationToken.None);
             _ingest = Metrics.GetIngestSummary();
+            await LoadApiRequestLogsAsync();
             await LoadGrainHierarchyAsync();
             _graphStatus = await Metrics.GetLastGraphSeedStatusAsync();
             await LoadGraphTenantOptionsAsync();
@@ -1425,12 +1518,86 @@ else
         return null;
     }
 
+
+    private async Task LoadApiRequestLogsAsync()
+    {
+        _apiLogLoading = true;
+        _apiLogError = null;
+
+        try
+        {
+            int? statusCode = null;
+            if (!string.IsNullOrWhiteSpace(_apiLogStatusCodeText) && int.TryParse(_apiLogStatusCodeText, out var parsed))
+            {
+                statusCode = parsed;
+            }
+
+            var query = new ApiRequestLogQuery(
+                _apiLogTenant,
+                _apiLogPathContains,
+                statusCode,
+                DateTimeOffset.UtcNow.AddMinutes(-15),
+                DateTimeOffset.UtcNow,
+                _apiLogLimit);
+
+            _apiRequestLogs = (await Metrics.GetApiRequestLogsAsync(query, CancellationToken.None)).ToList();
+            _apiLogStatus = $"Loaded {_apiRequestLogs.Count} rows at {DateTimeOffset.UtcNow:u}";
+        }
+        catch (Exception ex)
+        {
+            _apiLogError = $"Failed to load API request logs: {ex.Message}";
+        }
+        finally
+        {
+            _apiLogLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void StartApiLogTimer()
+    {
+        _apiLogTimerCts?.Cancel();
+        _apiLogTimerCts?.Dispose();
+        _apiLogTimer?.Dispose();
+
+        _apiLogTimerCts = new CancellationTokenSource();
+        _apiLogTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (_apiLogTimer is not null &&
+                       await _apiLogTimer.WaitForNextTickAsync(_apiLogTimerCts.Token))
+                {
+                    if (!_enableApiLogRealtime || _loading || _apiLogLoading)
+                    {
+                        continue;
+                    }
+
+                    await LoadApiRequestLogsAsync();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the timer is canceled or disposed.
+            }
+            catch
+            {
+                // Swallow other exceptions to avoid unobserved task exceptions from this fire-and-forget loop.
+            }
+        });
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_enableRealTimeUpdate)
         {
             await StopRealTimeUpdatesAsync();
         }
+        _apiLogTimerCts?.Cancel();
+        _apiLogTimer?.Dispose();
+        _apiLogTimerCts?.Dispose();
         _dotNetRef?.Dispose();
     }
 

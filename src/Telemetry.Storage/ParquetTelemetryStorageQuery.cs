@@ -108,6 +108,9 @@ public sealed class ParquetTelemetryStorageQuery : ITelemetryStorageQuery
             var pointColumn = await groupReader.ReadColumnAsync(fieldMap["pointId"], ct);
             var occurredColumn = await groupReader.ReadColumnAsync(fieldMap["occurredAt"], ct);
             var sequenceColumn = await groupReader.ReadColumnAsync(fieldMap["sequence"], ct);
+            var ingestedColumn = await groupReader.ReadColumnAsync(fieldMap["ingestedAt"], ct);
+            var eventTypeColumn = await groupReader.ReadColumnAsync(fieldMap["eventType"], ct);
+            var severityColumn = await groupReader.ReadColumnAsync(fieldMap["severity"], ct);
             var valueColumn = await groupReader.ReadColumnAsync(fieldMap["valueJson"], ct);
             var payloadColumn = await groupReader.ReadColumnAsync(fieldMap["payloadJson"], ct);
             var tagsColumn = await groupReader.ReadColumnAsync(fieldMap["tagsJson"], ct);
@@ -117,6 +120,9 @@ public sealed class ParquetTelemetryStorageQuery : ITelemetryStorageQuery
             var points = (string[])pointColumn.Data;
             var occurred = (DateTime[])occurredColumn.Data;
             var sequences = (long[])sequenceColumn.Data;
+            var ingested = (DateTime[])ingestedColumn.Data;
+            var eventTypes = (int[])eventTypeColumn.Data;
+            var severities = (int?[])severityColumn.Data;
             var values = (string?[])valueColumn.Data;
             var payloads = (string?[])payloadColumn.Data;
             var tags = (string?[])tagsColumn.Data;
@@ -149,6 +155,7 @@ public sealed class ParquetTelemetryStorageQuery : ITelemetryStorageQuery
                     ? null
                     : JsonSerializer.Deserialize<Dictionary<string, string>>(tags[row]!, SerializerOptions);
 
+                var ingestedAt = new DateTimeOffset(DateTime.SpecifyKind(ingested[row], DateTimeKind.Utc));
                 results.Add(new TelemetryQueryResult(
                     tenants[row],
                     devices[row],
@@ -157,7 +164,10 @@ public sealed class ParquetTelemetryStorageQuery : ITelemetryStorageQuery
                     sequences[row],
                     values[row],
                     payloads[row],
-                    tagsMap));
+                    tagsMap,
+                    ingestedAt,
+                    eventTypes[row],
+                    severities[row]));
 
                 if (results.Count >= limit)
                 {

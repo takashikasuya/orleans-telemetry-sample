@@ -16,7 +16,10 @@ public sealed record TelemetryQueryResult(
     long Sequence,
     string? ValueJson,
     string? PayloadJson,
-    IReadOnlyDictionary<string, string>? Tags);
+    IReadOnlyDictionary<string, string>? Tags,
+    DateTimeOffset IngestedAt = default,
+    int EventType = 0,
+    int? Severity = null);
 
 public interface ITelemetryStorageQuery
 {

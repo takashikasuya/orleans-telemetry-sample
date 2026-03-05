@@ -56,6 +56,7 @@ graph LR
 - [BigQuery sink 拡張設計案](docs/telemetry-storage-bigquery-design.md)
 - [RDF ロードと Grain 初期化](docs/rdf-loading-and-grains.md)
 - [Admin Console](docs/admin-console.md)
+- [AdminGateway APIリクエスト監視/ログ検索 検討](docs/admin-gateway-api-request-log-monitoring.md)
 - [Telemetry Client Spec](docs/telemetry-client-spec.md)
 - [負荷試験ガイド](docs/telemetry-ingest-loadtest.md)
 - [OpenTelemetry 運用メモ](docs/observability-opentelemetry.md)
