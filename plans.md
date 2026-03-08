@@ -1,3 +1,43 @@
+## Task: Telemetry.E2E.Tests の不安定失敗修正（2026-03-08）
+
+### Purpose
+`TelemetryE2ETests.EndToEndReport_IsGenerated` が stage の先頭レコードに API request log (`EventType.Log`) を拾って失敗する不安定要因を除去し、再現性高くテストが通るようにする。
+
+### Success Criteria
+1. E2E テストの stage レコード取得が `Telemetry` イベントに限定される。
+2. RDFノード属性（DeviceId/PointId）に一致する stage レコードを優先して取得する。
+3. `dotnet test` が成功する。
+
+### Steps
+1. `WaitForStageRecordAsync` を改修し、eventType/deviceId/pointId の条件でフィルタする。
+2. `EndToEndReport_IsGenerated` でノード属性を引き渡す。
+3. `dotnet test` で検証する。
+
+### Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+
+### Observations
+- 既存実装は最初の jsonl 行をそのまま返すため、ApiGateway request log を拾うと DeviceGrain 状態と不整合になりうる。
+
+### Decisions
+- flaky回避のため、テストの意図に沿って telemetry event + 対象 node 属性一致のレコードのみ採用する。
+
+### Verification Plan
+- `dotnet test`
+
+### Verification Results
+- `dotnet test src/Telemetry.E2E.Tests/Telemetry.E2E.Tests.csproj --filter "FullyQualifiedName~EndToEndReport_IsGenerated" -v minimal` 成功。
+- `dotnet test -v minimal` 成功（AdminGateway.E2E browser smoke は既存どおり Skip）。
+- `dotnet build -v minimal` 成功（既存 warning 1件）。
+
+### Retrospective
+- stage先頭行を盲目的に使う設計が、Logイベント混在時の誤判定を招いていた。
+- EventType と Device/Point 条件で明示的に絞り込むことで、E2Eテストの意図に沿った安定化ができた。
+
+---
+
 ## Task: Admin UIテレメトリー表示の常時・複数ポイント化（2026-03-08）
 
 ### Purpose
