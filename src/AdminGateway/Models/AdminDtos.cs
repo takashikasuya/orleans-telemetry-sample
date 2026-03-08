@@ -179,6 +179,18 @@ public sealed record PointTrendSample(
     double? Value,
     string? RawValue);
 
+
+/// <summary>
+/// Represents one telemetry trend line for multi-point charting.
+/// </summary>
+/// <param name="PointId">Point identifier.</param>
+/// <param name="Label">Display label for legend.</param>
+/// <param name="Samples">Samples for this point.</param>
+public sealed record PointTrendSeries(
+    string PointId,
+    string Label,
+    IReadOnlyList<PointTrendSample> Samples);
+
 /// <summary>
 /// Represents connector mapping details in control routing settings.
 /// </summary>

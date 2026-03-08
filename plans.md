@@ -1,3 +1,47 @@
+## Task: Admin UIテレメトリー表示の常時・複数ポイント化（2026-03-08）
+
+### Purpose
+Admin UIのテレメトリー表示をポイント詳細表示から切り離し、常時表示の独立セクションとして複数ポイントを同時表示（凡例付き）できるようにする。
+
+### Success Criteria
+1. テレメトリーチャートがポイント詳細パネル外に常時表示される。
+2. ポイント詳細で選択した複数ポイントをチャート対象として追加できる。
+3. チャートに各ポイントの凡例（ラベル）が表示される。
+4. `dotnet build` と `dotnet test` が成功する。
+
+### Steps
+1. Admin.razorのUIを再構成し、テレメトリーセクションを独立配置する。
+2. 選択ポイント管理（追加/削除/クリア）と複数ポイントクエリ処理を実装する。
+3. チャートコンポーネントと描画JSをマルチシリーズ＋凡例対応に拡張する。
+4. build/testで検証する。
+
+### Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+### Observations
+- 既存実装は単一ポイント＋リアルタイム購読前提だったため、常時表示と複数系列化に合わせて表示状態管理を分離した。
+
+### Decisions
+- リアルタイム購読は今回の要件外として除外し、手動リロード中心の複数ポイント可視化を優先した。
+
+### Verification Plan
+- `dotnet build`
+- `dotnet test`
+
+### Verification Results
+- `dotnet build` 成功（既存 warning 2件: AdminGateway.E2E.Tests の未使用フィールド）。
+- `dotnet test` 成功（AdminGateway.E2E の browser smoke は既存どおり Skip）。
+- `dotnet run --project src/AdminGateway/AdminGateway.csproj --urls http://0.0.0.0:8082` は Orleans Silo 未起動のため接続失敗（画面キャプチャ取得不可）。
+
+### Retrospective
+- ポイント詳細内の単一チャートを独立セクション化することで、ノード選択状態に依存しない複数ポイント比較が可能になった。
+- チャートJSを系列配列入力へ拡張し、凡例表示を追加して運用時の比較読解性を改善した。
+
+---
+
 ## Task: AdminGateway APIリクエスト監視/ログ検索の実装（2026-03-05）
 
 ### Purpose

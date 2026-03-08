@@ -1,6 +1,5 @@
 @using Microsoft.JSInterop
 @using AdminGateway.Models
-@using System.Globalization
 @inject IJSRuntime JSRuntime
 
 <MudPaper Class="pa-4">
@@ -18,7 +17,7 @@
     public string Title { get; set; } = "Telemetry Trend";
 
     [Parameter]
-    public IReadOnlyList<PointTrendSample> Samples { get; set; } = Array.Empty<PointTrendSample>();
+    public IReadOnlyList<PointTrendSeries> Series { get; set; } = Array.Empty<PointTrendSeries>();
 
     private readonly string _chartId = $"chart-{Guid.NewGuid():N}";
     private bool _loading;
@@ -27,7 +26,7 @@
 
     protected override void OnParametersSet()
     {
-        _loading = Samples.Count == 0;
+        _loading = Series.Count == 0;
         if (_initialized)
         {
             _ = UpdateChartAsync();
@@ -62,14 +61,15 @@
             return;
         }
 
-        if (Samples.Count == 0)
-        {
-            await JSRuntime.InvokeVoidAsync("updateChart", _chartId, Array.Empty<string>(), Array.Empty<string>());
-            return;
-        }
-
-        var timestamps = Samples.Select(s => s.Timestamp.ToString("o")).ToArray();
-        var values = Samples.Select(s => s.Value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
-        await JSRuntime.InvokeVoidAsync("updateChart", _chartId, timestamps, values);
+        await JSRuntime.InvokeVoidAsync(
+            "updateChart",
+            _chartId,
+            Series.Select(item => new
+            {
+                pointId = item.PointId,
+                label = item.Label,
+                timestamps = item.Samples.Select(sample => sample.Timestamp.ToString("o")).ToArray(),
+                values = item.Samples.Select(sample => sample.Value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray()
+            }).ToArray());
     }
 }
