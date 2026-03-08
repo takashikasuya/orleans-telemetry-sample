@@ -579,7 +579,7 @@ else
                 {
                     @foreach (var point in _selectedPoints)
                     {
-                        <span class="tag">@point.Label <button class="point-remove" @onclick="() => RemoveSelectedPoint(point.PointId)">×</button></span>
+                        <span class="tag">@point.Label <button type="button" class="point-remove" @onclick="() => RemoveSelectedPoint(point.PointId)" aria-label="@($"Remove {point.Label}")" title="@($"Remove {point.Label}")">×</button></span>
                     }
                 }
             </div>
