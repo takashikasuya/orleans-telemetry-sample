@@ -184,18 +184,18 @@ function onPointerMove(chart, event) {
     const pointerY = event.clientY - rect.top;
 
     let nearest = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
+    let bestDistanceSquared = Number.POSITIVE_INFINITY;
     chart.layout.points.forEach((point, index) => {
         const dx = point.x - pointerX;
         const dy = point.y - pointerY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < bestDistance) {
-            bestDistance = distance;
+        const distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared < bestDistanceSquared) {
+            bestDistanceSquared = distanceSquared;
             nearest = { point, index };
         }
     });
 
-    if (!nearest || bestDistance > 24) {
+    if (!nearest || bestDistanceSquared > 24 * 24) {
         clearHover(chart);
         return;
     }
