@@ -1,12 +1,10 @@
 ﻿@page "/"
 @inject AdminMetricsService Metrics
-@inject IJSRuntime JS
 @inject IConfiguration Configuration
 @using System.Collections.Generic
 @using System.IO
 @using System.Text.Json
 @using Microsoft.AspNetCore.Components.Forms
-@using Microsoft.JSInterop
 @implements IAsyncDisposable
 
 <section class="admin-header">
@@ -522,69 +520,14 @@ else
                                     </table>
                                 }
 
-                                <MudText Typo="Typo.subtitle2" Class="mt-4">Telemetry Trend</MudText>
-                                <div class="point-trend-controls mt-2">
-                                    <label>
-                                        Query Range
-                                        <select class="graph-input"
-                                                value="@_selectedTrendRangeKey"
-                                                @onchange="OnTrendRangeChanged"
-                                                disabled="@_pointTrendLoading">
-                                            @foreach (var option in TrendRangeOptions)
-                                            {
-                                                <option value="@option.Key">@option.Label</option>
-                                            }
-                                        </select>
-                                    </label>
-                                    <label style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <input type="checkbox" @onchange="OnRealTimeCheckboxChanged" checked="@_enableRealTimeUpdate" disabled="@_pointTrendLoading" />
-                                        Real-time update
-                                        @if (_enableRealTimeUpdate && _isSubscribedToUpdates)
-                                        {
-                                            <span class="badge badge-success" style="display: flex; align-items: center; gap: 0.25rem;">
-                                                <span class="pulse-dot"></span> Live
-                                            </span>
-                                        }
-                                    </label>
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_pointTrendLoading" OnClick="LoadPointTrendAsync">
-                                        @if (_pointTrendLoading)
-                                        {
-                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                        }
-                                        else
-                                        {
-                                            <MudText>Load Telemetry</MudText>
-                                        }
+                                <div class="graph-import-actions mt-2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddSelectedPointAsync">
+                                        Add point to telemetry chart
                                     </MudButton>
-                                    @if (_pointTrendRequested && !_pointTrendLoading && string.IsNullOrWhiteSpace(_pointTrendError))
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@_pointTrendStatusText</MudText>
-                                    }
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Disabled="@(!_selectedPoints.Any())" OnClick="ClearSelectedPoints">
+                                        Clear selected points
+                                    </MudButton>
                                 </div>
-
-                                @if (_pointTrendLoading)
-                                {
-                                    <MudProgressLinear Indeterminate="true" Class="mt-2" />
-                                }
-                                else if (!string.IsNullOrWhiteSpace(_pointTrendError))
-                                {
-                                    <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_pointTrendError</MudText>
-                                }
-                                else if (_pointTrendRequested && _pointTrendSamples.Any(sample => sample.Value.HasValue))
-                                {
-                                    <TelemetryTrendChart Samples="_pointTrendSamples"
-                                                         Title="Latest telemetry trend" />
-                                }
-                                else if (_pointTrendRequested && _enableRealTimeUpdate && _isSubscribedToUpdates)
-                                {
-                                    // Real-time update is active but no data yet - show chart in empty state
-                                    <TelemetryTrendChart Samples="_pointTrendSamples"
-                                                         Title="Latest telemetry trend (waiting for real-time data...)" />
-                                }
-                                else if (_pointTrendRequested)
-                                {
-                                    <MudText Typo="Typo.body2" Class="muted mt-2">No telemetry samples available.</MudText>
-                                }
                             }
                         }
                         else
@@ -593,6 +536,69 @@ else
                         }
                     </MudPaper>
                 </div>
+            }
+        </section>
+
+        <section>
+            <h2>Telemetry Trend</h2>
+            <div class="point-trend-controls mt-2">
+                <label>
+                    Query Range
+                    <select class="graph-input"
+                            value="@_selectedTrendRangeKey"
+                            @onchange="OnTrendRangeChanged"
+                            disabled="@_pointTrendLoading">
+                        @foreach (var option in TrendRangeOptions)
+                        {
+                            <option value="@option.Key">@option.Label</option>
+                        }
+                    </select>
+                </label>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_pointTrendLoading || !_selectedPoints.Any())" OnClick="LoadPointTrendAsync">
+                    @if (_pointTrendLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudText>Load Telemetry</MudText>
+                    }
+                </MudButton>
+                @if (_pointTrendRequested && !_pointTrendLoading && string.IsNullOrWhiteSpace(_pointTrendError))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_pointTrendStatusText</MudText>
+                }
+            </div>
+
+            <div class="selected-point-list mt-2">
+                @if (_selectedPoints.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="muted">Add point nodes from the detail pane to display telemetry.</MudText>
+                }
+                else
+                {
+                    @foreach (var point in _selectedPoints)
+                    {
+                        <span class="tag">@point.Label <button type="button" class="point-remove" @onclick="() => RemoveSelectedPoint(point.PointId)" aria-label="@($"Remove {point.Label}")" title="@($"Remove {point.Label}")">×</button></span>
+                    }
+                }
+            </div>
+
+            @if (_pointTrendLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="mt-2" />
+            }
+            else if (!string.IsNullOrWhiteSpace(_pointTrendError))
+            {
+                <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_pointTrendError</MudText>
+            }
+            else if (_pointTrendRequested && _pointTrendSeries.Any(series => series.Samples.Any(sample => sample.Value.HasValue)))
+            {
+                <TelemetryTrendChart Series="_pointTrendSeries" Title="Selected point telemetry trends" />
+            }
+            else if (_pointTrendRequested)
+            {
+                <MudText Typo="Typo.body2" Class="muted mt-2">No telemetry samples available.</MudText>
             }
         </section>
 
@@ -710,18 +716,14 @@ else
     private string? _graphUploadMessage;
     private string? _graphUploadError;
     private HashSet<string> _expandedGraphNodes = new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<PointTrendSeries> _pointTrendSeries = Array.Empty<PointTrendSeries>();
     private IReadOnlyList<PointTrendSample> _pointTrendSamples = Array.Empty<PointTrendSample>();
+    private List<SelectedPointContext> _selectedPoints = new();
     private bool _pointTrendRequested;
     private bool _pointTrendLoading;
     private string? _pointTrendError;
     private string? _pointTrendStatusText;
     private string _selectedTrendRangeKey = "15m";
-    private bool _enableRealTimeUpdate;
-    private bool _isSubscribedToUpdates;
-    private DotNetObjectReference<Admin>? _dotNetRef;
-    private string? _currentSubscriptionTenant;
-    private string? _currentSubscriptionDevice;
-    private string? _currentSubscriptionPoint;
     private const long DefaultGraphUploadLimitBytes = 10 * 1024 * 1024;
     private static readonly IReadOnlyList<TrendRangeOption> TrendRangeOptions = new[]
     {
@@ -734,7 +736,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _dotNetRef = DotNetObjectReference.Create(this);
         StartApiLogTimer();
         await RefreshAsync();
     }
@@ -769,19 +770,12 @@ else
 
     private async Task LoadSpatialHierarchyAsync()
     {
-        // Stop real-time updates when loading new hierarchy
-        if (_enableRealTimeUpdate)
-        {
-            await StopRealTimeUpdatesAsync();
-            _enableRealTimeUpdate = false;
-        }
-
         if (string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             _graphTreeNodes.Clear();
             _selectedGraphNodeDetails = null;
             _expandedGraphNodes.Clear();
-            ResetPointTrend();
+            ClearSelectedPoints();
             return;
         }
 
@@ -893,16 +887,9 @@ else
             return;
         }
 
-        // Stop real-time updates when tenant changes
-        if (_enableRealTimeUpdate)
-        {
-            await StopRealTimeUpdatesAsync();
-            _enableRealTimeUpdate = false;
-        }
-
         _selectedGraphTenant = tenant;
         _selectedGraphNodeDetails = null;
-        ResetPointTrend();
+        ClearSelectedPoints();
         await LoadSpatialHierarchyAsync();
         StateHasChanged();
     }
@@ -978,44 +965,22 @@ else
 
     private async Task SelectGraphNodeAsync(string nodeId)
     {
-        var shouldRestoreRealtime = _enableRealTimeUpdate;
-
-        if (shouldRestoreRealtime)
-        {
-            await StopRealTimeUpdatesAsync();
-        }
-
         if (string.IsNullOrWhiteSpace(nodeId) || string.IsNullOrWhiteSpace(_selectedGraphTenant))
         {
             _selectedGraphNodeDetails = null;
-            ResetPointTrend();
             return;
         }
 
         _selectedGraphNodeDetails = await Metrics.GetGraphNodeDetailsAsync(_selectedGraphTenant, nodeId);
-        ResetPointTrend();
-
-        if (shouldRestoreRealtime)
-        {
-            if (_selectedGraphNodeDetails?.Snapshot.Node.NodeType == GraphNodeType.Point)
-            {
-                _enableRealTimeUpdate = true;
-                await StartRealTimeUpdatesAsync();
-            }
-            else
-            {
-                _enableRealTimeUpdate = false;
-                _pointTrendError = "Select a point node before enabling real-time updates.";
-            }
-        }
-
         StateHasChanged();
     }
 
     private async Task LoadPointTrendAsync()
     {
-        if (_selectedGraphNodeDetails?.PointGrainKey is null || string.IsNullOrWhiteSpace(_selectedGraphTenant))
+        if (_selectedPoints.Count == 0)
         {
+            _pointTrendError = "Select at least one point from node details.";
+            _pointTrendRequested = false;
             return;
         }
 
@@ -1023,37 +988,36 @@ else
         _pointTrendLoading = true;
         _pointTrendError = null;
         _pointTrendStatusText = null;
+        _pointTrendSeries = Array.Empty<PointTrendSeries>();
         _pointTrendSamples = Array.Empty<PointTrendSample>();
 
         try
         {
-            if (!TryResolvePointQueryContext(
-                _selectedGraphNodeDetails,
-                _selectedGraphTenant!,
-                out var tenantId,
-                out var deviceId,
-                out var pointId))
+            var range = GetSelectedTrendRange();
+            var seriesList = new List<PointTrendSeries>();
+
+            foreach (var point in _selectedPoints)
             {
-                _pointTrendError = "Point trend context is missing required IDs.";
-                return;
+                var samples = await Metrics.QueryPointTrendHybridAsync(
+                    point.TenantId,
+                    point.DeviceId,
+                    point.PointId,
+                    range.Duration,
+                    range.MaxSamples);
+
+                seriesList.Add(new PointTrendSeries(point.PointId, point.Label, samples));
             }
 
-            var range = GetSelectedTrendRange();
-            _pointTrendSamples = await Metrics.QueryPointTrendHybridAsync(
-                tenantId,
-                deviceId,
-                pointId,
-                range.Duration,
-                range.MaxSamples);
+            _pointTrendSeries = seriesList;
+            _pointTrendSamples = _pointTrendSeries.SelectMany(series => series.Samples).OrderBy(sample => sample.Timestamp).ToList();
+            var totalSamples = _pointTrendSeries.Sum(series => series.Samples.Count);
+            _pointTrendStatusText = $"Loaded {totalSamples} samples across {_pointTrendSeries.Count} points ({range.Label}).";
 
-            if (_pointTrendSamples.Count == 0)
+            if (totalSamples == 0)
             {
                 _pointTrendStatusText = $"No samples for {range.Label}.";
-                return;
             }
-
-            _pointTrendStatusText = $"Loaded {_pointTrendSamples.Count} samples ({range.Label}).";
-            if (_pointTrendSamples.All(sample => !sample.Value.HasValue))
+            else if (_pointTrendSeries.All(series => series.Samples.All(sample => !sample.Value.HasValue)))
             {
                 _pointTrendError = "Telemetry values are non-numeric and cannot be charted.";
             }
@@ -1124,8 +1088,65 @@ else
         }
     }
 
+
+    private async Task AddSelectedPointAsync()
+    {
+        if (_selectedGraphNodeDetails is null ||
+            _selectedGraphNodeDetails.Snapshot.Node.NodeType != GraphNodeType.Point ||
+            string.IsNullOrWhiteSpace(_selectedGraphTenant))
+        {
+            _pointTrendError = "Select a point node before adding it to telemetry chart.";
+            return;
+        }
+
+        if (!TryResolvePointQueryContext(
+            _selectedGraphNodeDetails,
+            _selectedGraphTenant,
+            out var tenantId,
+            out var deviceId,
+            out var pointId))
+        {
+            _pointTrendError = "Point trend context is missing required IDs.";
+            return;
+        }
+
+        if (_selectedPoints.Any(item => item.PointId.Equals(pointId, StringComparison.OrdinalIgnoreCase)))
+        {
+            _pointTrendError = $"Point '{pointId}' is already added.";
+            return;
+        }
+
+        _selectedPoints.Add(new SelectedPointContext(
+            tenantId,
+            deviceId,
+            pointId,
+            GetNodeLabel(_selectedGraphNodeDetails.Snapshot)));
+        _pointTrendError = null;
+
+        await LoadPointTrendAsync();
+    }
+
+    private void RemoveSelectedPoint(string pointId)
+    {
+        _selectedPoints.RemoveAll(item => item.PointId.Equals(pointId, StringComparison.OrdinalIgnoreCase));
+        if (_selectedPoints.Count == 0)
+        {
+            ResetPointTrend();
+            return;
+        }
+
+        _ = LoadPointTrendAsync();
+    }
+
+    private void ClearSelectedPoints()
+    {
+        _selectedPoints.Clear();
+        ResetPointTrend();
+    }
+
     private void ResetPointTrend()
     {
+        _pointTrendSeries = Array.Empty<PointTrendSeries>();
         _pointTrendSamples = Array.Empty<PointTrendSample>();
         _pointTrendRequested = false;
         _pointTrendLoading = false;
@@ -1194,6 +1215,8 @@ else
     }
 
     private sealed record TrendRangeOption(string Key, string Label, TimeSpan Duration, int MaxSamples);
+
+    private sealed record SelectedPointContext(string TenantId, string DeviceId, string PointId, string Label);
 
     private static string GetNodeLabel(GraphNodeSnapshot snapshot)
     {
@@ -1371,153 +1394,6 @@ else
         }
     }
 
-    private async Task OnRealTimeToggleChanged()
-    {
-        if (_enableRealTimeUpdate)
-        {
-            await StartRealTimeUpdatesAsync();
-        }
-        else
-        {
-            await StopRealTimeUpdatesAsync();
-        }
-    }
-
-    private async Task OnRealTimeCheckboxChanged(ChangeEventArgs args)
-    {
-        if (args.Value is bool isChecked)
-        {
-            _enableRealTimeUpdate = isChecked;
-            StateHasChanged();
-            
-            if (isChecked)
-            {
-                await StartRealTimeUpdatesAsync();
-            }
-            else
-            {
-                await StopRealTimeUpdatesAsync();
-            }
-        }
-    }
-
-    private async Task StartRealTimeUpdatesAsync()
-    {
-        if (_selectedGraphNodeDetails is null)
-        {
-            _pointTrendError = "Select a point node before enabling real-time updates.";
-            _enableRealTimeUpdate = false;
-            StateHasChanged();
-            return;
-        }
-
-        if (!TryResolvePointQueryContext(
-            _selectedGraphNodeDetails,
-            _selectedGraphTenant ?? string.Empty,
-            out var tenantId,
-            out var deviceId,
-            out var pointId))
-        {
-            _pointTrendError = "Could not resolve Point context (tenant/device/point IDs missing).";
-            _enableRealTimeUpdate = false;
-            StateHasChanged();
-            return;
-        }
-
-        try
-        {
-            await JS.InvokeVoidAsync("subscribeToPointUpdates", tenantId, deviceId, pointId, _dotNetRef);
-            _isSubscribedToUpdates = true;
-            _currentSubscriptionTenant = tenantId;
-            _currentSubscriptionDevice = deviceId;
-            _currentSubscriptionPoint = pointId;
-            _pointTrendError = null;
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            _pointTrendError = $"Failed to start real-time updates: {ex.Message}";
-            _enableRealTimeUpdate = false;
-            _isSubscribedToUpdates = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task StopRealTimeUpdatesAsync()
-    {
-        try
-        {
-            await JS.InvokeVoidAsync("unsubscribeFromPointUpdates");
-            _isSubscribedToUpdates = false;
-            _currentSubscriptionTenant = null;
-            _currentSubscriptionDevice = null;
-            _currentSubscriptionPoint = null;
-            StateHasChanged();
-        }
-        catch
-        {
-            // Ignore errors during unsubscribe
-        }
-    }
-
-    [JSInvokable]
-    public async Task OnPointUpdate(PointUpdateDto update)
-    {
-        var newSample = new PointTrendSample(update.Timestamp, ExtractNumericValue(update.Value), update.Value?.ToString() ?? "null");
-        
-        var samples = _pointTrendSamples.ToList();
-        samples.Add(newSample);
-        
-        // Keep only last 500 samples
-        if (samples.Count > 500)
-        {
-            samples = samples.TakeLast(500).ToList();
-        }
-        
-        _pointTrendSamples = samples;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private static double? ExtractNumericValue(object? value)
-    {
-        if (value is null) return null;
-        if (value is JsonElement elem)
-        {
-            return elem.ValueKind switch
-            {
-                JsonValueKind.Number when elem.TryGetDouble(out var n) => n,
-                JsonValueKind.String when double.TryParse(
-                    elem.GetString(),
-                    System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var s) => s,
-                JsonValueKind.True => 1.0,
-                JsonValueKind.False => 0.0,
-                _ => null
-            };
-        }
-        if (value is bool b) return b ? 1.0 : 0.0;
-        if (value is double d) return d;
-        if (value is float f) return f;
-        if (value is int i) return i;
-        if (value is long l) return l;
-        if (value is decimal dec) return (double)dec;
-        
-        if (value is IConvertible convertible)
-        {
-            try { return Convert.ToDouble(convertible); }
-            catch { return null; }
-        }
-        
-        // Last resort: try parsing as string
-        if (value is string str && double.TryParse(str, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
-        {
-            return parsed;
-        }
-        
-        return null;
-    }
-
 
     private async Task LoadApiRequestLogsAsync()
     {
@@ -1589,16 +1465,72 @@ else
         });
     }
 
-    public async ValueTask DisposeAsync()
+
+    public Task OnPointUpdate(PointUpdateDto update)
     {
-        if (_enableRealTimeUpdate)
+        var sample = new PointTrendSample(update.Timestamp, ExtractNumericValue(update.Value), update.Value?.ToString());
+
+        var flatSamples = _pointTrendSamples.ToList();
+        flatSamples.Add(sample);
+        if (flatSamples.Count > 500)
         {
-            await StopRealTimeUpdatesAsync();
+            flatSamples = flatSamples.TakeLast(500).ToList();
         }
+
+        _pointTrendSamples = flatSamples;
+
+        var series = _pointTrendSeries.ToList();
+        var target = series.FirstOrDefault(item => item.PointId.Equals(update.PointId, StringComparison.OrdinalIgnoreCase));
+        if (target is not null)
+        {
+            var samples = target.Samples.ToList();
+            samples.Add(sample);
+            if (samples.Count > 500)
+            {
+                samples = samples.TakeLast(500).ToList();
+            }
+
+            var index = series.IndexOf(target);
+            series[index] = target with { Samples = samples };
+            _pointTrendSeries = series;
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private static double? ExtractNumericValue(object? value)
+    {
+        if (value is null) return null;
+        if (value is JsonElement elem)
+        {
+            return elem.ValueKind switch
+            {
+                JsonValueKind.Number when elem.TryGetDouble(out var n) => n,
+                JsonValueKind.String when double.TryParse(elem.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var s) => s,
+                JsonValueKind.True => 1.0,
+                JsonValueKind.False => 0.0,
+                _ => null
+            };
+        }
+
+        if (value is bool b) return b ? 1.0 : 0.0;
+        if (value is IConvertible convertible)
+        {
+            try { return Convert.ToDouble(convertible); }
+            catch { return null; }
+        }
+
+        return value is string str && double.TryParse(str, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    public ValueTask DisposeAsync()
+    {
         _apiLogTimerCts?.Cancel();
         _apiLogTimer?.Dispose();
         _apiLogTimerCts?.Dispose();
-        _dotNetRef?.Dispose();
+        return ValueTask.CompletedTask;
     }
 
     public sealed class PointUpdateDto

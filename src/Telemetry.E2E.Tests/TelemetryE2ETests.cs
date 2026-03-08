@@ -314,7 +314,9 @@ public sealed class TelemetryE2ETests
                 Attributes = nodeSnapshot.Node.Attributes
             };
 
-            var stageRecord = await WaitForStageRecordAsync(stageRoot, timeout);
+            var expectedDeviceId = GetNodeAttribute(nodeSnapshot, "DeviceId");
+            var expectedPointId = GetNodeAttribute(nodeSnapshot, "PointId");
+            var stageRecord = await WaitForStageRecordAsync(stageRoot, timeout, expectedDeviceId, expectedPointId);
             report.SeedEvent = new TelemetryE2EEvent
             {
                 TenantId = stageRecord.TenantId,
@@ -747,7 +749,25 @@ public sealed class TelemetryE2ETests
         throw new TimeoutException("Graph node was not available within the timeout.");
     }
 
-    private static async Task<TelemetryStageRecord> WaitForStageRecordAsync(string stageRoot, TimeSpan timeout)
+    private static string? GetNodeAttribute(GraphNodeSnapshot snapshot, string key)
+    {
+        foreach (var pair in snapshot.Node.Attributes)
+        {
+            if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(pair.Value))
+            {
+                return pair.Value;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<TelemetryStageRecord> WaitForStageRecordAsync(
+        string stageRoot,
+        TimeSpan timeout,
+        string? expectedDeviceId,
+        string? expectedPointId)
     {
         var deadline = DateTimeOffset.UtcNow.Add(timeout);
 
@@ -755,17 +775,40 @@ public sealed class TelemetryE2ETests
         {
             if (Directory.Exists(stageRoot))
             {
-                var files = Directory.GetFiles(stageRoot, "*.jsonl", SearchOption.AllDirectories);
-                if (files.Length > 0)
+                var files = Directory
+                    .GetFiles(stageRoot, "*.jsonl", SearchOption.AllDirectories)
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .ToArray();
+
+                foreach (var file in files)
                 {
-                    var lines = await File.ReadAllLinesAsync(files[0]);
-                    if (lines.Length > 0)
+                    var lines = await File.ReadAllLinesAsync(file);
+                    foreach (var line in lines)
                     {
-                        var record = JsonSerializer.Deserialize<TelemetryStageRecord>(lines[0], JsonOptions);
-                        if (record is not null)
+                        if (string.IsNullOrWhiteSpace(line))
                         {
-                            return record;
+                            continue;
                         }
+
+                        var record = JsonSerializer.Deserialize<TelemetryStageRecord>(line, JsonOptions);
+                        if (record is null || record.EventType != TelemetryEventType.Telemetry)
+                        {
+                            continue;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(expectedDeviceId) &&
+                            !string.Equals(record.DeviceId, expectedDeviceId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(expectedPointId) &&
+                            !string.Equals(record.PointId, expectedPointId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        return record;
                     }
                 }
             }
@@ -773,7 +816,7 @@ public sealed class TelemetryE2ETests
             await Task.Delay(200);
         }
 
-        throw new TimeoutException("Stage file was not created within the timeout.");
+        throw new TimeoutException($"Telemetry stage record was not created within the timeout. expectedDeviceId={expectedDeviceId ?? "(any)"} expectedPointId={expectedPointId ?? "(any)"}");
     }
 
     private static async Task<PointSnapshotResult> WaitForPointSnapshotAsync(

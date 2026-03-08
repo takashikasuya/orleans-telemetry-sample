@@ -1,3 +1,87 @@
+## Task: Telemetry.E2E.Tests の不安定失敗修正（2026-03-08）
+
+### Purpose
+`TelemetryE2ETests.EndToEndReport_IsGenerated` が stage の先頭レコードに API request log (`EventType.Log`) を拾って失敗する不安定要因を除去し、再現性高くテストが通るようにする。
+
+### Success Criteria
+1. E2E テストの stage レコード取得が `Telemetry` イベントに限定される。
+2. RDFノード属性（DeviceId/PointId）に一致する stage レコードを優先して取得する。
+3. `dotnet test` が成功する。
+
+### Steps
+1. `WaitForStageRecordAsync` を改修し、eventType/deviceId/pointId の条件でフィルタする。
+2. `EndToEndReport_IsGenerated` でノード属性を引き渡す。
+3. `dotnet test` で検証する。
+
+### Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+
+### Observations
+- 既存実装は最初の jsonl 行をそのまま返すため、ApiGateway request log を拾うと DeviceGrain 状態と不整合になりうる。
+
+### Decisions
+- flaky回避のため、テストの意図に沿って telemetry event + 対象 node 属性一致のレコードのみ採用する。
+
+### Verification Plan
+- `dotnet test`
+
+### Verification Results
+- `dotnet test src/Telemetry.E2E.Tests/Telemetry.E2E.Tests.csproj --filter "FullyQualifiedName~EndToEndReport_IsGenerated" -v minimal` 成功。
+- `dotnet test -v minimal` 成功（AdminGateway.E2E browser smoke は既存どおり Skip）。
+- `dotnet build -v minimal` 成功（既存 warning 1件）。
+
+### Retrospective
+- stage先頭行を盲目的に使う設計が、Logイベント混在時の誤判定を招いていた。
+- EventType と Device/Point 条件で明示的に絞り込むことで、E2Eテストの意図に沿った安定化ができた。
+
+---
+
+## Task: Admin UIテレメトリー表示の常時・複数ポイント化（2026-03-08）
+
+### Purpose
+Admin UIのテレメトリー表示をポイント詳細表示から切り離し、常時表示の独立セクションとして複数ポイントを同時表示（凡例付き）できるようにする。
+
+### Success Criteria
+1. テレメトリーチャートがポイント詳細パネル外に常時表示される。
+2. ポイント詳細で選択した複数ポイントをチャート対象として追加できる。
+3. チャートに各ポイントの凡例（ラベル）が表示される。
+4. `dotnet build` と `dotnet test` が成功する。
+
+### Steps
+1. Admin.razorのUIを再構成し、テレメトリーセクションを独立配置する。
+2. 選択ポイント管理（追加/削除/クリア）と複数ポイントクエリ処理を実装する。
+3. チャートコンポーネントと描画JSをマルチシリーズ＋凡例対応に拡張する。
+4. build/testで検証する。
+
+### Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+### Observations
+- 既存実装は単一ポイント＋リアルタイム購読前提だったため、常時表示と複数系列化に合わせて表示状態管理を分離した。
+
+### Decisions
+- リアルタイム購読は今回の要件外として除外し、手動リロード中心の複数ポイント可視化を優先した。
+
+### Verification Plan
+- `dotnet build`
+- `dotnet test`
+
+### Verification Results
+- `dotnet build` 成功（既存 warning 2件: AdminGateway.E2E.Tests の未使用フィールド）。
+- `dotnet test` 成功（AdminGateway.E2E の browser smoke は既存どおり Skip）。
+- `dotnet run --project src/AdminGateway/AdminGateway.csproj --urls http://0.0.0.0:8082` は Orleans Silo 未起動のため接続失敗（画面キャプチャ取得不可）。
+
+### Retrospective
+- ポイント詳細内の単一チャートを独立セクション化することで、ノード選択状態に依存しない複数ポイント比較が可能になった。
+- チャートJSを系列配列入力へ拡張し、凡例表示を追加して運用時の比較読解性を改善した。
+
+---
+
 ## Task: AdminGateway APIリクエスト監視/ログ検索の実装（2026-03-05）
 
 ### Purpose

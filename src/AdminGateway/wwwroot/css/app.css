@@ -605,3 +605,19 @@ th {
     gap: var(--space-3, 0.75rem);
     flex-wrap: wrap;
 }
+
+.selected-point-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.point-remove {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-weight: 700;
+    margin-left: 0.35rem;
+}
