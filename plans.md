@@ -1,3 +1,53 @@
+## Task: AdminUIテレメトリ監視の上部移動・リアルタイム復旧・Ingest量可視化（2026-03-08）
+
+### Purpose
+AdminUIでテレメトリ監視を画面上部へ移動し、消えていたリアルタイム更新を復旧する。加えて、Ingest量（一定時間内の受信件数）をリアルタイム相当（定期更新）またはログ由来で確認できる表示を追加し、必要時に非表示化できるようにする。
+
+### Success Criteria
+1. テレメトリ監視セクションが画面上部（Overview直下）に表示される。
+2. 選択中ポイントに対してSignalRリアルタイム更新が再度反映される。
+3. Ingest量サマリ（例: 1分/5分の件数）が表示され、表示ON/OFFトグルで隠せる。
+4. `dotnet build` と `dotnet test` が成功する。
+
+### Steps
+1. `Admin.razor` のレイアウトを変更し、テレメトリ監視を上部へ移動する。
+2. SignalR用JSの読み込みとBlazor側購読処理を復活させる。
+3. API request logsを集計したIngest量表示と表示切替トグルを実装する。
+4. 関連ドキュメント（`docs/admin-console.md`）と `plans.md` を更新する。
+5. `dotnet build` / `dotnet test` で検証する。
+
+### Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+- [x] Step 5
+
+### Observations
+- `Telemetry Trend` セクションは中段にあり、リアルタイム購読スクリプト（`telemetry-realtime.js`）が `_Host.cshtml` から読み込まれていなかったため、`OnPointUpdate` が実行されない状態だった。
+- Ingest量の専用メトリクスは未公開のため、既存の API request logs を時間窓集計して可視化する方針が最小変更で実現可能だった。
+
+### Decisions
+- 監視UIはOverview直下へ移動し、既存のポイント選択フローは維持する。
+- リアルタイム表示は「選択ポイントの先頭1件」をSignalR購読対象とする（多重購読の複雑化を避けるため）。
+- Ingest量表示はログ由来の件数表示（1分/5分）とし、UIトグルで非表示化できるようにする。
+
+### Verification Plan
+- `dotnet build`
+- `dotnet test`
+
+### Verification Results
+- `dotnet build -v minimal` 成功（既存 warning 2件: `AdminGateway.E2E.Tests` の未使用フィールド）。
+- `dotnet test -v minimal` は失敗（`Telemetry.E2E.Tests.TelemetryE2ETests.RdfGrainInitialization_LoadsGraphStructureAndEquipmentPoints` が既存要因で失敗、`AdminGateway.E2E.Tests` の browser smoke 1件は既存どおり Skip）。
+- Playwright screenshot 取得は試行したが `http://127.0.0.1:8082` が `ERR_EMPTY_RESPONSE`（Orleans Silo未起動環境のため）で取得不可。
+
+### Retrospective
+- 監視パネルを上部化したことで、グラフ確認までの操作導線を短縮できた。
+- JS読み込み漏れがリアルタイム欠落の直接原因であり、購読復旧により既存 `OnPointUpdate` 処理を再活用できた。
+- Ingest量はログ集計でも運用上の概況把握に有効で、将来専用メトリクスへ置換しやすい構成にできた。
+
+---
+
 ## Task: Telemetry.E2E.Tests の不安定失敗修正（2026-03-08）
 
 ### Purpose
