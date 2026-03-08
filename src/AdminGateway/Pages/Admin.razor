@@ -4,7 +4,9 @@
 @using System.Collections.Generic
 @using System.IO
 @using System.Text.Json
+@using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Forms
+@inject IJSRuntime JSRuntime
 @implements IAsyncDisposable
 
 <section class="admin-header">
@@ -78,6 +80,94 @@ else
                 <p>Silos: @_silos.Length</p>
                 <p>Total clients: @(_silos.Sum(s => s.ClientCount))</p>
             </article>
+        </section>
+
+        <section>
+            <h2>Telemetry Monitoring</h2>
+            <div class="graph-import-actions">
+                <label>
+                    <input type="checkbox" @bind="_enableTelemetryRealtime" @bind:after="EnsureRealtimeSubscriptionAsync" /> Realtime updates
+                </label>
+                <label>
+                    <input type="checkbox" @bind="_showIngestVolumePanel" /> Show ingest volume
+                </label>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_telemetryRealtimeStatus))
+            {
+                <p class="status muted">@_telemetryRealtimeStatus</p>
+            }
+
+            @if (_showIngestVolumePanel)
+            {
+                <div class="graph-import-grid">
+                    <article>
+                        <h3>Ingest Volume (from logs)</h3>
+                        <p>Last 1 minute: <strong>@_ingestCountLast1Minute</strong> events</p>
+                        <p>Last 5 minutes: <strong>@_ingestCountLast5Minutes</strong> events</p>
+                        <p class="status muted">Updated: @_ingestVolumeUpdatedAtText</p>
+                    </article>
+                </div>
+            }
+
+            <div class="point-trend-controls mt-2">
+                <label>
+                    Query Range
+                    <select class="graph-input"
+                            value="@_selectedTrendRangeKey"
+                            @onchange="OnTrendRangeChanged"
+                            disabled="@_pointTrendLoading">
+                        @foreach (var option in TrendRangeOptions)
+                        {
+                            <option value="@option.Key">@option.Label</option>
+                        }
+                    </select>
+                </label>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_pointTrendLoading || !_selectedPoints.Any())" OnClick="LoadPointTrendAsync">
+                    @if (_pointTrendLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudText>Load Telemetry</MudText>
+                    }
+                </MudButton>
+                @if (_pointTrendRequested && !_pointTrendLoading && string.IsNullOrWhiteSpace(_pointTrendError))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_pointTrendStatusText</MudText>
+                }
+            </div>
+
+            <div class="selected-point-list mt-2">
+                @if (_selectedPoints.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="muted">Add point nodes from the detail pane to display telemetry.</MudText>
+                }
+                else
+                {
+                    @foreach (var point in _selectedPoints)
+                    {
+                        <span class="tag">@point.Label <button type="button" class="point-remove" @onclick="() => RemoveSelectedPoint(point.PointId)" aria-label="@($"Remove {point.Label}")" title="@($"Remove {point.Label}")">×</button></span>
+                    }
+                }
+            </div>
+
+            @if (_pointTrendLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="mt-2" />
+            }
+            else if (!string.IsNullOrWhiteSpace(_pointTrendError))
+            {
+                <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_pointTrendError</MudText>
+            }
+            else if (_pointTrendRequested && _pointTrendSeries.Any(series => series.Samples.Any(sample => sample.Value.HasValue)))
+            {
+                <TelemetryTrendChart Series="_pointTrendSeries" Title="Selected point telemetry trends" />
+            }
+            else if (_pointTrendRequested)
+            {
+                <MudText Typo="Typo.body2" Class="muted mt-2">No telemetry samples available.</MudText>
+            }
         </section>
 
 
@@ -540,69 +630,6 @@ else
         </section>
 
         <section>
-            <h2>Telemetry Trend</h2>
-            <div class="point-trend-controls mt-2">
-                <label>
-                    Query Range
-                    <select class="graph-input"
-                            value="@_selectedTrendRangeKey"
-                            @onchange="OnTrendRangeChanged"
-                            disabled="@_pointTrendLoading">
-                        @foreach (var option in TrendRangeOptions)
-                        {
-                            <option value="@option.Key">@option.Label</option>
-                        }
-                    </select>
-                </label>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_pointTrendLoading || !_selectedPoints.Any())" OnClick="LoadPointTrendAsync">
-                    @if (_pointTrendLoading)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                    }
-                    else
-                    {
-                        <MudText>Load Telemetry</MudText>
-                    }
-                </MudButton>
-                @if (_pointTrendRequested && !_pointTrendLoading && string.IsNullOrWhiteSpace(_pointTrendError))
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_pointTrendStatusText</MudText>
-                }
-            </div>
-
-            <div class="selected-point-list mt-2">
-                @if (_selectedPoints.Count == 0)
-                {
-                    <MudText Typo="Typo.body2" Class="muted">Add point nodes from the detail pane to display telemetry.</MudText>
-                }
-                else
-                {
-                    @foreach (var point in _selectedPoints)
-                    {
-                        <span class="tag">@point.Label <button type="button" class="point-remove" @onclick="() => RemoveSelectedPoint(point.PointId)" aria-label="@($"Remove {point.Label}")" title="@($"Remove {point.Label}")">×</button></span>
-                    }
-                }
-            </div>
-
-            @if (_pointTrendLoading)
-            {
-                <MudProgressLinear Indeterminate="true" Class="mt-2" />
-            }
-            else if (!string.IsNullOrWhiteSpace(_pointTrendError))
-            {
-                <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_pointTrendError</MudText>
-            }
-            else if (_pointTrendRequested && _pointTrendSeries.Any(series => series.Samples.Any(sample => sample.Value.HasValue)))
-            {
-                <TelemetryTrendChart Series="_pointTrendSeries" Title="Selected point telemetry trends" />
-            }
-            else if (_pointTrendRequested)
-            {
-                <MudText Typo="Typo.body2" Class="muted mt-2">No telemetry samples available.</MudText>
-            }
-        </section>
-
-        <section>
             <h2>Graph RDF Import</h2>
             <div class="graph-import-grid">
                 <div class="graph-import">
@@ -723,6 +750,13 @@ else
     private bool _pointTrendLoading;
     private string? _pointTrendError;
     private string? _pointTrendStatusText;
+    private DotNetObjectReference<Admin>? _dotNetRef;
+    private bool _enableTelemetryRealtime = true;
+    private bool _showIngestVolumePanel = true;
+    private string? _telemetryRealtimeStatus;
+    private int _ingestCountLast1Minute;
+    private int _ingestCountLast5Minutes;
+    private string _ingestVolumeUpdatedAtText = "-";
     private string _selectedTrendRangeKey = "15m";
     private const long DefaultGraphUploadLimitBytes = 10 * 1024 * 1024;
     private static readonly IReadOnlyList<TrendRangeOption> TrendRangeOptions = new[]
@@ -738,6 +772,18 @@ else
     {
         StartApiLogTimer();
         await RefreshAsync();
+        await RefreshIngestVolumeFromLogsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await EnsureRealtimeSubscriptionAsync();
     }
 
     private async Task RefreshAsync()
@@ -1124,6 +1170,7 @@ else
         _pointTrendError = null;
 
         await LoadPointTrendAsync();
+        await EnsureRealtimeSubscriptionAsync();
     }
 
     private void RemoveSelectedPoint(string pointId)
@@ -1135,13 +1182,18 @@ else
             return;
         }
 
-        _ = LoadPointTrendAsync();
+        _ = Task.Run(async () =>
+        {
+            await LoadPointTrendAsync();
+            await EnsureRealtimeSubscriptionAsync();
+        });
     }
 
     private void ClearSelectedPoints()
     {
         _selectedPoints.Clear();
         ResetPointTrend();
+        _ = EnsureRealtimeSubscriptionAsync();
     }
 
     private void ResetPointTrend()
@@ -1418,6 +1470,7 @@ else
 
             _apiRequestLogs = (await Metrics.GetApiRequestLogsAsync(query, CancellationToken.None)).ToList();
             _apiLogStatus = $"Loaded {_apiRequestLogs.Count} rows at {DateTimeOffset.UtcNow:u}";
+            UpdateIngestVolumeFromCurrentLogs();
         }
         catch (Exception ex)
         {
@@ -1465,7 +1518,58 @@ else
         });
     }
 
+    private async Task EnsureRealtimeSubscriptionAsync()
+    {
+        if (_dotNetRef is null)
+        {
+            return;
+        }
 
+        await JSRuntime.InvokeVoidAsync("unsubscribeFromPointUpdates");
+
+        if (!_enableTelemetryRealtime)
+        {
+            _telemetryRealtimeStatus = "Realtime updates are disabled.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var target = _selectedPoints.FirstOrDefault();
+        if (target is null)
+        {
+            _telemetryRealtimeStatus = "Add a point to start realtime monitoring.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("subscribeToPointUpdates", target.TenantId, target.DeviceId, target.PointId, _dotNetRef);
+            _telemetryRealtimeStatus = $"Realtime subscribed: {target.TenantId}/{target.DeviceId}/{target.PointId}";
+        }
+        catch (Exception ex)
+        {
+            _telemetryRealtimeStatus = $"Realtime subscription failed: {ex.Message}";
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Task RefreshIngestVolumeFromLogsAsync()
+    {
+        UpdateIngestVolumeFromCurrentLogs();
+        return Task.CompletedTask;
+    }
+
+    private void UpdateIngestVolumeFromCurrentLogs()
+    {
+        var now = DateTimeOffset.UtcNow;
+        _ingestCountLast1Minute = _apiRequestLogs.Count(log => log.OccurredAt >= now.AddMinutes(-1));
+        _ingestCountLast5Minutes = _apiRequestLogs.Count(log => log.OccurredAt >= now.AddMinutes(-5));
+        _ingestVolumeUpdatedAtText = now.ToString("u");
+    }
+
+    [JSInvokable]
     public Task OnPointUpdate(PointUpdateDto update)
     {
         var sample = new PointTrendSample(update.Timestamp, ExtractNumericValue(update.Value), update.Value?.ToString());
@@ -1525,12 +1629,21 @@ else
             : null;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         _apiLogTimerCts?.Cancel();
         _apiLogTimer?.Dispose();
         _apiLogTimerCts?.Dispose();
-        return ValueTask.CompletedTask;
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("unsubscribeFromPointUpdates");
+        }
+        catch
+        {
+            // ignore on dispose
+        }
+
+        _dotNetRef?.Dispose();
     }
 
     public sealed class PointUpdateDto
