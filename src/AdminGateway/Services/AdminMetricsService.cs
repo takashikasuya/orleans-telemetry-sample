@@ -235,6 +235,42 @@ internal sealed class AdminMetricsService
         return results;
     }
 
+    public async Task<ApiRequestLogVolumeSummary> GetApiRequestLogVolumeAsync(string? tenantId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var from = now.AddMinutes(-5);
+        var tenant = string.IsNullOrWhiteSpace(tenantId) ? "t1" : tenantId.Trim();
+
+        var configuredLimit = _configuration.GetValue<int?>("Admin:IngestVolumeQueryLimit") ?? 5000;
+        var queryLimit = Math.Clamp(configuredLimit, 100, 50000);
+
+        var deviceId = _configuration["ApiRequestLogging:DeviceId"];
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            deviceId = "api-gateway";
+        }
+
+        var pointId = _configuration["ApiRequestLogging:PointId"];
+        if (string.IsNullOrWhiteSpace(pointId))
+        {
+            pointId = "http-request";
+        }
+
+        var rows = await _storageQuery.QueryAsync(
+            new TelemetryQueryRequest(tenant, deviceId, from, now, pointId, queryLimit),
+            cancellationToken);
+
+        var logRows = rows
+            .Where(row => row.EventType == (int)TelemetryEventType.Log)
+            .ToList();
+
+        var last1Minute = logRows.Count(log => log.OccurredAt >= now.AddMinutes(-1));
+        var last5Minutes = logRows.Count(log => log.OccurredAt >= now.AddMinutes(-5));
+        var mayBeCapped = logRows.Count >= queryLimit;
+
+        return new ApiRequestLogVolumeSummary(last1Minute, last5Minutes, now, mayBeCapped, queryLimit);
+    }
+
     private static ApiRequestLogEntry MapApiRequestLogEntry(TelemetryQueryResult row)
     {
         string method = row.Tags?.GetValueOrDefault("method") ?? string.Empty;

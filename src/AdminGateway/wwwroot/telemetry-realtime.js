@@ -1,7 +1,47 @@
 // Telemetry real-time updates via SignalR
 let telemetryConnection = null;
 
-window.subscribeToPointUpdates = async (tenantId, deviceId, pointId, dotNetHelper) => {
+function normalizeSubscriptions(subscriptions) {
+    if (!Array.isArray(subscriptions)) {
+        return [];
+    }
+
+    // Build a plain JSON-safe payload for SignalR invocation.
+    return subscriptions
+        .map(item => {
+            const tenantId = item?.tenantId ?? item?.TenantId;
+            const deviceId = item?.deviceId ?? item?.DeviceId;
+            const pointId = item?.pointId ?? item?.PointId;
+
+            if (!tenantId || !deviceId || !pointId) {
+                return null;
+            }
+
+            return {
+                tenantId: String(tenantId),
+                deviceId: String(deviceId),
+                pointId: String(pointId)
+            };
+        })
+        .filter(item => item !== null);
+}
+
+function toPointKeys(subscriptions) {
+    return subscriptions.map(item => `${item.tenantId}|${item.deviceId}|${item.pointId}`);
+}
+
+window.subscribeToPointUpdates = async (subscriptions, dotNetHelper) => {
+    const normalizedSubscriptions = normalizeSubscriptions(subscriptions);
+    const pointKeys = toPointKeys(normalizedSubscriptions);
+
+    if (!pointKeys.length) {
+        throw new Error("No telemetry subscriptions were provided.");
+    }
+
+    if (!dotNetHelper || typeof dotNetHelper.invokeMethodAsync !== "function") {
+        throw new Error("Invalid .NET callback reference for realtime updates.");
+    }
+
     // Stop existing connection if any
     if (telemetryConnection) {
         try {
@@ -35,8 +75,8 @@ window.subscribeToPointUpdates = async (tenantId, deviceId, pointId, dotNetHelpe
 
         telemetryConnection.onreconnected((connectionId) => {
             console.info(`Telemetry connection reconnected: ${connectionId}`);
-            // Resubscribe after reconnection
-            telemetryConnection.invoke("SubscribeToPoint", tenantId, deviceId, pointId)
+            // Resubscribe all points after reconnection
+            telemetryConnection.invoke("SubscribeToPointKeys", pointKeys)
                 .catch(err => console.error('Failed to resubscribe after reconnection:', err));
         });
 
@@ -50,8 +90,8 @@ window.subscribeToPointUpdates = async (tenantId, deviceId, pointId, dotNetHelpe
         console.info('Telemetry SignalR connection established');
 
         // Subscribe to point updates
-        await telemetryConnection.invoke("SubscribeToPoint", tenantId, deviceId, pointId);
-        console.info(`Subscribed to telemetry updates: ${tenantId}/${deviceId}/${pointId}`);
+        await telemetryConnection.invoke("SubscribeToPointKeys", pointKeys);
+        console.info(`Subscribed to ${pointKeys.length} telemetry point(s)`);
 
     } catch (error) {
         console.error('Failed to subscribe to telemetry updates:', error);

@@ -89,7 +89,7 @@ else
                     <input type="checkbox" @bind="_enableTelemetryRealtime" @bind:after="EnsureRealtimeSubscriptionAsync" /> Realtime updates
                 </label>
                 <label>
-                    <input type="checkbox" @bind="_showIngestVolumePanel" /> Show ingest volume
+                    <input type="checkbox" @bind="_showIngestVolumePanel" @bind:after="OnIngestVolumePanelChangedAsync" /> Show ingest volume
                 </label>
             </div>
             @if (!string.IsNullOrWhiteSpace(_telemetryRealtimeStatus))
@@ -105,6 +105,10 @@ else
                         <p>Last 1 minute: <strong>@_ingestCountLast1Minute</strong> events</p>
                         <p>Last 5 minutes: <strong>@_ingestCountLast5Minutes</strong> events</p>
                         <p class="status muted">Updated: @_ingestVolumeUpdatedAtText</p>
+                        @if (!string.IsNullOrWhiteSpace(_ingestVolumeNote))
+                        {
+                            <p class="status muted">@_ingestVolumeNote</p>
+                        }
                     </article>
                 </div>
             }
@@ -160,7 +164,7 @@ else
             {
                 <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_pointTrendError</MudText>
             }
-            else if (_pointTrendRequested && _pointTrendSeries.Any(series => series.Samples.Any(sample => sample.Value.HasValue)))
+            else if (_pointTrendRequested && _pointTrendSeries.Any(series => series.Samples.Any()))
             {
                 <TelemetryTrendChart Series="_pointTrendSeries" Title="Selected point telemetry trends" />
             }
@@ -757,6 +761,7 @@ else
     private int _ingestCountLast1Minute;
     private int _ingestCountLast5Minutes;
     private string _ingestVolumeUpdatedAtText = "-";
+    private string? _ingestVolumeNote;
     private string _selectedTrendRangeKey = "15m";
     private const long DefaultGraphUploadLimitBytes = 10 * 1024 * 1024;
     private static readonly IReadOnlyList<TrendRangeOption> TrendRangeOptions = new[]
@@ -1470,7 +1475,10 @@ else
 
             _apiRequestLogs = (await Metrics.GetApiRequestLogsAsync(query, CancellationToken.None)).ToList();
             _apiLogStatus = $"Loaded {_apiRequestLogs.Count} rows at {DateTimeOffset.UtcNow:u}";
-            UpdateIngestVolumeFromCurrentLogs();
+            if (_showIngestVolumePanel)
+            {
+                await RefreshIngestVolumeFromLogsAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -1499,7 +1507,17 @@ else
                 while (_apiLogTimer is not null &&
                        await _apiLogTimer.WaitForNextTickAsync(_apiLogTimerCts.Token))
                 {
-                    if (!_enableApiLogRealtime || _loading || _apiLogLoading)
+                    if (_loading)
+                    {
+                        continue;
+                    }
+
+                    if (_showIngestVolumePanel)
+                    {
+                        await RefreshIngestVolumeFromLogsAsync();
+                    }
+
+                    if (!_enableApiLogRealtime || _apiLogLoading)
                     {
                         continue;
                     }
@@ -1534,18 +1552,22 @@ else
             return;
         }
 
-        var target = _selectedPoints.FirstOrDefault();
-        if (target is null)
+        if (_selectedPoints.Count == 0)
         {
             _telemetryRealtimeStatus = "Add a point to start realtime monitoring.";
             await InvokeAsync(StateHasChanged);
             return;
         }
 
+        var subscriptions = _selectedPoints
+            .Select(item => new RealtimeSubscriptionTarget(item.TenantId, item.DeviceId, item.PointId))
+            .Distinct()
+            .ToArray();
+
         try
         {
-            await JSRuntime.InvokeVoidAsync("subscribeToPointUpdates", target.TenantId, target.DeviceId, target.PointId, _dotNetRef);
-            _telemetryRealtimeStatus = $"Realtime subscribed: {target.TenantId}/{target.DeviceId}/{target.PointId}";
+            await JSRuntime.InvokeVoidAsync("subscribeToPointUpdates", subscriptions, _dotNetRef);
+            _telemetryRealtimeStatus = $"Realtime subscribed to {subscriptions.Length} point(s).";
         }
         catch (Exception ex)
         {
@@ -1555,23 +1577,40 @@ else
         await InvokeAsync(StateHasChanged);
     }
 
-    private Task RefreshIngestVolumeFromLogsAsync()
+    private async Task RefreshIngestVolumeFromLogsAsync()
     {
-        UpdateIngestVolumeFromCurrentLogs();
-        return Task.CompletedTask;
-    }
-
-    private void UpdateIngestVolumeFromCurrentLogs()
-    {
-        var now = DateTimeOffset.UtcNow;
-        _ingestCountLast1Minute = _apiRequestLogs.Count(log => log.OccurredAt >= now.AddMinutes(-1));
-        _ingestCountLast5Minutes = _apiRequestLogs.Count(log => log.OccurredAt >= now.AddMinutes(-5));
-        _ingestVolumeUpdatedAtText = now.ToString("u");
+        try
+        {
+            var summary = await Metrics.GetApiRequestLogVolumeAsync(_apiLogTenant, CancellationToken.None);
+            _ingestCountLast1Minute = summary.Last1MinuteCount;
+            _ingestCountLast5Minutes = summary.Last5MinutesCount;
+            _ingestVolumeUpdatedAtText = summary.CalculatedAt.ToString("u");
+            _ingestVolumeNote = summary.MayBeCapped
+                ? $"Volume may be truncated by query limit ({summary.QueryLimit})."
+                : null;
+        }
+        catch (Exception ex)
+        {
+            _ingestVolumeNote = $"Failed to refresh ingest volume: {ex.Message}";
+        }
     }
 
     [JSInvokable]
     public Task OnPointUpdate(PointUpdateDto update)
     {
+        if (_selectedPoints.Count > 0)
+        {
+            var watchedPoint = _selectedPoints.FirstOrDefault(item =>
+                item.PointId.Equals(update.PointId, StringComparison.OrdinalIgnoreCase) &&
+                item.DeviceId.Equals(update.DeviceId, StringComparison.OrdinalIgnoreCase) &&
+                item.TenantId.Equals(update.TenantId, StringComparison.OrdinalIgnoreCase));
+
+            if (watchedPoint is null)
+            {
+                return Task.CompletedTask;
+            }
+        }
+
         var sample = new PointTrendSample(update.Timestamp, ExtractNumericValue(update.Value), update.Value?.ToString());
 
         var flatSamples = _pointTrendSamples.ToList();
@@ -1601,6 +1640,17 @@ else
 
         return InvokeAsync(StateHasChanged);
     }
+
+    private async Task OnIngestVolumePanelChangedAsync()
+    {
+        if (_showIngestVolumePanel)
+        {
+            await RefreshIngestVolumeFromLogsAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private sealed record RealtimeSubscriptionTarget(string TenantId, string DeviceId, string PointId);
 
     private static double? ExtractNumericValue(object? value)
     {

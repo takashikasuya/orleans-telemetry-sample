@@ -1,3 +1,47 @@
+## Task: Admin UI複数ポイント監視の継続更新修正とIngest Volume精度改善（2026-03-14）
+
+### Purpose
+Admin UIで複数ポイントを監視した際に先頭ポイントのみ継続更新される不具合を修正し、Telemetry Monitoringを複数ポイントで継続監視可能にする。併せて Ingest Volume (from logs) がログ一覧フィルタや表示件数上限に影響されないよう、専用集計クエリへ切り替えて精度を改善する。
+
+### Success Criteria
+1. 複数ポイント選択時に SignalR のリアルタイム購読が全ポイントで継続される。
+2. `OnPointUpdate` が複数系列へ正しく反映される。
+3. Ingest Volume (1分/5分) がログ一覧のパス/ステータス/limit フィルタに依存せず更新される。
+4. `dotnet build` と `dotnet test`（AdminGateway.Tests）が成功する。
+
+### Steps
+1. TelemetryHub/JS/Blazor の購読処理を複数ポイント対応にする。
+2. AdminMetricsService に Ingest Volume 専用集計 API を追加する。
+3. Admin UI で Ingest Volume 表示を専用集計 API 連携へ変更する。
+4. 関連ドキュメントを更新し、build/test で検証する。
+
+### Progress
+- [x] Step 1
+- [x] Step 2
+- [x] Step 3
+- [x] Step 4
+
+### Observations
+- 既存実装は `EnsureRealtimeSubscriptionAsync` が `_selectedPoints.FirstOrDefault()` のみを購読対象にし、Hub 側も `SubscribeToPoint` 呼び出し時に接続単位で既存購読を全解除していたため、実質単一ポイント監視になっていた。
+- Ingest Volume は画面上の `_apiRequestLogs`（15分/最大100件かつUIフィルタ済み）から算出していたため、運用上の実量を過小表示し得た。
+
+### Decisions
+- Realtime は SignalR 1接続で複数ポイント購読を維持し、`SubscribeToPoints` で一括購読/再購読する。
+- Ingest Volume は `AdminMetricsService.GetApiRequestLogVolumeAsync` で直近5分ログを専用再取得し、1分/5分をサーバー側で算出する。
+- 件数上限ヒット時は UI に「集計が上限で切られている可能性」を注記表示する。
+
+### Verification Plan
+- `dotnet build src/AdminGateway/AdminGateway.csproj -v minimal`
+- `dotnet test src/AdminGateway.Tests/AdminGateway.Tests.csproj -v minimal`
+
+### Verification Results
+- `dotnet build src/AdminGateway/AdminGateway.csproj -v minimal` 成功（0 errors / 0 warnings）。
+- `dotnet test src/AdminGateway.Tests/AdminGateway.Tests.csproj -v minimal` 成功（9 passed）。
+
+### Retrospective
+- 複数ポイント監視の不整合は UI 側だけでなく Hub 側の「単一購読前提」設計が原因だった。
+- Ingest Volume を表示用ログテーブルから分離したことで、運用値に近い件数表示へ改善できた。
+
 ## Task: AdminUIテレメトリ監視の上部移動・リアルタイム復旧・Ingest量可視化（2026-03-08）
 
 ### Purpose

@@ -256,3 +256,18 @@ public sealed record ApiRequestLogQuery(
     DateTimeOffset? From,
     DateTimeOffset? To,
     int Limit = 100);
+
+/// <summary>
+/// Represents API request ingest volume summary derived from log events.
+/// </summary>
+/// <param name="Last1MinuteCount">Count of events in the last 1 minute.</param>
+/// <param name="Last5MinutesCount">Count of events in the last 5 minutes.</param>
+/// <param name="CalculatedAt">Calculation timestamp (UTC).</param>
+/// <param name="MayBeCapped">Whether the count may be truncated by query limit.</param>
+/// <param name="QueryLimit">Applied query row limit.</param>
+public sealed record ApiRequestLogVolumeSummary(
+    int Last1MinuteCount,
+    int Last5MinutesCount,
+    DateTimeOffset CalculatedAt,
+    bool MayBeCapped,
+    int QueryLimit);

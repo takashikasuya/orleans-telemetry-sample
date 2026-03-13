@@ -54,8 +54,12 @@ public sealed class TelemetryHub : Hub
 
             var subscriptionKey = $"{connectionId}:{tenantId}:{deviceId}:{pointId}";
 
-            // Keep one active point subscription per SignalR connection.
-            await UnsubscribeAllForConnectionAsync(connectionId);
+            if (Subscriptions.ContainsKey(subscriptionKey))
+            {
+                _logger.LogDebug("Client {ConnectionId} already subscribed to {TenantId}/{DeviceId}/{PointId}",
+                    Context.ConnectionId, tenantId, deviceId, pointId);
+                return;
+            }
 
             // Subscribe to stream
             var subscription = await stream.SubscribeAsync(async (snapshot, token) =>
@@ -83,6 +87,54 @@ public sealed class TelemetryHub : Hub
             _logger.LogError(ex, "Failed to subscribe to point {TenantId}/{DeviceId}/{PointId}",
                 tenantId, deviceId, pointId);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Subscribe to multiple points in one request.
+    /// Existing subscriptions are preserved; duplicate entries are ignored.
+    /// </summary>
+    /// <param name="subscriptions">Point subscription targets.</param>
+    public async Task SubscribeToPoints(IReadOnlyList<PointSubscriptionRequest>? subscriptions)
+    {
+        if (subscriptions is null || subscriptions.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var item in subscriptions)
+        {
+            await SubscribeToPoint(item.TenantId, item.DeviceId, item.PointId);
+        }
+    }
+
+    /// <summary>
+    /// Subscribe to multiple points using compact string keys.
+    /// Key format: "tenantId|deviceId|pointId".
+    /// </summary>
+    /// <param name="pointKeys">Point keys.</param>
+    public async Task SubscribeToPointKeys(IReadOnlyList<string>? pointKeys)
+    {
+        if (pointKeys is null || pointKeys.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var key in pointKeys)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            var parts = key.Split('|', 3, StringSplitOptions.TrimEntries);
+            if (parts.Length != 3)
+            {
+                _logger.LogWarning("Invalid point key for realtime subscription: {PointKey}", key);
+                continue;
+            }
+
+            await SubscribeToPoint(parts[0], parts[1], parts[2]);
         }
     }
 
@@ -160,4 +212,6 @@ public sealed class TelemetryHub : Hub
         
         return null;
     }
+
+    public sealed record PointSubscriptionRequest(string TenantId, string DeviceId, string PointId);
 }
