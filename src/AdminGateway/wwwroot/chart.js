@@ -295,7 +295,15 @@ function clearHover(chart) {
 
 function showTooltip(chart, point, clientX, clientY) {
     const formattedTime = formatDateTime(point.timestamp);
-    chart.tooltip.innerHTML = `<strong>${point.label}</strong><br/>${formattedTime}<br/>Value: ${point.value.toFixed(3)}`;
+    // Build tooltip content using DOM API to avoid XSS from point.label
+    chart.tooltip.textContent = '';
+    const labelEl = document.createElement('strong');
+    labelEl.textContent = point.label;
+    chart.tooltip.appendChild(labelEl);
+    chart.tooltip.appendChild(document.createElement('br'));
+    chart.tooltip.appendChild(document.createTextNode(formattedTime));
+    chart.tooltip.appendChild(document.createElement('br'));
+    chart.tooltip.appendChild(document.createTextNode('Value: ' + point.value.toFixed(3)));
     chart.tooltip.style.display = 'block';
 
     const containerRect = chart.container.getBoundingClientRect();
@@ -311,6 +319,8 @@ function hideTooltip(chart) {
     chart.tooltip.style.display = 'none';
 }
 
+// Formats a Date for the chart tooltip in local time (browser timezone).
+// Server-side timestamps in Admin.razor use FormatTimestamp() which displays UTC.
 function formatDateTime(value) {
     if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
         return '-';
