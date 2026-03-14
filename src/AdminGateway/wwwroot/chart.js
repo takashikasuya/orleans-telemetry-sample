@@ -97,7 +97,7 @@ function drawChart(chart) {
         return;
     }
 
-    const padding = { top: 16, right: 20, bottom: 40, left: 56 };
+    const padding = { top: 16, right: 20, bottom: 56, left: 56 };
     const legendHeight = Math.max(0, chart.series.length) * 18;
     const chartWidth = Math.max(1, width - padding.left - padding.right);
     const chartHeight = Math.max(1, height - padding.top - padding.bottom - legendHeight);
@@ -110,6 +110,7 @@ function drawChart(chart) {
     const toX = index => padding.left + (index / Math.max(maxLength - 1, 1)) * chartWidth;
     const toY = value => padding.top + (1 - (value - minValue) / valueRange) * chartHeight;
 
+    // Draw horizontal grid lines
     ctx.strokeStyle = '#d1d5db';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 5; i++) {
@@ -120,6 +121,7 @@ function drawChart(chart) {
         ctx.stroke();
     }
 
+    // Draw data lines
     chart.series.forEach((line, lineIndex) => {
         ctx.strokeStyle = line.color;
         ctx.lineWidth = 2;
@@ -141,6 +143,7 @@ function drawChart(chart) {
         ctx.stroke();
     });
 
+    // Draw data point circles
     chart.layout.points.forEach((point, idx) => {
         const isHover = chart.hover === idx;
         ctx.fillStyle = point.color;
@@ -149,6 +152,7 @@ function drawChart(chart) {
         ctx.fill();
     });
 
+    // Draw Y-axis labels
     ctx.fillStyle = '#4b5563';
     ctx.font = '11px "Segoe UI", sans-serif';
     ctx.textAlign = 'right';
@@ -159,7 +163,80 @@ function drawChart(chart) {
         ctx.fillText(value.toFixed(2), padding.left - 8, y);
     }
 
-    drawLegend(chart, padding.left, padding.top + chartHeight + 20);
+    // Draw X-axis time labels
+    drawTimeAxis(chart, ctx, padding, chartWidth, chartHeight, maxLength);
+
+    drawLegend(chart, padding.left, padding.top + chartHeight + 36);
+}
+
+function drawTimeAxis(chart, ctx, padding, chartWidth, chartHeight, maxLength) {
+    // Collect all unique timestamps across all series
+    const allTimestamps = [];
+    chart.series.forEach(line => {
+        line.timestamps.forEach((ts, idx) => {
+            if (ts instanceof Date && !Number.isNaN(ts.getTime())) {
+                allTimestamps.push({ idx, ts });
+            }
+        });
+    });
+
+    if (allTimestamps.length === 0) return;
+
+    // Determine a good number of labels to show (max 6)
+    const labelCount = Math.min(6, maxLength);
+    if (labelCount < 2) return;
+
+    // Find min/max timestamps for even distribution
+    const sortedTs = allTimestamps.map(a => a.ts.getTime()).sort((a, b) => a - b);
+    const minTs = sortedTs[0];
+    const maxTs = sortedTs[sortedTs.length - 1];
+    const tsRange = maxTs - minTs;
+
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '10px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    const baseY = padding.top + chartHeight + 4;
+
+    for (let i = 0; i < labelCount; i++) {
+        const ratio = i / (labelCount - 1);
+        const x = padding.left + ratio * chartWidth;
+        const targetTs = new Date(minTs + ratio * tsRange);
+        const label = formatTimeLabel(targetTs, tsRange);
+
+        // Draw tick mark
+        ctx.strokeStyle = '#d1d5db';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, padding.top + chartHeight);
+        ctx.lineTo(x, padding.top + chartHeight + 3);
+        ctx.stroke();
+
+        ctx.fillText(label, x, baseY);
+    }
+}
+
+function formatTimeLabel(date, rangeMs) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+
+    const pad = n => String(n).padStart(2, '0');
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    const seconds = pad(date.getSeconds());
+
+    // If range is less than 1 hour, show HH:mm:ss
+    if (rangeMs < 3600000) {
+        return `${hours}:${minutes}:${seconds}`;
+    }
+    // If range is less than 24 hours, show HH:mm
+    if (rangeMs < 86400000) {
+        return `${hours}:${minutes}`;
+    }
+    // Otherwise show MM/DD HH:mm
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    return `${month}/${day} ${hours}:${minutes}`;
 }
 
 function drawLegend(chart, x, y) {
@@ -218,7 +295,15 @@ function clearHover(chart) {
 
 function showTooltip(chart, point, clientX, clientY) {
     const formattedTime = formatDateTime(point.timestamp);
-    chart.tooltip.textContent = `${point.label}: ${formattedTime} | ${point.value.toFixed(3)}`;
+    // Build tooltip content using DOM API to avoid XSS from point.label
+    chart.tooltip.textContent = '';
+    const labelEl = document.createElement('strong');
+    labelEl.textContent = point.label;
+    chart.tooltip.appendChild(labelEl);
+    chart.tooltip.appendChild(document.createElement('br'));
+    chart.tooltip.appendChild(document.createTextNode(formattedTime));
+    chart.tooltip.appendChild(document.createElement('br'));
+    chart.tooltip.appendChild(document.createTextNode('Value: ' + point.value.toFixed(3)));
     chart.tooltip.style.display = 'block';
 
     const containerRect = chart.container.getBoundingClientRect();
@@ -234,13 +319,19 @@ function hideTooltip(chart) {
     chart.tooltip.style.display = 'none';
 }
 
+// Formats a Date for the chart tooltip in local time (browser timezone).
+// Server-side timestamps in Admin.razor use FormatTimestamp() which displays UTC.
 function formatDateTime(value) {
     if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
         return '-';
     }
 
-    return new Intl.DateTimeFormat(undefined, {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
-    }).format(value);
+    const pad = n => String(n).padStart(2, '0');
+    const y = value.getFullYear();
+    const m = pad(value.getMonth() + 1);
+    const d = pad(value.getDate());
+    const hh = pad(value.getHours());
+    const mm = pad(value.getMinutes());
+    const ss = pad(value.getSeconds());
+    return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
 }

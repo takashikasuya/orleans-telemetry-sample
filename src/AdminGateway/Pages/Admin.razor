@@ -84,6 +84,7 @@ else
 
         <section>
             <h2>Telemetry Monitoring</h2>
+            <p class="muted section-description">Select points from the Spatial Hierarchy below, then load or stream live telemetry data.</p>
             <div class="graph-import-actions">
                 <label>
                     <input type="checkbox" @bind="_enableTelemetryRealtime" @bind:after="EnsureRealtimeSubscriptionAsync" /> Realtime updates
@@ -238,7 +239,7 @@ else
                             @foreach (var log in _apiRequestLogs)
                             {
                                 <tr>
-                                    <td>@log.OccurredAt.UtcDateTime.ToString("u")</td>
+                                    <td>@FormatTimestamp(log.OccurredAt)</td>
                                     <td>@log.TenantId</td>
                                     <td>@log.Method</td>
                                     <td>@log.Path</td>
@@ -256,6 +257,7 @@ else
 
         <section>
             <h2>Control Routing</h2>
+            <p class="muted section-description">Connector-to-gateway mapping that determines how telemetry commands are routed.</p>
             @if (_controlRoutingLoading)
             {
                 <p class="status muted">Loading control routing config...</p>
@@ -317,6 +319,7 @@ else
 
         <section>
             <h2>Activation Explorer (@_grains.Length types)</h2>
+            <p class="muted section-description">Active Orleans grain types and how many instances are running across the cluster.</p>
             @if (_grains.Length == 0)
             {
                 <p class="status muted">No grain activations yet.</p>
@@ -352,6 +355,7 @@ else
                 <h2>Grain Placement (Detailed Stats)</h2>
                 <button class="refresh-button button-ghost" @onclick="LoadGrainHierarchyAsync">Refresh Placement</button>
             </div>
+            <p class="muted section-description">Hierarchical view of grain instances grouped by silo and grain type.</p>
             @if (_loadingGrainHierarchy)
             {
                 <p class="status">Loading grain placement...</p>
@@ -376,6 +380,7 @@ else
 
         <section>
             <h2>Client Connections</h2>
+            <p class="muted section-description">Silo health status including connected client count, CPU, and memory usage.</p>
             @if (_silos.Length == 0)
             {
                 <p class="status muted">No active silos detected.</p>
@@ -414,6 +419,7 @@ else
 
         <section>
             <h2>Storage Buckets</h2>
+            <p class="muted section-description">File storage usage broken down by tier (Stage, Parquet, Index) and tenant.</p>
             <div class="tier-grid">
                 @if (_storage is not null)
                 {
@@ -608,7 +614,7 @@ else
                                             </tr>
                                             <tr>
                                                 <th>Updated</th>
-                                                <td>@_selectedGraphNodeDetails.PointSnapshot.UpdatedAt:u</td>
+                                                <td>@FormatTimestamp(_selectedGraphNodeDetails.PointSnapshot.UpdatedAt)</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -616,10 +622,10 @@ else
 
                                 <div class="graph-import-actions mt-2">
                                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddSelectedPointAsync">
-                                        Add point to telemetry chart
+                                        📈 Add to telemetry chart
                                     </MudButton>
                                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Disabled="@(!_selectedPoints.Any())" OnClick="ClearSelectedPoints">
-                                        Clear selected points
+                                        Clear all points
                                     </MudButton>
                                 </div>
                             }
@@ -674,7 +680,7 @@ else
                         {
                             <p class="graph-status-line">Tenant Name: @_graphStatus.TenantName</p>
                         }
-                        <p class="graph-status-line">@_graphStatus.StartedAt:u / @_graphStatus.CompletedAt:u</p>
+                        <p class="graph-status-line">Started: @FormatTimestamp(_graphStatus.StartedAt) — Completed: @FormatTimestamp(_graphStatus.CompletedAt)</p>
                         <p class="graph-status-line">Nodes: @_graphStatus.NodeCount / Edges: @_graphStatus.EdgeCount</p>
                         @if (!string.IsNullOrWhiteSpace(_graphStatus.Message))
                         {
@@ -1101,9 +1107,9 @@ else
             GraphNodeType.Building => Icons.Material.Filled.HomeWork,
             GraphNodeType.Level => Icons.Material.Filled.Layers,
             GraphNodeType.Area => Icons.Material.Filled.Map,
-            GraphNodeType.Equipment => Icons.Material.Filled.Memory,
-            GraphNodeType.Device => Icons.Material.Filled.Memory,
-            GraphNodeType.Point => Icons.Material.Filled.ControlPoint,
+            GraphNodeType.Equipment => Icons.Material.Filled.PrecisionManufacturing,
+            GraphNodeType.Device => Icons.Material.Filled.Router,
+            GraphNodeType.Point => Icons.Material.Filled.Sensors,
             _ => Icons.Material.Filled.DeviceHub
         };
 
@@ -1305,6 +1311,19 @@ else
     private static string FormatPercent(double? value)
         => value.HasValue ? $"{value.Value:F1}%" : "-";
 
+    private static string FormatTimestamp(DateTimeOffset? value)
+    {
+        if (!value.HasValue)
+        {
+            return "-";
+        }
+
+        return FormatTimestamp(value.Value);
+    }
+
+    private static string FormatTimestamp(DateTimeOffset value)
+        => value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + " UTC";
+
     private static string FormatMemoryUsage(double? used, double? available)
     {
         if (!used.HasValue && !available.HasValue)
@@ -1474,7 +1493,7 @@ else
                 _apiLogLimit);
 
             _apiRequestLogs = (await Metrics.GetApiRequestLogsAsync(query, CancellationToken.None)).ToList();
-            _apiLogStatus = $"Loaded {_apiRequestLogs.Count} rows at {DateTimeOffset.UtcNow:u}";
+            _apiLogStatus = $"Loaded {_apiRequestLogs.Count} rows at {FormatTimestamp(DateTimeOffset.UtcNow)}";
             if (_showIngestVolumePanel)
             {
                 await RefreshIngestVolumeFromLogsAsync();
@@ -1584,7 +1603,7 @@ else
             var summary = await Metrics.GetApiRequestLogVolumeAsync(_apiLogTenant, CancellationToken.None);
             _ingestCountLast1Minute = summary.Last1MinuteCount;
             _ingestCountLast5Minutes = summary.Last5MinutesCount;
-            _ingestVolumeUpdatedAtText = summary.CalculatedAt.ToString("u");
+            _ingestVolumeUpdatedAtText = FormatTimestamp(summary.CalculatedAt);
             _ingestVolumeNote = summary.MayBeCapped
                 ? $"Volume may be truncated by query limit ({summary.QueryLimit})."
                 : null;
