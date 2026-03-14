@@ -4,9 +4,13 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orleans;
 
-namespace Telemetry.E2E.Tests;
+namespace Tests.Shared;
 
-internal sealed class TestGraphSeedService : BackgroundService
+/// <summary>
+/// Shared hosted service for E2E tests that seeds the graph store from an RDF file.
+/// Configure RDF_SEED_PATH and TENANT_ID environment variables before use.
+/// </summary>
+public sealed class TestGraphSeedService : BackgroundService
 {
     private readonly OrleansIntegrationService _integration;
     private readonly IGrainFactory _grainFactory;

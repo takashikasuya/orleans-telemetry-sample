@@ -39,6 +39,19 @@ graph LR
 - `src/Grains.Abstractions`: Grain インターフェースと契約モデル
 - `src/Publisher`: サンプルテレメトリー送信
 
+Solution folder structure (Visual Studio / Rider):
+
+```
+Services/     → SiloHost, ApiGateway, AdminGateway, TelemetryClient, Publisher
+Libraries/    → Grains.Abstractions, ApiGateway.Contracts, Telemetry.Ingest, Telemetry.Storage, DataModel.Analyzer
+Tools/        → ApiGateway.Client
+Tests/
+  Unit/       → SiloHost.Tests, ApiGateway.Tests, AdminGateway.Tests, Publisher.Tests,
+                Telemetry.Ingest.Tests, Telemetry.Storage.Tests, DataModel.Analyzer.Tests
+  E2E/        → Telemetry.E2E.Tests, AdminGateway.E2E.Tests, Tests.Shared
+  LoadTests/  → Telemetry.Ingest.LoadTest, Telemetry.Orleans.MemoryLoadTest
+```
+
 ## Documentation Map
 
 概要と導入:

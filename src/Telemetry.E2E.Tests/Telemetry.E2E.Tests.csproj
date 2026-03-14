@@ -25,6 +25,7 @@
     <ProjectReference Include="..\SiloHost\SiloHost.csproj" />
     <ProjectReference Include="..\Telemetry.Storage\Telemetry.Storage.csproj" />
     <ProjectReference Include="..\Grains.Abstractions\Grains.Abstractions.csproj" />
+    <ProjectReference Include="..\Tests.Shared\Tests.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

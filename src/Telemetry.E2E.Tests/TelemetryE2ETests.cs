@@ -18,6 +18,7 @@ using Telemetry.Ingest.Kafka;
 using Telemetry.Ingest.RabbitMq;
 using Telemetry.Ingest.Simulator;
 using Telemetry.Storage;
+using Tests.Shared;
 using Publisher;
 using SiloHost;
 using Xunit;

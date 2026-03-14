@@ -12,6 +12,7 @@ using Telemetry.Ingest.Kafka;
 using Telemetry.Ingest.RabbitMq;
 using Telemetry.Ingest.Simulator;
 using Telemetry.Storage;
+using Tests.Shared;
 using SiloHost;
 
 namespace AdminGateway.E2E.Tests;
