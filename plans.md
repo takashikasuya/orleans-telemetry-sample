@@ -1,3 +1,58 @@
+## Task: リポジトリ構成最適化（2026-03-14）
+
+### Purpose
+リポジトリの内容を精査し、フォルダ構成の最適化、不要ファイルの除去、重複コードの統合を実施する。今後の開発がより合理的に進むよう整備する。
+
+### Success Criteria
+1. 機密情報ファイル（`credential.txt`、`storage/` 生成データ）が git 追跡から除外される。
+2. `.gitignore` が `credential.txt` を明示的にカバーする。
+3. `TestGraphSeedService.cs` の重複が解消され、`Tests.Shared` プロジェクトに一元化される。
+4. ソリューションファイルがロジカルなソリューションフォルダで整理される。
+5. `SiloHost.Tests` がソリューションに追加される（漏れていた）。
+6. `dotnet build` および `dotnet test` が成功する。
+
+### Steps
+1. `.gitignore` に `credential.txt` を追加（既存の `credentials.*` パターンはシングル形式をカバーしていなかった）。
+2. `git rm --cached` で `credential.txt` と `storage/` の追跡済みファイルを削除。
+3. `Tests.Shared` プロジェクトを作成し、`TestGraphSeedService.cs` を一元管理。
+4. `AdminGateway.E2E.Tests` と `Telemetry.E2E.Tests` を `Tests.Shared` 参照に更新し、重複ファイルを削除。
+5. ソリューションファイルを Services / Libraries / Tools / Tests（Unit/E2E/LoadTests）に再編。
+6. `SiloHost.Tests` をソリューションに追加。
+7. build / test で検証。
+
+### Progress
+- [x] Step 1 (.gitignore fix)
+- [x] Step 2 (git untrack)
+- [x] Step 3 (Tests.Shared project)
+- [x] Step 4 (remove duplicate TestGraphSeedService)
+- [x] Step 5 (solution folder reorganization)
+- [x] Step 6 (SiloHost.Tests added to solution)
+- [x] Step 7 (build / test verification)
+
+### Observations
+- `credential.txt` は JWT トークンを含み、git に追跡されていた（セキュリティリスク）。`.gitignore` の `credentials.*` パターンは複数形のみマッチし、`credential.txt`（単数形）はカバーしていなかった。
+- `storage/` ディレクトリの生成ファイル（parquet/index）が git に追跡されていた。`.gitignore` に `storage/` は記載済みだったが追跡除外は未実施。
+- `TestGraphSeedService.cs` が `AdminGateway.E2E.Tests` と `Telemetry.E2E.Tests` に namespace 違いのみで完全重複していた。
+- `SiloHost.Tests` プロジェクト（ディレクトリ・csproj 存在）がソリューションファイルに未登録だった。
+- ソリューションは全22プロジェクトが `src` 1フォルダ下に並列配置されており、役割別の区分が困難だった。
+
+### Decisions
+- `credential.txt` は `.gitignore` に追加し `git rm --cached` で追跡解除（ファイル自体は削除しない）。
+- `Tests.Shared` を `internal` ではなく `public` で定義（異なるアセンブリから参照するため）。
+- ソリューションフォルダ構成：Services（SiloHost/ApiGateway/AdminGateway/TelemetryClient/Publisher）/ Libraries（Grains.Abstractions/ApiGateway.Contracts/Telemetry.Ingest/Telemetry.Storage/DataModel.Analyzer）/ Tools（ApiGateway.Client）/ Tests（Unit/E2E/LoadTests）。
+- `Tests.Shared` は E2E テストで共有されるため Tests/E2E フォルダ下に配置。
+
+### Verification Results
+- `dotnet build -v minimal` 成功（既存 warning 2件のみ）。
+- `dotnet test` 成功（Publisher.Tests: 10 passed / AdminGateway.Tests: 9 passed / ApiGateway.Tests: 53 passed / AdminGateway.E2E.Tests: 1 passed, 1 skipped / Telemetry.E2E.Tests: 5 passed）。
+
+### Retrospective
+- `credential.txt` の git 追跡は重大なセキュリティリスクであり、早期に対処すべき問題だった。
+- 重複 `TestGraphSeedService` の統合により、将来のE2Eテスト開発において一箇所の変更で両テストプロジェクトに反映できる。
+- ソリューションフォルダの整理により、IDE（Visual Studio / Rider）でのプロジェクトナビゲーションが向上する。
+
+---
+
 ## Task: Admin UI複数ポイント監視の継続更新修正とIngest Volume精度改善（2026-03-14）
 
 ### Purpose
