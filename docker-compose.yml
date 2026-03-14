@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: src/SiloHost
+        PROJECT: src/Services/SiloHost
     depends_on:
       mq:
         condition: service_healthy
@@ -79,7 +79,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: src/ApiGateway
+        PROJECT: src/Services/ApiGateway
     depends_on:
       - silo
     environment:
@@ -101,7 +101,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: src/AdminGateway
+        PROJECT: src/Services/AdminGateway
     depends_on:
       - silo
     environment:
@@ -125,7 +125,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: src/TelemetryClient
+        PROJECT: src/Services/TelemetryClient
     depends_on:
       - api
     environment:
@@ -143,7 +143,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: src/Publisher
+        PROJECT: src/Services/Publisher
     depends_on:
       - mq
     environment:

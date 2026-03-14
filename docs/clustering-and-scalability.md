@@ -105,11 +105,11 @@ builder.UseOrleans((context, siloBuilder) =>
 
 ```bash
 # SiloHost
-cd src/SiloHost
+cd src/Services/SiloHost
 dotnet run
 
 # ApiGateway (別ターミナル)
-cd src/ApiGateway
+cd src/Services/ApiGateway
 dotnet run
 ```
 

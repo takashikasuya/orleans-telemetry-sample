@@ -1,7 +1,7 @@
 # E2Eテスト内容レビュー（必要十分性の分析）
 
 ## Purpose
-`src/Telemetry.E2E.Tests` の E2E テストが、テレメトリー取り込みパイプラインの回帰検知として「必要十分」かを評価する。
+`src/Tests/E2E/Telemetry.E2E.Tests` の E2E テストが、テレメトリー取り込みパイプラインの回帰検知として「必要十分」かを評価する。
 
 ## 対象
 - `TelemetryE2ETests.EndToEndReport_IsGenerated`

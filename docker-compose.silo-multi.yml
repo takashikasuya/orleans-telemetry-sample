@@ -26,7 +26,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: src/SiloHost
+        PROJECT: src/Services/SiloHost
     depends_on:
       mq:
         condition: service_healthy
@@ -65,7 +65,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: src/SiloHost
+        PROJECT: src/Services/SiloHost
     depends_on:
       mq:
         condition: service_healthy
@@ -102,7 +102,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.dotnet
       args:
-        PROJECT: src/SiloHost
+        PROJECT: src/Services/SiloHost
     depends_on:
       mq:
         condition: service_healthy

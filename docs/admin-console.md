@@ -2,12 +2,12 @@
 
 ## Overview
 
-The Blazor Server admin console (`src/AdminGateway`) ministers immediate operational visibility for the Orleans cluster alongside the RDF-based graph seed workflow. It runs independently of the API gateway and reuses the same JWT/OIDC configuration so operators can lock it down with existing tokens. The console refreshes live metrics for grain activations, silo health, storage tiers, and ingest configuration, and it exposes the Graph RDF import controls that re-use the same Orleans grains as the silo bootstrap graph seeding. The graph view now renders as a MudBlazor tree (Site → Building → Level → Area → Equipment → Point) instead of the SVG network.
+The Blazor Server admin console (`src/Services/AdminGateway`) ministers immediate operational visibility for the Orleans cluster alongside the RDF-based graph seed workflow. It runs independently of the API gateway and reuses the same JWT/OIDC configuration so operators can lock it down with existing tokens. The console refreshes live metrics for grain activations, silo health, storage tiers, and ingest configuration, and it exposes the Graph RDF import controls that re-use the same Orleans grains as the silo bootstrap graph seeding. The graph view now renders as a MudBlazor tree (Site → Building → Level → Area → Equipment → Point) instead of the SVG network.
 
 ## Implementation summary
 
 - **Startup surface**: `Program.cs` wires JWT authentication/authorization, telemetry options, the `AdminMetricsService`, and an Orleans client configured via `UseStaticClustering`. Blazor Server pages are served from `/` while a set of `/admin/*` endpoints expose the same slices (`grains`, `clients`, `storage`, `ingest`, `graph/import/status`, `graph/import`) for automation.
-- **Metrics service**: `AdminMetricsService` (`src/AdminGateway/Services/AdminMetricsService.cs`) aggregates data from `IManagementGrain` (grain stats + silo hosts/runtime stats), `TelemetryStorageScanner`, and configuration options via `TelemetryIngestOptions`. It shapes DTOs such as `GrainActivationSummary`, `SiloSummary`, `StorageOverview`, and `IngestSummary` and surfaces methods for triggering graph seeds via the Orleans grain `IGraphSeedGrain`.
+- **Metrics service**: `AdminMetricsService` (`src/Services/AdminGateway/Services/AdminMetricsService.cs`) aggregates data from `IManagementGrain` (grain stats + silo hosts/runtime stats), `TelemetryStorageScanner`, and configuration options via `TelemetryIngestOptions`. It shapes DTOs such as `GrainActivationSummary`, `SiloSummary`, `StorageOverview`, and `IngestSummary` and surfaces methods for triggering graph seeds via the Orleans grain `IGraphSeedGrain`.
 - **Blazor page**: `Pages/Admin.razor` injects `AdminMetricsService`, refreshes data during `OnInitializedAsync`, and renders the Activation Explorer, Client Connections table, storage tiers, ingest summary, and a spatial hierarchy tree (Site/Building/Level/Area/Equipment/Point) sourced from `GraphNodeGrain`. Selecting a node shows its GraphStore metadata (attributes + edges) and point snapshots when applicable.
 - **Hierarchy defaults**: the tree expands by default down to Level nodes so operators can see floors without manual expansion.
 - **Telemetry monitoring panel (top)**: telemetry monitoring is shown near the top (below overview), keeps multi-point trend comparison, supports optional SignalR realtime updates for multiple selected points, and adds a toggleable ingest volume summary (last 1/5 minutes) computed by a dedicated API request-log aggregation query.
@@ -18,13 +18,13 @@ The Blazor Server admin console (`src/AdminGateway`) ministers immediate operati
 
 ## Component breakdown
 
-- **`src/AdminGateway/Program.cs`** 窶・configures authentication, telemetry scanners, Orleans client, and maps `/admin` endpoints plus Blazor pages.
-- **`src/AdminGateway/Services/AdminMetricsService.cs`** 窶・orchestrates Orleans management grains, storage scanning, ingest config, and graph seed invocations; exports typed DTOs used by the UI.
-- **`src/AdminGateway/Models/AdminDtos.cs`** 窶・holds `GrainActivationSummary`, `SiloSummary` (CPU %, filtered memory, max memory), `StorageOverview`, and `IngestSummary`.
-- **`src/AdminGateway/Pages/Admin.razor`** 窶・renders the dashboard, data tables, storage tiers, the MudBlazor hierarchy tree, and the graph import card.
-- **`src/AdminGateway/wwwroot/css/app.css`** 窶・contains styling for layout, tables, tag chips, graph import grid, and status badges to keep the console visually consistent and readable.
-- **`src/SiloHost/GraphSeedGrain.cs` & `src/SiloHost/GraphSeeder.cs`** 窶・handle the actual RDF parsing and grain population that the console reuses through `GraphSeedRequest`/`GraphSeedStatus`.
-- **`src/Grains.Abstractions/GraphSeedContracts.cs`** 窶・defines the serializable records shared between console, silo, and integration tests.
+- **`src/Services/AdminGateway/Program.cs`** 窶・configures authentication, telemetry scanners, Orleans client, and maps `/admin` endpoints plus Blazor pages.
+- **`src/Services/AdminGateway/Services/AdminMetricsService.cs`** 窶・orchestrates Orleans management grains, storage scanning, ingest config, and graph seed invocations; exports typed DTOs used by the UI.
+- **`src/Services/AdminGateway/Models/AdminDtos.cs`** 窶・holds `GrainActivationSummary`, `SiloSummary` (CPU %, filtered memory, max memory), `StorageOverview`, and `IngestSummary`.
+- **`src/Services/AdminGateway/Pages/Admin.razor`** 窶・renders the dashboard, data tables, storage tiers, the MudBlazor hierarchy tree, and the graph import card.
+- **`src/Services/AdminGateway/wwwroot/css/app.css`** 窶・contains styling for layout, tables, tag chips, graph import grid, and status badges to keep the console visually consistent and readable.
+- **`src/Services/SiloHost/GraphSeedGrain.cs` & `src/Services/SiloHost/GraphSeeder.cs`** 窶・handle the actual RDF parsing and grain population that the console reuses through `GraphSeedRequest`/`GraphSeedStatus`.
+- **`src/Libraries/Grains.Abstractions/GraphSeedContracts.cs`** 窶・defines the serializable records shared between console, silo, and integration tests.
 
 ## Data & UI sequence
 

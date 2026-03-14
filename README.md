@@ -29,15 +29,15 @@ graph LR
 
 ## Repository Structure
 
-- `src/SiloHost`: Orleans サイロ（ingest / grain / graph seed）
-- `src/ApiGateway`: REST/gRPC API
-- `src/AdminGateway`: 運用向け管理 UI
-- `src/TelemetryClient`: 階層ツリー/ポイント閲覧 UI
-- `src/Telemetry.Ingest`: コネクタ/バッチ取り込み
-- `src/Telemetry.Storage`: JSONL ステージ + Parquet compaction
-- `src/DataModel.Analyzer`: RDF 解析と BuildingDataModel 構築
-- `src/Grains.Abstractions`: Grain インターフェースと契約モデル
-- `src/Publisher`: サンプルテレメトリー送信
+- `src/Services/SiloHost`: Orleans サイロ（ingest / grain / graph seed）
+- `src/Services/ApiGateway`: REST/gRPC API
+- `src/Services/AdminGateway`: 運用向け管理 UI
+- `src/Services/TelemetryClient`: 階層ツリー/ポイント閲覧 UI
+- `src/Libraries/Telemetry.Ingest`: コネクタ/バッチ取り込み
+- `src/Libraries/Telemetry.Storage`: JSONL ステージ + Parquet compaction
+- `src/Libraries/DataModel.Analyzer`: RDF 解析と BuildingDataModel 構築
+- `src/Libraries/Grains.Abstractions`: Grain インターフェースと契約モデル
+- `src/Services/Publisher`: サンプルテレメトリー送信
 
 Solution folder structure (Visual Studio / Rider):
 

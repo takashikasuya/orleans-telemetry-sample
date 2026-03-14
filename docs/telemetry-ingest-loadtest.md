@@ -16,7 +16,7 @@
 ## クイックスタート
 ```bash
 # 既定ステージ（baseline/ramp/overload）を実行
-dotnet run --project src/Telemetry.Ingest.LoadTest
+dotnet run --project src/Tests/LoadTests/Telemetry.Ingest.LoadTest
 ```
 - 実行後、`reports/telemetry-ingest-backpressure-YYYYMMDD-HHMMSS.md` と同名の JSON が生成されます。
 
@@ -35,19 +35,19 @@ dotnet run --project src/Telemetry.Ingest.LoadTest
 ## 追加の実行例
 ```bash
 # 短時間で概要を掴む
-dotnet run --project src/Telemetry.Ingest.LoadTest -- --quick
+dotnet run --project src/Tests/LoadTests/Telemetry.Ingest.LoadTest -- --quick
 
 # 設定ファイルを指定（RabbitMq セクションを使用）
-dotnet run --project src/Telemetry.Ingest.LoadTest -- --config appsettings.loadtest.json
+dotnet run --project src/Tests/LoadTests/Telemetry.Ingest.LoadTest -- --config appsettings.loadtest.json
 
 # バッチサイズの影響を比較
-dotnet run --project src/Telemetry.Ingest.LoadTest -- --batch-sweep
+dotnet run --project src/Tests/LoadTests/Telemetry.Ingest.LoadTest -- --batch-sweep
 
 # RabbitMQ を使ったスパイク試験（RabbitMQ が起動していること）
-dotnet run --project src/Telemetry.Ingest.LoadTest -- --spike
+dotnet run --project src/Tests/LoadTests/Telemetry.Ingest.LoadTest -- --spike
 
 # 複数ステージをまとめて実施（クイック + バッチスイープ + 異常系）
-dotnet run --project src/Telemetry.Ingest.LoadTest -- --quick --batch-sweep --abnormal
+dotnet run --project src/Tests/LoadTests/Telemetry.Ingest.LoadTest -- --quick --batch-sweep --abnormal
 ```
 
 ## 設定ファイル例（`appsettings.loadtest.json`）
@@ -64,7 +64,7 @@ dotnet run --project src/Telemetry.Ingest.LoadTest -- --quick --batch-sweep --ab
 }
 ```
 環境変数も併せて読み込みます（キーが重複する場合は環境変数が優先されます）。
-- サンプルを同梱しています: `src/Telemetry.Ingest.LoadTest/appsettings.loadtest.sample.json`
+- サンプルを同梱しています: `src/Tests/LoadTests/Telemetry.Ingest.LoadTest/appsettings.loadtest.sample.json`
 
 ## 出力について
 - Markdown レポート: `telemetry-ingest-backpressure-<RunId>.md`

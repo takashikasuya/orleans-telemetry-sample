@@ -4,27 +4,27 @@
 
 ## ソリューション構成
 
-- `src/SiloHost`
+- `src/Services/SiloHost`
   - Orleans サイロ本体。Device/Graph/Value などの Grain 実装と Telemetry.Ingest の登録を担当します。
   - `GraphSeedService` が `RDF_SEED_PATH` を読み込み、GraphNode/GraphIndex Grain を初期化します。
-- `src/ApiGateway`
+- `src/Services/ApiGateway`
   - REST API を提供する ASP.NET Core アプリです。
   - OIDC/JWT 認証を前提にしており、`tenant` claim を `TenantResolver` が解決します。
   - gRPC は `DeviceService`（GetSnapshot/StreamUpdates）と `RegistryService`（タグ検索）が有効です。
-- `src/Telemetry.Ingest`
+- `src/Libraries/Telemetry.Ingest`
   - テレメトリ取り込み基盤。RabbitMQ/Kafka/MQTT/Simulator コネクタと `TelemetryIngestCoordinator` を提供します。
-- `src/Telemetry.Storage`
+- `src/Libraries/Telemetry.Storage`
   - テレメトリ永続化モジュール。取り込んだイベントをステージファイル（JSONL）に書き込み、バックグラウンドで Parquet + インデックスに圧縮します。
   - クエリ API でテナント・デバイス・時間範囲によるテレメトリ検索が可能です。
-- `src/Publisher`
+- `src/Services/Publisher`
   - RabbitMQ にデモ用テレメトリを送信するコンソールアプリです。
   - RDF で定義された writable なポイントに対して `telemetry-control` キュー経由で JSON 制御コマンドを受け付け、値を上書きできます。
-- `src/DataModel.Analyzer`
+- `src/Libraries/DataModel.Analyzer`
   - RDF 解析と BuildingDataModel の構築、Orleans 連携用データ生成を担当します。
-- `src/Grains.Abstractions`
+- `src/Libraries/Grains.Abstractions`
   - Grain のインターフェース/キー/契約モデルを集約しています。
-- `src/*Tests`
-  - `DataModel.Analyzer` と `Telemetry.Ingest` のテストプロジェクトです。
+- `src/Tests/Unit/*`, `src/Tests/E2E/*`, `src/Tests/LoadTests/*`
+  - 単体テスト、E2E テスト、負荷試験プロジェクトです。
 
 ## データフロー概要
 

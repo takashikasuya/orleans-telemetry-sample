@@ -46,7 +46,7 @@ function Wait-ForUrl([string]$Url, [int]$TimeoutSeconds) {
 
 function Run-InProc {
   Log "Running in-proc E2E test"
-  & dotnet test (Join-Path $Root "src/Telemetry.E2E.Tests")
+  & dotnet test (Join-Path $Root "src/Tests/E2E/Telemetry.E2E.Tests")
   if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
   }
@@ -78,7 +78,7 @@ services:
       context: .
       dockerfile: Dockerfile.dotnet
       args:
-        PROJECT: src/SiloHost
+        PROJECT: src/Services/SiloHost
     environment:
       RDF_SEED_PATH: /seed/seed.ttl
       TENANT_ID: t1
@@ -108,7 +108,7 @@ services:
       context: .
       dockerfile: Dockerfile.dotnet
       args:
-        PROJECT: src/ApiGateway
+        PROJECT: src/Services/ApiGateway
     environment:
       TelemetryStorage__StagePath: /storage/stage
       TelemetryStorage__ParquetPath: /storage/parquet
