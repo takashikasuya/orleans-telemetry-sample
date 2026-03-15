@@ -261,6 +261,10 @@ app.MapPost("/api/devices/{deviceId}/control", async (
     var grain = client.GetGrain<IPointControlGrain>(grainKey);
     var snapshot = await grain.SubmitAsync(grainRequest);
 
+    var indexGrainKey = DeviceControlIndexGrainKey.Create(tenant, deviceId);
+    var indexGrain = client.GetGrain<IDeviceControlIndexGrain>(indexGrainKey);
+    await indexGrain.RecordAsync(requestId, snapshot);
+
     var egressRequest = new ControlEgressRequest
     {
         CommandId = requestId,
@@ -280,6 +284,7 @@ app.MapPost("/api/devices/{deviceId}/control", async (
     {
         var error = egressResult?.Error ?? $"No egress connector registered for '{connectorName}'.";
         await grain.UpdateAsync(requestId, ControlRequestStatus.Failed, null, error);
+        await indexGrain.UpdateAsync(requestId, ControlRequestStatus.Failed, null, error);
         responseSnapshot = snapshot with
         {
             Status = ControlRequestStatus.Failed,
@@ -289,6 +294,7 @@ app.MapPost("/api/devices/{deviceId}/control", async (
     else if (egressResult.CorrelationId is not null)
     {
         await grain.UpdateAsync(requestId, ControlRequestStatus.Accepted, egressResult.CorrelationId, null);
+        await indexGrain.UpdateAsync(requestId, ControlRequestStatus.Accepted, egressResult.CorrelationId, null);
         responseSnapshot = snapshot with
         {
             CorrelationId = egressResult.CorrelationId
@@ -307,6 +313,35 @@ app.MapPost("/api/devices/{deviceId}/control", async (
 
     var location = $"/api/devices/{deviceId}/control/{snapshot.CommandId}";
     return Results.Accepted(location, response);
+}).RequireAuthorization();
+
+app.MapGet("/api/devices/{deviceId}/control/{commandId}", async (
+    string deviceId,
+    string commandId,
+    IClusterClient client,
+    HttpContext http) =>
+{
+    var tenant = TenantResolver.ResolveTenant(http);
+    var indexGrainKey = DeviceControlIndexGrainKey.Create(tenant, deviceId);
+    var indexGrain = client.GetGrain<IDeviceControlIndexGrain>(indexGrainKey);
+    var snapshot = await indexGrain.GetAsync(commandId);
+
+    if (snapshot is null)
+    {
+        return Results.NotFound(new { Message = $"Command '{commandId}' not found for device '{deviceId}'." });
+    }
+
+    var response = new ApiControlResponse(
+        snapshot.CommandId,
+        snapshot.Status.ToString(),
+        snapshot.RequestedAt,
+        snapshot.AcceptedAt,
+        snapshot.AppliedAt,
+        snapshot.ConnectorName,
+        snapshot.CorrelationId,
+        snapshot.LastError);
+
+    return Results.Ok(response);
 }).RequireAuthorization();
 
 

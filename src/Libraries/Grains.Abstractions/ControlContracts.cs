@@ -142,3 +142,33 @@ public interface IPointControlGrain : IGrainWithStringKey
     /// <param name="lastError">Error message when the command failed.</param>
     Task UpdateAsync(string commandId, ControlRequestStatus status, string? correlationId, string? lastError);
 }
+
+/// <summary>
+/// Grain contract for device-level control command index.
+/// Enables lookup of any command by commandId without requiring the pointId.
+/// </summary>
+public interface IDeviceControlIndexGrain : IGrainWithStringKey
+{
+    /// <summary>
+    /// Records a control command snapshot in the device index.
+    /// </summary>
+    /// <param name="commandId">Command identifier.</param>
+    /// <param name="snapshot">Initial snapshot to record.</param>
+    Task RecordAsync(string commandId, PointControlSnapshot snapshot);
+
+    /// <summary>
+    /// Gets a control command snapshot by command identifier.
+    /// </summary>
+    /// <param name="commandId">Command identifier.</param>
+    /// <returns>Snapshot when found; otherwise null.</returns>
+    Task<PointControlSnapshot?> GetAsync(string commandId);
+
+    /// <summary>
+    /// Updates the status and egress result of a previously recorded control command.
+    /// </summary>
+    /// <param name="commandId">Command identifier.</param>
+    /// <param name="status">New status to set.</param>
+    /// <param name="correlationId">Connector-side correlation identifier, if available.</param>
+    /// <param name="lastError">Error message when the command failed.</param>
+    Task UpdateAsync(string commandId, ControlRequestStatus status, string? correlationId, string? lastError);
+}
