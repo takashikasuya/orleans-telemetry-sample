@@ -278,6 +278,18 @@ public sealed class ControlEgressEndpointTests
                     onUpdate?.Invoke(commandId, status, correlationId, lastError))
             .Returns(Task.CompletedTask);
 
+        var indexGrain = new Mock<IDeviceControlIndexGrain>();
+        indexGrain
+            .Setup(g => g.RecordAsync(It.IsAny<string>(), It.IsAny<PointControlSnapshot>()))
+            .Returns(Task.CompletedTask);
+        indexGrain
+            .Setup(g => g.UpdateAsync(
+                It.IsAny<string>(),
+                It.IsAny<ControlRequestStatus>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()))
+            .Returns(Task.CompletedTask);
+
         var clusterMock = new Mock<IClusterClient>();
         clusterMock
             .Setup(c => c.GetGrain<IGraphIndexGrain>(tenant, It.IsAny<string?>()))
@@ -302,6 +314,9 @@ public sealed class ControlEgressEndpointTests
         clusterMock
             .Setup(c => c.GetGrain<IPointControlGrain>(It.IsAny<string>(), It.IsAny<string?>()))
             .Returns(controlGrain.Object);
+        clusterMock
+            .Setup(c => c.GetGrain<IDeviceControlIndexGrain>(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns(indexGrain.Object);
 
         return clusterMock;
     }

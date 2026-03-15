@@ -53,9 +53,23 @@
   - `PointControlResponse.connectorName` に解決されたコネクタ名を返却
   - RabbitMQ publish で correlationId を採番できた場合は `PointControlResponse.correlationId` を返却
 
+`GET /api/devices/{deviceId}/control/{commandId}`
+
+- 送信済みの制御コマンドの現在ステータスを照会します。
+- `commandId` は POST レスポンスの `commandId` フィールド、または `Location` ヘッダから取得できます。
+- レスポンスは `PointControlResponse` 形式で、`status` フィールドに現在の状態を返します。
+- `commandId` が存在しない場合は `404 Not Found` を返します。
+
+### ステータス遷移
+
+| ステータス | 説明 |
+|-----------|------|
+| `Accepted` | コネクタへの送信に成功。 |
+| `Failed`   | コネクタへの送信が失敗、または登録済みコネクタが存在しない。`lastError` にエラー内容を格納。 |
+| `Applied`  | （将来実装）コネクタ側で適用確認が取れた状態。 |
+
 ## 現時点の制約
 
-- `Location` 先（`GET /api/devices/{deviceId}/control/{commandId}`）は未実装です。
 - `Applied` への遷移や read-back 確認は未実装です。現状は publish 失敗時のみ `Failed` へ更新します。
 - 直接配送は RabbitMQ のみ実装済みで、MQTT/Kafka など他コネクタ egress は未実装です。
 
@@ -63,7 +77,7 @@
 
 - `ConnectorName` に応じた egress（MQTT/Kafka など）を ApiGateway 側に拡張
 - 制御結果（ack/nack）を受けて `PointControlSnapshot` を `Applied/Failed` へ更新
-- 制御履歴照会 API（`GET /api/devices/{deviceId}/control/{commandId}`）を追加
+- 制御履歴一覧 API（`GET /api/devices/{deviceId}/control`）を追加
 
 
 ## Admin UI での確認・変更
