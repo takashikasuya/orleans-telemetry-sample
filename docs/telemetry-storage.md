@@ -134,7 +134,7 @@ Parquet への保存が成立していることを、以下の観点で検証し
 ```bash
 # ストレージ系のみ
 
-dotnet test src/Telemetry.Storage.Tests
+dotnet test src/Tests/Unit/Telemetry.Storage.Tests
 ```
 
 ## 関連設計

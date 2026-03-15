@@ -392,7 +392,7 @@ service TelemetryService {
 ### 実装メモ
 
 - 現行コードでは `Program.cs` で `DeviceService` と `RegistryGrpcService` を `MapGrpcService` 済みです（`Grpc:Enabled=true` の場合）。
-- `src/ApiGateway/Protos/devices.proto` が実装済み契約であり、上記の大きな proto は将来拡張の設計案です。
+- `src/Services/ApiGateway/Protos/devices.proto` が実装済み契約であり、上記の大きな proto は将来拡張の設計案です。
 
 ## OpenAPI/Swagger 出力
 
@@ -401,7 +401,7 @@ ApiGateway は Swashbuckle を導入済みです。`ASPNETCORE_ENVIRONMENT=Devel
 ### 開発環境での取得例
 
 ```bash
-dotnet run --project src/ApiGateway
+dotnet run --project src/Services/ApiGateway
 ```
 
 Swagger UI:

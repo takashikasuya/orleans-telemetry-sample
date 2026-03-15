@@ -46,13 +46,13 @@ PowerShell:
 docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:management
 
 # Orleans Silo
-dotnet run --project src/SiloHost
+dotnet run --project src/Services/SiloHost
 
 # API Gateway
-dotnet run --project src/ApiGateway
+dotnet run --project src/Services/ApiGateway
 
 # Publisher (optional)
-dotnet run --project src/Publisher
+dotnet run --project src/Services/Publisher
 ```
 
 ## 認証（Mock OIDC）
@@ -86,13 +86,13 @@ curl -H "Authorization: Bearer $TOKEN" \
 ## API 検証クライアント
 
 ```bash
-dotnet run --project src/ApiGateway.Client
+dotnet run --project src/Tools/ApiGateway.Client
 ```
 
 オプション例:
 
 ```bash
-dotnet run --project src/ApiGateway.Client -- \
+dotnet run --project src/Tools/ApiGateway.Client -- \
   --api-base http://localhost:8080 \
   --authority http://localhost:8081/default \
   --client-id test-client \
@@ -118,7 +118,7 @@ dotnet test
 Docker Compose不要で、in-process Orleans Silo + AdminGateway を起動してPlaywright E2Eを実行します。
 
 ```bash
-dotnet test src/AdminGateway.E2E.Tests
+dotnet test src/Tests/E2E/AdminGateway.E2E.Tests
 ```
 
 初回実行時、Playwright ブラウザの自動ダウンロードが含まれるため、時間がかかります。
@@ -126,7 +126,7 @@ dotnet test src/AdminGateway.E2E.Tests
 ## メモリロードテスト
 
 ```bash
-dotnet run --project src/Telemetry.Orleans.MemoryLoadTest -- --config src/Telemetry.Orleans.MemoryLoadTest/appsettings.memoryloadtest.sample.json
+dotnet run --project src/Tests/LoadTests/Telemetry.Orleans.MemoryLoadTest -- --config src/Tests/LoadTests/Telemetry.Orleans.MemoryLoadTest/appsettings.memoryloadtest.sample.json
 ```
 
 レポートは既定で `reports/` に出力されます（`TELEMETRY_MEMORY_REPORT_DIR` で上書き可能）。

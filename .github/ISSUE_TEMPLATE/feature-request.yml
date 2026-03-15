@@ -1,0 +1,69 @@
+name: Feature request
+description: Propose a user-facing or developer-facing capability.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for new behavior or notable capability changes. Keep scope narrow and verification concrete.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What limitation or need is driving this work
+      placeholder: Operators can only inspect point trend history up to 6 hours.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe the intended capability
+      placeholder: Add a 24-hour range option to the Admin UI point trend.
+    validations:
+      required: true
+  - type: textarea
+    id: user_value
+    attributes:
+      label: User value
+      description: Who benefits and how
+      placeholder: Operators can inspect previous-day anomalies without using raw storage artifacts.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: Testable outcomes
+      placeholder: |
+        - [ ] New capability is available in the intended UI or API
+        - [ ] Existing behavior remains intact
+        - [ ] Relevant tests pass
+        - [ ] Documentation is updated if behavior changes
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: Explicitly exclude follow-on work
+      placeholder: Do not redesign chart rendering or add arbitrary custom ranges.
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Commands or manual checks that prove completion
+      placeholder: |
+        - dotnet test src/Tests/Unit/AdminGateway.Tests/AdminGateway.Tests.csproj
+        - Manual UI verification in docker compose stack
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Related docs, issues, prototypes, or screenshots
+      placeholder: docs/admin-console.md, mockup link, related issue
+

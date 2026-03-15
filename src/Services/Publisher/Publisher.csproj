@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Libraries/Grains.Abstractions/Grains.Abstractions.csproj" />
+    <ProjectReference Include="../../Libraries/DataModel.Analyzer/DataModel.Analyzer.csproj" />
+    <PackageReference Include="RabbitMQ.Client" Version="6.4.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
+  </ItemGroup>
+</Project>

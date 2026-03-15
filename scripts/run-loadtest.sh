@@ -22,7 +22,7 @@ Options:
   --spike                 Add RabbitMQ spike test
   --multi-connector       Add multi-connector stages
   --output-dir <path>     Override report output directory (default: reports)
-  --config <path>         Configuration file path (default: src/Telemetry.Ingest.LoadTest/appsettings.loadtest.json)
+  --config <path>         Configuration file path (default: src/Tests/LoadTests/Telemetry.Ingest.LoadTest/appsettings.loadtest.json)
   --ensure-rabbitmq       Start RabbitMQ via docker compose if needed
   --help                  Show this help
 
@@ -83,7 +83,7 @@ if [[ $ENSURE_RABBITMQ -eq 1 ]]; then
 fi
 
 # Build command
-CMD=(dotnet run --project src/Telemetry.Ingest.LoadTest --)
+CMD=(dotnet run --project src/Tests/LoadTests/Telemetry.Ingest.LoadTest --)
 
 if [[ -n "$OUTPUT_DIR" ]]; then
   CMD+=(--output-dir "$OUTPUT_DIR")

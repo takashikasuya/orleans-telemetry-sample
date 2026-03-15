@@ -54,6 +54,6 @@
 ## Initial Implementation Plan
 
 1. Document the UX contract (this spec) and the API surface used by the client (per Step 1 and 2).
-2. Scaffold `src/TelemetryClient/` as a Blazor Server project with MudBlazor, HttpClient factories, and placeholder tree/trend layout.
+2. Scaffold `src/Services/TelemetryClient/` as a Blazor Server project with MudBlazor, HttpClient factories, and placeholder tree/trend layout.
 3. Add new `ApiGateway.Contracts` library so the client can consume `PointControlRequest`/`Response` without pulling in the entire ApiGateway host.
 4. Wire up placeholder pages/components (`TelemetryTree.razor`, `TelemetryCanvas.razor`, `PointControlForm.razor`) with TODO markers for future data bindings.

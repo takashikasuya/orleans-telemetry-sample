@@ -16,51 +16,51 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "E2E", "E2E", "{A1000006-000
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LoadTests", "LoadTests", "{A1000007-0000-0000-0000-000000000007}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SiloHost", "src\SiloHost\SiloHost.csproj", "{8A1336E3-097A-5471-6249-8B0FC8040AC7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SiloHost", "src\Services\SiloHost\SiloHost.csproj", "{8A1336E3-097A-5471-6249-8B0FC8040AC7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway", "src\ApiGateway\ApiGateway.csproj", "{967A9878-9005-C8B0-725C-1F34134168DB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway", "src\Services\ApiGateway\ApiGateway.csproj", "{967A9878-9005-C8B0-725C-1F34134168DB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminGateway", "src\AdminGateway\AdminGateway.csproj", "{EA618B2A-3FC8-45AB-8F79-AB20DBDDDC36}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminGateway", "src\Services\AdminGateway\AdminGateway.csproj", "{EA618B2A-3FC8-45AB-8F79-AB20DBDDDC36}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelemetryClient", "src\TelemetryClient\TelemetryClient.csproj", "{63D6F056-F215-47CD-99FE-7CEE8CFAD8B2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelemetryClient", "src\Services\TelemetryClient\TelemetryClient.csproj", "{63D6F056-F215-47CD-99FE-7CEE8CFAD8B2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Publisher", "src\Publisher\Publisher.csproj", "{B53A3F93-644F-077D-263C-2A9461829575}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Publisher", "src\Services\Publisher\Publisher.csproj", "{B53A3F93-644F-077D-263C-2A9461829575}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grains.Abstractions", "src\Grains.Abstractions\Grains.Abstractions.csproj", "{FA32BC97-A445-BD9B-F584-EB484F4CF15B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grains.Abstractions", "src\Libraries\Grains.Abstractions\Grains.Abstractions.csproj", "{FA32BC97-A445-BD9B-F584-EB484F4CF15B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Contracts", "src\ApiGateway.Contracts\ApiGateway.Contracts.csproj", "{D493AF95-161C-4EAC-B9D2-946C2C927C36}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Contracts", "src\Libraries\ApiGateway.Contracts\ApiGateway.Contracts.csproj", "{D493AF95-161C-4EAC-B9D2-946C2C927C36}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Ingest", "src\Telemetry.Ingest\Telemetry.Ingest.csproj", "{9FAD7D59-1CD9-4013-9392-6A537FA17B1D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Ingest", "src\Libraries\Telemetry.Ingest\Telemetry.Ingest.csproj", "{9FAD7D59-1CD9-4013-9392-6A537FA17B1D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Storage", "src\Telemetry.Storage\Telemetry.Storage.csproj", "{902BEFF3-F4B9-4862-AC04-EEFF9BF11A76}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Storage", "src\Libraries\Telemetry.Storage\Telemetry.Storage.csproj", "{902BEFF3-F4B9-4862-AC04-EEFF9BF11A76}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DataModel.Analyzer", "src\DataModel.Analyzer\DataModel.Analyzer.csproj", "{C5B2F123-4D5E-6789-ABCD-EF0123456789}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DataModel.Analyzer", "src\Libraries\DataModel.Analyzer\DataModel.Analyzer.csproj", "{C5B2F123-4D5E-6789-ABCD-EF0123456789}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Client", "src\ApiGateway.Client\ApiGateway.Client.csproj", "{769BC19A-284A-40AD-887E-75A8885006B1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Client", "src\Tools\ApiGateway.Client\ApiGateway.Client.csproj", "{769BC19A-284A-40AD-887E-75A8885006B1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SiloHost.Tests", "src\SiloHost.Tests\SiloHost.Tests.csproj", "{B1000001-0000-0000-0000-000000000001}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SiloHost.Tests", "src\Tests\Unit\SiloHost.Tests\SiloHost.Tests.csproj", "{B1000001-0000-0000-0000-000000000001}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Tests", "src\ApiGateway.Tests\ApiGateway.Tests.csproj", "{5D88092C-6F41-447F-BCE9-EBF11FBC3824}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Tests", "src\Tests\Unit\ApiGateway.Tests\ApiGateway.Tests.csproj", "{5D88092C-6F41-447F-BCE9-EBF11FBC3824}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminGateway.Tests", "src\AdminGateway.Tests\AdminGateway.Tests.csproj", "{0158B1FF-5ED1-404A-87C0-8C03316441CA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminGateway.Tests", "src\Tests\Unit\AdminGateway.Tests\AdminGateway.Tests.csproj", "{0158B1FF-5ED1-404A-87C0-8C03316441CA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Publisher.Tests", "src\Publisher.Tests\Publisher.Tests.csproj", "{157F67B7-E62F-4B9F-8681-321C1AC17743}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Publisher.Tests", "src\Tests\Unit\Publisher.Tests\Publisher.Tests.csproj", "{157F67B7-E62F-4B9F-8681-321C1AC17743}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Ingest.Tests", "src\Telemetry.Ingest.Tests\Telemetry.Ingest.Tests.csproj", "{137D96DB-1C9B-4064-9E7F-C2397F2551ED}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Ingest.Tests", "src\Tests\Unit\Telemetry.Ingest.Tests\Telemetry.Ingest.Tests.csproj", "{137D96DB-1C9B-4064-9E7F-C2397F2551ED}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Storage.Tests", "src\Telemetry.Storage.Tests\Telemetry.Storage.Tests.csproj", "{3F4312E5-76F4-4A2F-AC60-9EB33B6CB4C5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Storage.Tests", "src\Tests\Unit\Telemetry.Storage.Tests\Telemetry.Storage.Tests.csproj", "{3F4312E5-76F4-4A2F-AC60-9EB33B6CB4C5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DataModel.Analyzer.Tests", "src\DataModel.Analyzer.Tests\DataModel.Analyzer.Tests.csproj", "{8F6B4A12-2C7C-4A8A-9D8C-1234567890AB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DataModel.Analyzer.Tests", "src\Tests\Unit\DataModel.Analyzer.Tests\DataModel.Analyzer.Tests.csproj", "{8F6B4A12-2C7C-4A8A-9D8C-1234567890AB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.E2E.Tests", "src\Telemetry.E2E.Tests\Telemetry.E2E.Tests.csproj", "{0F5D6515-4A36-40E6-A2A7-27B144446DB9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.E2E.Tests", "src\Tests\E2E\Telemetry.E2E.Tests\Telemetry.E2E.Tests.csproj", "{0F5D6515-4A36-40E6-A2A7-27B144446DB9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminGateway.E2E.Tests", "src\AdminGateway.E2E.Tests\AdminGateway.E2E.Tests.csproj", "{9A32B9A6-5A39-4F44-9E14-1B5C9A1D9D5A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminGateway.E2E.Tests", "src\Tests\E2E\AdminGateway.E2E.Tests\AdminGateway.E2E.Tests.csproj", "{9A32B9A6-5A39-4F44-9E14-1B5C9A1D9D5A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests.Shared", "src\Tests.Shared\Tests.Shared.csproj", "{A2000001-0000-0000-0000-000000000001}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests.Shared", "src\Tests\E2E\Tests.Shared\Tests.Shared.csproj", "{A2000001-0000-0000-0000-000000000001}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Ingest.LoadTest", "src\Telemetry.Ingest.LoadTest\Telemetry.Ingest.LoadTest.csproj", "{4A6033C1-033C-4956-85D6-84091A6FED3C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Ingest.LoadTest", "src\Tests\LoadTests\Telemetry.Ingest.LoadTest\Telemetry.Ingest.LoadTest.csproj", "{4A6033C1-033C-4956-85D6-84091A6FED3C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Orleans.MemoryLoadTest", "src\Telemetry.Orleans.MemoryLoadTest\Telemetry.Orleans.MemoryLoadTest.csproj", "{1F27D0A0-74E8-48C3-979A-408201FA38A2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telemetry.Orleans.MemoryLoadTest", "src\Tests\LoadTests\Telemetry.Orleans.MemoryLoadTest\Telemetry.Orleans.MemoryLoadTest.csproj", "{1F27D0A0-74E8-48C3-979A-408201FA38A2}"
 EndProject
 Global
 GlobalSection(SolutionConfigurationPlatforms) = preSolution

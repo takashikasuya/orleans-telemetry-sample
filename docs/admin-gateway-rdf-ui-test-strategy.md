@@ -2,7 +2,7 @@
 
 ## 目的
 
-AdminGateway (`src/AdminGateway`) に対して、RDF を入力に Orleans の Graph Grain 群を生成し、UI（MudTreeView ベース）の表示・選択・詳細表示を継続的に検証できるテスト体系を定義する。
+AdminGateway (`src/Services/AdminGateway`) に対して、RDF を入力に Orleans の Graph Grain 群を生成し、UI（MudTreeView ベース）の表示・選択・詳細表示を継続的に検証できるテスト体系を定義する。
 
 この設計方針では、以下を同時に満たすことを重視する。
 
@@ -64,10 +64,10 @@ AdminGateway (`src/AdminGateway`) に対して、RDF を入力に Orleans の Gr
 
 ## Phase 1: サービス層テスト基盤を作る
 
-- `src/AdminGateway.Tests`（新規 xUnit）を追加
+- `src/Tests/Unit/AdminGateway.Tests`（新規 xUnit）を追加
 - 参照:
-  - `src/AdminGateway/AdminGateway.csproj`
-  - `src/Grains.Abstractions/Grains.Abstractions.csproj`
+  - `src/Services/AdminGateway/AdminGateway.csproj`
+  - `src/Libraries/Grains.Abstractions/Grains.Abstractions.csproj`
 - モック方針:
   - `IClusterClient` を Moq/NSubstitute で差し替え
   - `IGraphIndexGrain` の `GetByTypeAsync` 戻り値を fixture 化
@@ -123,8 +123,8 @@ E2E は実行コストが高いため、CI では nightly/手動トリガー、P
 ## CI への載せ方（推奨）
 
 - PR 必須:
-  - `dotnet test src/DataModel.Analyzer.Tests`
-  - `dotnet test src/AdminGateway.Tests`
+  - `dotnet test src/Tests/Unit/DataModel.Analyzer.Tests`
+  - `dotnet test src/Tests/Unit/AdminGateway.Tests`
 - 任意（手動/夜間）:
   - Docker 起動を伴う E2E UI
 

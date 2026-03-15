@@ -108,7 +108,7 @@ YML
       context: $ROOT
       dockerfile: $DOCKERFILE
       args:
-        PROJECT: src/Publisher
+        PROJECT: src/Services/Publisher
     depends_on:
       mq:
         condition: service_healthy
@@ -141,7 +141,7 @@ $MQ_BLOCK
       context: $ROOT
       dockerfile: $DOCKERFILE
       args:
-        PROJECT: src/SiloHost
+        PROJECT: src/Services/SiloHost
     environment:
       RDF_SEED_PATH: /seed/seed.ttl
       TENANT_ID: t1
@@ -163,7 +163,7 @@ $SIMULATOR_LINES
       context: $ROOT
       dockerfile: $DOCKERFILE
       args:
-        PROJECT: src/ApiGateway
+        PROJECT: src/Services/ApiGateway
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       OIDC_AUTHORITY: http://mock-oidc:8080/default
@@ -183,7 +183,7 @@ $SIMULATOR_LINES
       context: $ROOT
       dockerfile: $DOCKERFILE
       args:
-        PROJECT: src/AdminGateway
+        PROJECT: src/Services/AdminGateway
     environment:
       OIDC_AUTHORITY: http://mock-oidc:8080/default
       OIDC_AUDIENCE: default
