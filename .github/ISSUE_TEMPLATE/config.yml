@@ -1,0 +1,6 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Issue workflow
+    url: https://github.com/takashikasuya/orleans-telemetry-sample/blob/main/docs/github-issue-workflow.md
+    about: Review issue naming, planning note mapping, and completion flow before opening a task.
+

@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a defect with expected behavior, impact, and verification.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for observable defects. Link logs, screenshots, or failing tests when available.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the defect and user-visible impact.
+      placeholder: API request log volume shows filtered counts instead of true ingest counts.
+    validations:
+      required: true
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current behavior
+      description: What happens now
+      placeholder: |
+        1. Open Admin UI
+        2. Apply a path filter
+        3. Ingest volume decreases even though total traffic is unchanged
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: What should happen instead
+      placeholder: Ingest volume should be computed independently from filtered log rows.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and impact
+      description: Affected services, environments, and user impact
+      placeholder: AdminGateway only, local compose stack, dashboard operators affected.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: Concrete completion conditions
+      placeholder: |
+        - [ ] Root cause identified
+        - [ ] Fix implemented
+        - [ ] Relevant tests added or updated
+        - [ ] No regression in adjacent flows
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Commands or manual checks that prove the fix
+      placeholder: |
+        - dotnet test src/Tests/Unit/AdminGateway.Tests/AdminGateway.Tests.csproj
+        - Manual check in Admin UI with and without log filters
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Related PRs, docs, logs, screenshots, or issue links
+      placeholder: docs/admin-console.md, log excerpt, screenshot, related issue
+
