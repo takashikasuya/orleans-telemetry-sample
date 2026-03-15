@@ -17,6 +17,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Orleans;
 using Telemetry.Ingest;
+using Telemetry.Ingest.RabbitMq;
 using Telemetry.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -64,6 +65,9 @@ builder.Services.AddSingleton<GraphPointResolver>();
 builder.Services.Configure<ControlRoutingOptions>(builder.Configuration.GetSection("ControlRouting"));
 builder.Services.AddSingleton<ControlConnectorRouter>();
 builder.Services.AddSingleton<PointGatewayResolver>();
+builder.Services.Configure<RabbitMqControlEgressOptions>(builder.Configuration.GetSection("RabbitMqControlEgress"));
+builder.Services.AddSingleton<IControlEgressConnector, RabbitMqControlEgressConnector>();
+builder.Services.AddSingleton<ControlEgressDispatcher>();
 builder.Services.AddHostedService<RegistryExportCleanupService>();
 
 // Configure gRPC
@@ -190,6 +194,7 @@ app.MapPost("/api/devices/{deviceId}/control", async (
     IClusterClient client,
     PointGatewayResolver gatewayResolver,
     ControlConnectorRouter connectorRouter,
+    ControlEgressDispatcher egressDispatcher,
     HttpContext http) =>
 {
     var tenant = TenantResolver.ResolveTenant(http);
@@ -255,15 +260,50 @@ app.MapPost("/api/devices/{deviceId}/control", async (
     var grainKey = PointControlGrainKey.Create(tenant, deviceId, command.PointId);
     var grain = client.GetGrain<IPointControlGrain>(grainKey);
     var snapshot = await grain.SubmitAsync(grainRequest);
+
+    var egressRequest = new ControlEgressRequest
+    {
+        CommandId = requestId,
+        TenantId = tenant,
+        BuildingName = command.BuildingName ?? string.Empty,
+        SpaceId = command.SpaceId ?? string.Empty,
+        DeviceId = command.DeviceId,
+        PointId = command.PointId,
+        DesiredValue = command.DesiredValue,
+        RequestedAt = grainRequest.RequestedAt,
+        Metadata = metadata
+    };
+
+    var responseSnapshot = snapshot;
+    var egressResult = await egressDispatcher.SendAsync(connectorName, egressRequest, http.RequestAborted);
+    if (egressResult is null || egressResult is { Accepted: false })
+    {
+        var error = egressResult?.Error ?? $"No egress connector registered for '{connectorName}'.";
+        await grain.UpdateAsync(requestId, ControlRequestStatus.Failed, null, error);
+        responseSnapshot = snapshot with
+        {
+            Status = ControlRequestStatus.Failed,
+            LastError = error
+        };
+    }
+    else if (egressResult.CorrelationId is not null)
+    {
+        await grain.UpdateAsync(requestId, ControlRequestStatus.Accepted, egressResult.CorrelationId, null);
+        responseSnapshot = snapshot with
+        {
+            CorrelationId = egressResult.CorrelationId
+        };
+    }
+
     var response = new ApiControlResponse(
-        snapshot.CommandId,
-        snapshot.Status.ToString(),
-        snapshot.RequestedAt,
-        snapshot.AcceptedAt,
-        snapshot.AppliedAt,
-        snapshot.ConnectorName,
-        snapshot.CorrelationId,
-        snapshot.LastError);
+        responseSnapshot.CommandId,
+        responseSnapshot.Status.ToString(),
+        responseSnapshot.RequestedAt,
+        responseSnapshot.AcceptedAt,
+        responseSnapshot.AppliedAt,
+        responseSnapshot.ConnectorName,
+        responseSnapshot.CorrelationId,
+        responseSnapshot.LastError);
 
     var location = $"/api/devices/{deviceId}/control/{snapshot.CommandId}";
     return Results.Accepted(location, response);

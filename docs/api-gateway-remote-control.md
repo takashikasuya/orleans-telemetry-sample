@@ -7,7 +7,8 @@
 - `POST /api/devices/{deviceId}/control` は制御要求を受け付け、Orleans の `PointControlGrain` に記録します。
 - 受理時に、Graph 上の `DeviceId + PointId` から `GatewayId` を解決し、設定ファイルの `ConnectorGatewayMappings`（connector↔gateway の明示マップ）を優先し、必要に応じて正規表現ルールで `ConnectorName` を決定します。
 - ルールに一致しない場合は `400 BadRequest` を返し、曖昧な制御要求を拒否します。
-- ApiGateway から `telemetry-control` キューへ直接 publish する処理はまだなく、配送実装は別途必要です。
+- `ConnectorName=RabbitMq` の場合、ApiGateway は `telemetry-control` キューへ Publisher 互換 JSON（`deviceId` / `pointId` / `value`）を publish します。
+- 配送失敗時は `PointControlGrain` を `Failed` に更新し、エラー内容を保持します。
 
 ## ルーティングの仕組み
 
@@ -50,16 +51,17 @@
   - `202 Accepted`
   - `Location: /api/devices/{deviceId}/control/{commandId}`
   - `PointControlResponse.connectorName` に解決されたコネクタ名を返却
+  - RabbitMQ publish で correlationId を採番できた場合は `PointControlResponse.correlationId` を返却
 
 ## 現時点の制約
 
 - `Location` 先（`GET /api/devices/{deviceId}/control/{commandId}`）は未実装です。
-- `ControlRequestStatus` は現状 `Accepted` までで、`Applied/Failed` などの更新フローは未接続です。
-- ApiGateway→Publisher control queue への直接配送機能は未実装です。
+- `Applied` への遷移や read-back 確認は未実装です。現状は publish 失敗時のみ `Failed` へ更新します。
+- 直接配送は RabbitMQ のみ実装済みで、MQTT/Kafka など他コネクタ egress は未実装です。
 
 ## 今後の実装候補
 
-- `ConnectorName` に応じた egress（RabbitMQ/MQTT/Kafka など）を ApiGateway 側に実装
+- `ConnectorName` に応じた egress（MQTT/Kafka など）を ApiGateway 側に拡張
 - 制御結果（ack/nack）を受けて `PointControlSnapshot` を `Applied/Failed` へ更新
 - 制御履歴照会 API（`GET /api/devices/{deviceId}/control/{commandId}`）を追加
 
