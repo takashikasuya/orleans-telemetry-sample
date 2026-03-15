@@ -108,7 +108,7 @@ dotnet test
 | デバイス通信（受信）機能   |    必要 |   ◎  | RabbitMQ/Kafka/MQTT/Simulator から受信し、Coordinatorが処理 ([GitHub][1])             | "デバイス"直収というより **メッセージブローカ/コネクタ受信**中心                       |
 | データルーティング機能    |    必要 |   ◎  | TelemetryRouterGrain → DeviceGrain へルーティング ([GitHub][2])                     | —                                                          |
 | データフィルタリング機能   |    推奨 |   △  | Coordinator/Envelope/Queryで条件処理の余地はあるが、ガイドライン相当のフィルタ機能として明示は弱い ([GitHub][3]) | ルール/品質/異常値除外などの"フィルタリング機能"を仕様化すると良い                        |
-| デバイス通信（送信）機能   |    推奨 |   △  | 遠隔制御要求をPointControlGrainへ記録（受付）まで ([GitHub][4])                              | **フィールド層へ実際に送る（egress/publish）**が未実装（docに明記） ([GitHub][4]) |
+| デバイス通信（送信）機能   |    推奨 |   ○  | 遠隔制御要求をApiGatewayで受け付け、RabbitMQ `telemetry-control` キューへ publish 可能 ([GitHub][4]) | RabbitMQ egress は実装済み。MQTT/Kafka など他コネクタ配送と applied/read-back 確認は未実装 |
 | 連携GW遠隔アップデート機能 |    推奨 |   ×  | 記載・実装根拠なし                                                                    | —                                                          |
 | デバイス認証機能       |    必要 |   △  | アプリ側はJWT/OIDCだが、フィールド層"デバイス認証"としての仕組みは見えにくい ([GitHub][2])                    | mTLS/トークン等で"送信元デバイスの正当性"を担保する設計が必要                         |
 
@@ -143,7 +143,7 @@ dotnet test
 | 機能（ガイドライン）   | 必要/推奨 | 実装状況 | 根拠（レポジトリ側）                                                                | ギャップ/補足                                      |
 | ------------ | ----: | :--: | ------------------------------------------------------------------------- | -------------------------------------------- |
 | データ提供機能      |    必要 |   ◎  | REST APIで最新/履歴、グラフ参照。gRPC（GetSnapshot/StreamUpdates等） ([GitHub][1])       | —                                            |
-| 遠隔制御コマンド送信機能 |    推奨 |   △  | APIが制御要求を受付→PointControlGrainへ記録、ルーティング決定まで ([GitHub][4])                 | **フィールド層へ送信する配送実装が未実装**（doc明記） ([GitHub][4]) |
+| 遠隔制御コマンド送信機能 |    推奨 |   ○  | APIが制御要求を受付し、RabbitMQ egress で `telemetry-control` へ配送 ([GitHub][4])      | RabbitMQ 以外の egress と applied/read-back の完了確認は未実装 |
 | ブローカー機能      |    推奨 |   △  | 内部はOrleans Streamで更新配信、外部はMQ（RabbitMQ/Kafka/MQTT）は主に"取り込み側" ([GitHub][2]) | ガイドラインの想定する「アプリ間Pub/Sub仲介」用途としては追加設計が必要      |
 | アプリケーション認証機能 |    必要 |   ◎  | OIDC/JWT前提（tenant claim解決、mock-oidc同梱） ([GitHub][2])                      | —                                            |
 | 権限管理機能       |    必要 |   △  | tenant分離はあるが、権限（RBAC/ABAC）としての詳細は不明確 ([GitHub][2])                        | "誰がどのデータ/制御を実行できるか"のポリシー層が今後                 |
@@ -163,7 +163,7 @@ dotnet test
     ([GitHub][2])
 * **弱い/未完（△/×が目立つ領域）**：
 
-  * **遠隔制御の"配送（egress）"**（受付・ルーティング決定はあるが、実送信は未実装） ([GitHub][4])
+  * 遠隔制御の egress は RabbitMQ のみ実装済みで、他コネクタへの配送拡張が残る ([GitHub][4])
   * フィールド層デバイス認証、GW遠隔アップデート
   * 権限管理（RBAC/ABAC）とデータフィルタリングの仕様化
 

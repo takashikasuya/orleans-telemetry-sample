@@ -3,26 +3,30 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ApiGateway.Contracts;
 using ApiPointControlRequest = ApiGateway.Contracts.PointControlRequest;
 using FluentAssertions;
 using Grains.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Telemetry.Ingest;
 using Xunit;
 
 namespace ApiGateway.Tests;
 
-public sealed class ControlRoutingEndpointTests
+public sealed class ControlEgressEndpointTests
 {
     [Fact]
-    public async Task PostControl_RoutesConnectorByGatewayMapping()
+    public async Task PostControl_DeliversCommandToEgressConnector()
     {
         var tenant = "tenant-a";
         var deviceId = "ahu-01";
         var pointId = "setpoint-temp";
         var equipmentNodeId = "equip-1";
         var pointNodeId = "point-1";
+        const string connectorName = "RabbitMq";
 
         var equipmentSnapshot = new GraphNodeSnapshot
         {
@@ -33,7 +37,7 @@ public sealed class ControlRoutingEndpointTests
                 Attributes = new Dictionary<string, string>
                 {
                     ["DeviceId"] = deviceId,
-                    ["GatewayId"] = "mqtt-east-01"
+                    ["GatewayId"] = "rabbitmq-gw-01"
                 }
             },
             OutgoingEdges = new List<GraphEdge>
@@ -56,21 +60,38 @@ public sealed class ControlRoutingEndpointTests
             }
         };
 
+        ControlEgressRequest? capturedRequest = null;
+        var egressConnector = new Mock<IControlEgressConnector>();
+        egressConnector.Setup(c => c.Name).Returns(connectorName);
+        egressConnector.Setup(c => c.ConfirmMode).Returns(ControlConfirmMode.AckOnly);
+        egressConnector
+            .Setup(c => c.SendAsync(It.IsAny<ControlEgressRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<ControlEgressRequest, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync(new ControlEgressResult
+            {
+                CommandId = "test-cmd",
+                ConnectorName = connectorName,
+                Accepted = true,
+                ConfirmMode = ControlConfirmMode.AckOnly,
+                CorrelationId = "corr-01"
+            });
+
         var clusterMock = BuildClusterMock(
             tenant,
             equipmentNodeId,
             equipmentSnapshot,
-            pointSnapshot,
-            expectedConnector: "Mqtt");
+            pointSnapshot);
 
         var extraConfig = new Dictionary<string, string?>
         {
-            ["ControlRouting:DefaultConnector"] = "RabbitMq",
-            ["ControlRouting:ConnectorGatewayMappings:0:Connector"] = "Mqtt",
-            ["ControlRouting:ConnectorGatewayMappings:0:GatewayIds:0"] = "mqtt-east-01"
+            ["ControlRouting:ConnectorGatewayMappings:0:Connector"] = connectorName,
+            ["ControlRouting:ConnectorGatewayMappings:0:GatewayIds:0"] = "rabbitmq-gw-01"
         };
 
-        await using var factory = new ApiGatewayTestFactory(clusterMock, extraConfig);
+        await using var factory = new ApiGatewayTestFactory(
+            clusterMock,
+            extraConfig,
+            services => services.AddSingleton(_ => egressConnector.Object));
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Test", $"tenant={tenant}");
 
@@ -87,18 +108,31 @@ public sealed class ControlRoutingEndpointTests
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var payload = await response.Content.ReadFromJsonAsync<PointControlResponse>();
+
+        egressConnector.Verify(
+            c => c.SendAsync(It.IsAny<ControlEgressRequest>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.DeviceId.Should().Be(deviceId);
+        capturedRequest.PointId.Should().Be(pointId);
+        capturedRequest.DesiredValue.Should().NotBeNull();
+        capturedRequest.Metadata.Should().ContainKey("ConnectorName")
+            .WhoseValue.Should().Be(connectorName);
         payload.Should().NotBeNull();
-        payload!.ConnectorName.Should().Be("Mqtt");
+        payload!.CorrelationId.Should().Be("corr-01");
+        payload.Status.Should().Be(ControlRequestStatus.Accepted.ToString());
     }
 
     [Fact]
-    public async Task PostControl_ReturnsBadRequest_WhenNoConnectorRouteMatched()
+    public async Task PostControl_UpdatesGrainToFailed_WhenEgressConnectorRejectsCommand()
     {
         var tenant = "tenant-a";
         var deviceId = "ahu-01";
-        var pointId = "point-a";
+        var pointId = "setpoint-temp";
         var equipmentNodeId = "equip-1";
         var pointNodeId = "point-1";
+        const string connectorName = "RabbitMq";
 
         var equipmentSnapshot = new GraphNodeSnapshot
         {
@@ -109,7 +143,7 @@ public sealed class ControlRoutingEndpointTests
                 Attributes = new Dictionary<string, string>
                 {
                     ["DeviceId"] = deviceId,
-                    ["GatewayId"] = "unknown-gw"
+                    ["GatewayId"] = "rabbitmq-gw-01"
                 }
             },
             OutgoingEdges = new List<GraphEdge>
@@ -132,24 +166,50 @@ public sealed class ControlRoutingEndpointTests
             }
         };
 
+        var egressConnector = new Mock<IControlEgressConnector>();
+        egressConnector.Setup(c => c.Name).Returns(connectorName);
+        egressConnector.Setup(c => c.ConfirmMode).Returns(ControlConfirmMode.AckOnly);
+        egressConnector
+            .Setup(c => c.SendAsync(It.IsAny<ControlEgressRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ControlEgressResult
+            {
+                CommandId = "test-cmd",
+                ConnectorName = connectorName,
+                Accepted = false,
+                Error = "connection refused",
+                ConfirmMode = ControlConfirmMode.AckOnly
+            });
+
+        string? updatedCommandId = null;
+        ControlRequestStatus? updatedStatus = null;
+        string? updatedError = null;
         var clusterMock = BuildClusterMock(
             tenant,
             equipmentNodeId,
             equipmentSnapshot,
             pointSnapshot,
-            expectedConnector: null);
+            onUpdate: (commandId, status, _, lastError) =>
+            {
+                updatedCommandId = commandId;
+                updatedStatus = status;
+                updatedError = lastError;
+            });
 
         var extraConfig = new Dictionary<string, string?>
         {
-            ["ControlRouting:DefaultConnector"] = ""
+            ["ControlRouting:ConnectorGatewayMappings:0:Connector"] = connectorName,
+            ["ControlRouting:ConnectorGatewayMappings:0:GatewayIds:0"] = "rabbitmq-gw-01"
         };
 
-        await using var factory = new ApiGatewayTestFactory(clusterMock, extraConfig);
+        await using var factory = new ApiGatewayTestFactory(
+            clusterMock,
+            extraConfig,
+            services => services.AddSingleton(_ => egressConnector.Object));
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Test", $"tenant={tenant}");
 
         var request = new ApiPointControlRequest(
-            CommandId: string.Empty,
+            CommandId: "cmd-fail-01",
             BuildingName: "b1",
             SpaceId: "s1",
             DeviceId: deviceId,
@@ -159,7 +219,16 @@ public sealed class ControlRoutingEndpointTests
 
         var response = await client.PostAsJsonAsync($"/api/devices/{deviceId}/control", request);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+
+        var payload = await response.Content.ReadFromJsonAsync<PointControlResponse>();
+        payload.Should().NotBeNull();
+        payload!.Status.Should().Be(ControlRequestStatus.Failed.ToString());
+        payload.LastError.Should().Be("connection refused");
+
+        updatedCommandId.Should().Be("cmd-fail-01");
+        updatedStatus.Should().Be(ControlRequestStatus.Failed);
+        updatedError.Should().Be("connection refused");
     }
 
     private static Mock<IClusterClient> BuildClusterMock(
@@ -167,7 +236,7 @@ public sealed class ControlRoutingEndpointTests
         string equipmentNodeId,
         GraphNodeSnapshot equipmentSnapshot,
         GraphNodeSnapshot pointSnapshot,
-        string? expectedConnector)
+        Action<string, ControlRequestStatus, string?, string?>? onUpdate = null)
     {
         var graphIndex = new Mock<IGraphIndexGrain>();
         graphIndex
@@ -185,16 +254,7 @@ public sealed class ControlRoutingEndpointTests
             .Setup(g => g.SubmitAsync(It.IsAny<Grains.Abstractions.PointControlRequest>()))
             .ReturnsAsync((Grains.Abstractions.PointControlRequest req) =>
             {
-                if (expectedConnector is not null)
-                {
-                    req.Metadata.Should().ContainKey("ConnectorName");
-                    req.Metadata["ConnectorName"].Should().Be(expectedConnector);
-                }
-
                 req.Metadata.TryGetValue("ConnectorName", out var connectorName);
-                req.Metadata.TryGetValue("CorrelationId", out var correlationId);
-                req.Metadata.TryGetValue("LastError", out var lastError);
-
                 return new PointControlSnapshot(
                     req.CommandId,
                     ControlRequestStatus.Accepted,
@@ -203,8 +263,8 @@ public sealed class ControlRoutingEndpointTests
                     DateTimeOffset.UtcNow,
                     null,
                     connectorName,
-                    correlationId,
-                    lastError);
+                    null,
+                    null);
             });
 
         controlGrain
@@ -213,6 +273,9 @@ public sealed class ControlRoutingEndpointTests
                 It.IsAny<ControlRequestStatus>(),
                 It.IsAny<string?>(),
                 It.IsAny<string?>()))
+            .Callback<string, ControlRequestStatus, string?, string?>(
+                (commandId, status, correlationId, lastError) =>
+                    onUpdate?.Invoke(commandId, status, correlationId, lastError))
             .Returns(Task.CompletedTask);
 
         var clusterMock = new Mock<IClusterClient>();

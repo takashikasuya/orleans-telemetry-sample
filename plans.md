@@ -5,6 +5,9 @@ Keep the repository-level planning surface small and current.
 Use this file as the active index for ongoing work and archive links, not as a long-running task journal.
 
 ## Active Tasks
+- [adhoc-2026-03-16-pr78-port-fix](/home/takashi/projects/dotnet/orleans-telemetry-sample/plans/2026-03/adhoc-2026-03-16-pr78-port-fix.md)
+  - Status: Completed
+  - Scope: 旧 PR #78 の control egress 実装を現行 src 構成へ移植し、RabbitMQ 契約不整合と応答不整合を修正する。
 - [adhoc-2026-03-15-epic-decomposition](/home/takashi/projects/dotnet/orleans-telemetry-sample/plans/2026-03/adhoc-2026-03-15-epic-decomposition.md)
   - Status: Completed
   - Scope: Epic 候補 Issue を実行可能な子タスクへ分解する。

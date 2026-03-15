@@ -132,4 +132,13 @@ public interface IPointControlGrain : IGrainWithStringKey
     /// <param name="commandId">Command identifier.</param>
     /// <returns>Snapshot when found; otherwise null.</returns>
     Task<PointControlSnapshot?> GetAsync(string commandId);
+
+    /// <summary>
+    /// Updates the status and egress result of a previously submitted control command.
+    /// </summary>
+    /// <param name="commandId">Command identifier.</param>
+    /// <param name="status">New status to set.</param>
+    /// <param name="correlationId">Connector-side correlation identifier, if available.</param>
+    /// <param name="lastError">Error message when the command failed.</param>
+    Task UpdateAsync(string commandId, ControlRequestStatus status, string? correlationId, string? lastError);
 }

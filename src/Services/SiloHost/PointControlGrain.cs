@@ -38,6 +38,24 @@ public sealed class PointControlGrain : Grain, IPointControlGrain
         return Task.FromResult(snapshot);
     }
 
+    public async Task UpdateAsync(string commandId, ControlRequestStatus status, string? correlationId, string? lastError)
+    {
+        if (!_state.State.History.TryGetValue(commandId, out var existing))
+        {
+            return;
+        }
+
+        var updated = existing with
+        {
+            Status = status,
+            CorrelationId = correlationId ?? existing.CorrelationId,
+            LastError = lastError ?? existing.LastError
+        };
+
+        _state.State.History[commandId] = updated;
+        await _state.WriteStateAsync();
+    }
+
     [GenerateSerializer]
     public sealed class PointControlState
     {

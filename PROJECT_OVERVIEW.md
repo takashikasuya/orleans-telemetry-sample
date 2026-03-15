@@ -99,4 +99,4 @@
 ## 現状の制約
 
 - gRPC は `DeviceService` と `RegistryService` のみ提供され、REST の全機能と等価ではありません。
-- Control Flow はインターフェース定義のみで、制御 Grain/エグレス連携は未実装です。
+- Control egress は RabbitMQ のみ実装済みで、MQTT/Kafka など他コネクタへの配送や applied/read-back 確認は未実装です。

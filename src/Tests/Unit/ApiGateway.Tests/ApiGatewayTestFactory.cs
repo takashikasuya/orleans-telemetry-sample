@@ -16,13 +16,16 @@ internal sealed class ApiGatewayTestFactory : WebApplicationFactory<global::Prog
 {
     private readonly Mock<IClusterClient> _clusterMock;
     private readonly IReadOnlyDictionary<string, string?> _extraConfig;
+    private readonly Action<IServiceCollection>? _extraServices;
 
     public ApiGatewayTestFactory(
         Mock<IClusterClient> clusterMock,
-        IReadOnlyDictionary<string, string?>? extraConfig = null)
+        IReadOnlyDictionary<string, string?>? extraConfig = null,
+        Action<IServiceCollection>? extraServices = null)
     {
         _clusterMock = clusterMock;
         _extraConfig = extraConfig ?? new Dictionary<string, string?>();
+        _extraServices = extraServices;
     }
 
     protected override IHost CreateHost(IHostBuilder builder)
@@ -63,6 +66,7 @@ internal sealed class ApiGatewayTestFactory : WebApplicationFactory<global::Prog
             });
 
             services.AddSingleton(_ => _clusterMock.Object);
+            _extraServices?.Invoke(services);
         });
 
         return base.CreateHost(builder);
