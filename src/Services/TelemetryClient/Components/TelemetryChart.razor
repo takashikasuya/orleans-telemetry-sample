@@ -1,11 +1,13 @@
 @using TelemetryClient.Services
+@using Microsoft.JSInterop
 @inject TelemetryService TelemetryService
 @inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
 <MudPaper Class="pa-4">
     <MudText Typo="Typo.h6">@Title</MudText>
     <div id="@_chartId" class="telemetry-chart"></div>
-    
+
     @if (_loading)
     {
         <MudProgressLinear Indeterminate="true" />
@@ -15,30 +17,29 @@
 @code {
     [Parameter]
     public string DeviceId { get; set; } = string.Empty;
-    
+
     [Parameter]
     public string PointId { get; set; } = string.Empty;
-    
+
     [Parameter]
     public string TenantId { get; set; } = "default";
-    
+
     [Parameter]
     public string Title { get; set; } = "Telemetry Trend";
-    
-    [Parameter]
-    public int RefreshIntervalMs { get; set; } = 2000;
 
     private string _chartId = Guid.NewGuid().ToString("N");
     private bool _loading = false;
-    private System.Threading.Timer? _pollTimer;
     private List<TelemetryRecord> _data = new();
+    private DotNetObjectReference<TelemetryChart>? _dotNetHelper;
+    private bool _isSubscribed = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             await InitializeChartAsync();
-            StartPolling();
+            await LoadInitialDataAsync();
+            await SubscribeToRealtimeUpdatesAsync();
         }
     }
 
@@ -48,15 +49,7 @@
         await JSRuntime.InvokeVoidAsync("initializeChart", _chartId);
     }
 
-    private void StartPolling()
-    {
-        _pollTimer = new System.Threading.Timer(async _ =>
-        {
-            await LoadDataAsync();
-        }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(RefreshIntervalMs));
-    }
-
-    private async Task LoadDataAsync()
+    private async Task LoadInitialDataAsync()
     {
         if (string.IsNullOrEmpty(DeviceId) || string.IsNullOrEmpty(PointId))
             return;
@@ -65,24 +58,85 @@
         try
         {
             var result = await TelemetryService.QueryAsync(DeviceId, TenantId, limit: 100);
-            
+
             // Filter data for the specific point
             _data = result.Records
                 .Where(r => r.PointId == PointId)
                 .OrderBy(r => r.Timestamp)
                 .ToList();
 
-            // Update chart with new data
+            // Update chart with initial data
             await UpdateChartAsync();
         }
         catch (Exception ex)
         {
-            // Log error (could add ILogger if needed for detailed logging)
-            Console.WriteLine($"Error loading telemetry data: {ex.Message}");
+            Console.WriteLine($"Error loading initial telemetry data: {ex.Message}");
         }
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task SubscribeToRealtimeUpdatesAsync()
+    {
+        if (string.IsNullOrEmpty(DeviceId) || string.IsNullOrEmpty(PointId) || _isSubscribed)
+            return;
+
+        try
+        {
+            // Initialize SignalR connection if not already done
+            await JSRuntime.InvokeVoidAsync("initializeTelemetryRealtime");
+
+            // Create .NET helper for JS callbacks
+            _dotNetHelper = DotNetObjectReference.Create(this);
+
+            // Subscribe to point updates
+            await JSRuntime.InvokeVoidAsync("subscribeToPoint", TenantId, DeviceId, PointId, _dotNetHelper);
+            _isSubscribed = true;
+
+            Console.WriteLine($"Subscribed to real-time updates for {TenantId}/{DeviceId}/{PointId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error subscribing to real-time updates: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Called by JavaScript when a point update is received via SignalR
+    /// </summary>
+    [JSInvokable]
+    public async Task OnPointUpdate(PointUpdate update)
+    {
+        try
+        {
+            Console.WriteLine($"Received update: {update.PointId} = {update.Value} at {update.Timestamp}");
+
+            // Add new data point
+            var record = new TelemetryRecord(
+                update.DeviceId,
+                update.PointId,
+                update.Value,
+                update.Timestamp,
+                null
+            );
+
+            _data.Add(record);
+
+            // Keep only last 100 points
+            if (_data.Count > 100)
+            {
+                _data = _data.OrderByDescending(d => d.Timestamp).Take(100).OrderBy(d => d.Timestamp).ToList();
+            }
+
+            // Update chart with new data
+            await UpdateChartAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error processing point update: {ex.Message}");
         }
     }
 
@@ -92,13 +146,28 @@
         {
             var timestamps = _data.Select(d => d.Timestamp.ToString("HH:mm:ss")).ToArray();
             var values = _data.Select(d => d.Value?.ToString() ?? "0").ToArray();
-            
+
             await JSRuntime.InvokeVoidAsync("updateChart", _chartId, timestamps, values);
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        _pollTimer?.Dispose();
+        if (_isSubscribed && _dotNetHelper != null)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("unsubscribeFromPoint", TenantId, DeviceId, PointId, _dotNetHelper);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error unsubscribing: {ex.Message}");
+            }
+        }
+
+        _dotNetHelper?.Dispose();
     }
+
+    // DTO for point updates from SignalR
+    public record PointUpdate(string TenantId, string DeviceId, string PointId, object? Value, DateTimeOffset Timestamp);
 }

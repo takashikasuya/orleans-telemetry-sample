@@ -22,10 +22,12 @@
 - Writable points surface context-sensitive controls (slider/input/toggle) that post to `/api/devices/{deviceId}/control` with `{ pointId, value }`.
 - Every control response shows a toast or inline validation message referencing `PointControlResponse.Status`.
 
-### Tenant Awareness & Polling
+### Tenant Awareness & Real-time Updates
 
 - Tenant selector at the top honors the JWT tenant claim; the UI should disable invalid tenants and show tooltips explaining isolation when necessary.
-- Polling for telemetry updates re-uses the ApiGateway telemetry endpoint and respects tenant-scoped cursors to limit load.
+- **Live telemetry push** via SignalR: TelemetryClient includes a SignalR hub (`/telemetryHub`) that subscribes to Orleans PointUpdates stream and pushes real-time updates to connected clients.
+- Initial chart data is loaded via REST API (`GET /api/telemetry/{deviceId}`), then live updates are received via SignalR for selected points.
+- SignalR connection includes automatic reconnection with exponential backoff and resubscription on reconnect.
 
 ## API Contract Mapping
 
@@ -35,18 +37,25 @@
 | Child lookup | `GET /api/graph/traverse/{nodeId}?tenantId={tenant}&depth=1` |
 | Device details & point list | `GET /api/devices/{deviceId}?tenantId={tenant}` and `GET /api/nodes/{nodeId}?tenantId={tenant}` |
 | Point value history | `GET /api/telemetry/{deviceId}?limit={n}&fallBackTo={timestamp}` |
-| Remote control | `POST /api/devices/{deviceId}/control` (new contract accepting `PointControlRequest`, returning `PointControlResponse`) |
-| Live telemetry push | Polling via repeated `GET /api/telemetry/{deviceId}` requests and optional WebSocket upgrade in future |
+| Remote control | `POST /api/devices/{deviceId}/control` (contract accepting `PointControlRequest`, returning `PointControlResponse`) |
+| Live telemetry push | SignalR hub at `/telemetryHub` with `SubscribeToPoint(tenantId, deviceId, pointId)` method; receives `ReceivePointUpdate` events from Orleans PointUpdates stream |
 
 ## Real-time & Control Contracts
 
 - **PointControlRequest/Response**: Reuse ApiGateway contracts (`ApiGateway.Contracts.PointControlRequest`/`PointControlResponse`). The client will extend the ApiGateway surface with these payloads.
+- **SignalR Real-time Updates**:
+  - TelemetryHub exposes `SubscribeToPoint(tenantId, deviceId, pointId)` method
+  - Clients receive `ReceivePointUpdate` events containing `{ Timestamp, Value, PointId, DeviceId, TenantId }`
+  - Hub subscribes to Orleans PointUpdates stream and normalizes values for charting
+  - Automatic cleanup on disconnect via `OnDisconnectedAsync`
 
 ## Tech Stack & Integration Notes
 
 - **Blazor Server** for hosting the MudBlazor layout and typed `HttpClient` pipelines.
 - **MudBlazor** for components (`MudTreeView`, cards, loading shards, toast).
-- **ECharts** (via JS interop) for telemetry trends; initial version may use `Plotly.js` if ECharts setup proves heavier (decision pending).
+- **SignalR** for real-time telemetry updates via Orleans PointUpdates stream.
+- **Canvas 2D** for telemetry trend charts (simple implementation; can be upgraded to ECharts/Plotly later).
+- **Orleans Client** to subscribe to PointUpdates stream for real-time push notifications.
 - **Authentication**: Blazor Server will inherit API JWT tokens (same middleware) or use `HttpClient` configured with `Authorization` header per tenant selection.
 - **Service layer**: `TelemetryTreeService`, `TelemetryChartService`, `DeviceControlService` abstractions wrapping typed `HttpClient` requests.
 - **Navigation**: Use `NavMenu` to expose the telemetry client entry point from ApiGateway docs or README; eventually include tenant filter in layout.
