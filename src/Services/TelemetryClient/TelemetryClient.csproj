@@ -6,8 +6,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../Libraries/ApiGateway.Contracts/ApiGateway.Contracts.csproj" />
+    <ProjectReference Include="../../Libraries/Grains.Abstractions/Grains.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="MudBlazor" Version="7.7.0" />
+    <PackageReference Include="Microsoft.Orleans.Client" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
   </ItemGroup>
 </Project>
