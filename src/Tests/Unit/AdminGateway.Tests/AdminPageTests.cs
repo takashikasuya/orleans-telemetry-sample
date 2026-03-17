@@ -272,6 +272,61 @@ public sealed class AdminPageTests : TestContext
         Assert.Equal(500, samples[^1].Value);
     }
 
+    [Fact]
+    public async Task SelectingEquipmentNode_ShowsNodeIdAndNodeType()
+    {
+        var equipNode = Snapshot("equip-1", "AHU-1", GraphNodeType.Equipment);
+
+        var metrics = CreateMetricsService(
+            tenants: new[] { "t1" },
+            idsByType: new Dictionary<GraphNodeType, IReadOnlyList<string>>
+            {
+                [GraphNodeType.Equipment] = new[] { "equip-1" }
+            },
+            snapshots: new Dictionary<string, GraphNodeSnapshot>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["equip-1"] = equipNode
+            });
+
+        ConfigureServices(metrics);
+
+        var cut = RenderComponent<Admin>();
+
+        ClickButton(cut, "Load Hierarchy");
+        cut.WaitForAssertion(() => Assert.Contains("AHU-1", cut.Markup));
+
+        await cut.InvokeAsync(() => InvokePrivateAsync(cut.Instance, "SelectGraphNodeAsync", "equip-1"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("<th>ID</th>", cut.Markup);
+            Assert.Contains("<td>equip-1</td>", cut.Markup);
+            Assert.Contains("Equipment", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void LoadHierarchy_EmptyGraph_RendersGracefully()
+    {
+        // Arrange: tenant exists but no nodes registered
+        var metrics = CreateMetricsService(
+            tenants: new[] { "t1" },
+            idsByType: new Dictionary<GraphNodeType, IReadOnlyList<string>>(),
+            snapshots: new Dictionary<string, GraphNodeSnapshot>(StringComparer.OrdinalIgnoreCase));
+
+        ConfigureServices(metrics);
+
+        var cut = RenderComponent<Admin>();
+
+        ClickButton(cut, "Load Hierarchy");
+
+        // Should show "No hierarchy data available." when tree is empty – no crash
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("No hierarchy data available.", cut.Markup);
+        });
+    }
+
     private static Task InvokePrivateAsync(object target, string methodName, params object[] args)
     {
         var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)

@@ -1424,7 +1424,7 @@ internal sealed class AdminMetricsService
         }
 
         visited.Remove(nodeId);
-        return new GraphTreeNode(snapshot.Node.NodeId, displayName, snapshot.Node.NodeType, children);
+        return new GraphTreeNode(snapshot.Node.NodeId, displayName, NormalizeNodeType(snapshot.Node.NodeType), children);
     }
 
     private static GraphNodeType NormalizeNodeType(GraphNodeType nodeType)
