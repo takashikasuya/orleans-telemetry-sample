@@ -62,37 +62,39 @@ AdminGateway (`src/Services/AdminGateway`) に対して、RDF を入力に Orlea
 
 ## 推奨テスト実装プラン
 
-## Phase 1: サービス層テスト基盤を作る
+## Phase 1: サービス層テスト基盤を作る ✅ 実装済み
 
-- `src/Tests/Unit/AdminGateway.Tests`（新規 xUnit）を追加
+- `src/Tests/Unit/AdminGateway.Tests` に `AdminMetricsServiceTests` を追加
 - 参照:
   - `src/Services/AdminGateway/AdminGateway.csproj`
   - `src/Libraries/Grains.Abstractions/Grains.Abstractions.csproj`
 - モック方針:
-  - `IClusterClient` を Moq/NSubstitute で差し替え
+  - `IClusterClient` を Moq で差し替え
   - `IGraphIndexGrain` の `GetByTypeAsync` 戻り値を fixture 化
   - `IGraphNodeGrain.GetAsync` をノード辞書から返す
 
-**代表ケース**
+**実装済みケース**
 
-1. `hasBuilding/hasLevel/hasArea/hasPoint` がツリーに反映される
-2. `isPartOf` しか無い RDF でも逆向き解釈で親子化される
-3. `locatedIn` / `isLocationOf` で Area 配下に Equipment が入る
-4. Device 型ノードが Equipment 表示になる
-5. 循環参照があっても無限再帰にならない
+1. `hasBuilding/hasLevel/hasArea/hasPoint` がツリーに反映される → `GetGraphTree_ContainmentPredicates_BuildsFullHierarchy`
+2. `isPartOf` しか無い RDF でも逆向き解釈で親子化される → `GetGraphTree_IsPartOf_ReversedRelation_PlacesNodeUnderParent`
+3. `locatedIn` / `isLocationOf` で Area 配下に Equipment が入る → `GetGraphTree_LocatedIn_PlacesEquipmentUnderArea`
+4. Device 型ノードが Equipment 表示になる → `GetGraphTree_DeviceType_IsNormalisedToEquipment`
+5. 循環参照があっても無限再帰にならない → `GetGraphTree_CyclicRelation_DoesNotHang`
 
-## Phase 2: Blazor UI テストを追加する
+備考: ケース 4 の実装に伴い `BuildTreeNode` の通常パスで `NormalizeNodeType` を適用するよう修正した。
 
-- `bUnit` 導入（`AdminGateway.Tests` に追加）
+## Phase 2: Blazor UI テストを追加する ✅ 実装済み
+
+- `bUnit` 導入（`AdminGateway.Tests` に追加済み）
 - `AdminMetricsService` をテストダブルで注入
 - `Admin.razor` をレンダリングし、以下を検証
 
-**代表ケース**
+**実装済みケース**
 
-1. 初期表示で Graph Tree 見出しとノードラベルが表示
-2. ノードクリックで詳細カードに `NodeId`/`NodeType` が表示
-3. テナント切り替え時にツリーが更新される
-4. エラー時に graceful な文言（空表示/警告）が出る
+1. 初期表示で Graph Tree 見出しとノードラベルが表示 → `LoadHierarchy_ShowsTreePanelAndNodeLabel`
+2. Point ノードクリックで詳細カードに `NodeId`/`NodeType`/点スナップショットが表示 → `SelectingPointNode_ShowsMetadataAndPointSnapshot`
+3. Equipment ノードクリックで詳細カードに `NodeId`/`NodeType` が表示 → `SelectingEquipmentNode_ShowsNodeIdAndNodeType`
+4. グラフが空の場合に graceful な文言（"No hierarchy data available."）が表示 → `LoadHierarchy_EmptyGraph_RendersGracefully`
 
 ## Phase 3: E2E UI テスト（Playwright）を整備する
 
@@ -144,11 +146,13 @@ E2E は実行コストが高いため、CI では nightly/手動トリガー、P
 - 失敗時に原因レイヤーが即判別できる（データ/サービス/UI）
 - E2E（統合D）は少なくとも 1 シナリオで通過記録がある
 
-## 最初の 1 スプリントで実施する最小セット
+## 最初の 1 スプリントで実施する最小セット ✅ 完了
 
-1. `AdminGateway.Tests` 新設
-2. `GetGraphTreeAsync` のサービス層テストを 5 ケース追加
-3. `Admin.razor` の bUnit テストを 2 ケース追加（表示 + クリック）
-4. README または docs にテスト実行コマンドを追記
+1. `AdminGateway.Tests` 新設 → 既存プロジェクトに追加（`AdminMetricsServiceTests.cs`）
+2. `GetGraphTreeAsync` のサービス層テストを 5 ケース追加 → `AdminMetricsServiceTests` に実装済み
+3. `Admin.razor` の bUnit テストを 2 ケース追加（表示 + クリック） → `AdminPageTests` に `SelectingEquipmentNode_ShowsNodeIdAndNodeType` / `LoadHierarchy_EmptyGraph_RendersGracefully` を追加
+4. docs にテスト実行コマンドを記載 → 本ドキュメント「CI への載せ方」セクション参照
+
+実行コマンド: `dotnet test src/Tests/Unit/AdminGateway.Tests/AdminGateway.Tests.csproj`
 
 この最小セットで、RDF 由来の Grain データが UI ツリーに反映される経路を、現実的なコストで継続検証できるようになる。
